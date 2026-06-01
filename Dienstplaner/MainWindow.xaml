@@ -70,7 +70,7 @@
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeuerMitarbeiterName}"
+                                     Text="{Binding NeuerMitarbeiterName, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,8"/>
 
                             <TextBlock Text="Abteilung"
@@ -78,7 +78,7 @@
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeueMitarbeiterAbteilung}"
+                                     Text="{Binding NeueMitarbeiterAbteilung, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,8"/>
 
                             <TextBlock Text="Qualifikation"
@@ -86,7 +86,7 @@
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeuerMitarbeiterQualifikation}"
+                                     Text="{Binding NeuerMitarbeiterQualifikation, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,8"/>
 
                             <Button Content="Mitarbeiter hinzufügen"
@@ -117,7 +117,7 @@
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeueSchichtName}"
+                                     Text="{Binding NeueSchichtName, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,8"/>
 
                             <TextBlock Text="Abteilung"
@@ -125,7 +125,7 @@
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeueSchichtAbteilung}"
+                                     Text="{Binding NeueSchichtAbteilung, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,8"/>
 
                             <TextBlock Text="Wochentag"
@@ -133,7 +133,7 @@
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeueSchichtWochentag}"
+                                     Text="{Binding NeueSchichtWochentag, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,8"/>
 
                             <TextBlock Text="Benötigte Mitarbeiter"
@@ -141,7 +141,7 @@
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeueSchichtKapazitaet}"
+                                     Text="{Binding NeueSchichtKapazitaet, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,12"/>
 
                             <Button Content="Schicht erstellen"
@@ -186,7 +186,7 @@
                         <ComboBox Height="32"
                                   ItemsSource="{Binding MitarbeiterListe}"
                                   DisplayMemberPath="Name"
-                                  SelectedItem="{Binding AusgewaehlterMitarbeiter}"
+                                  SelectedItem="{Binding AusgewaehlterMitarbeiter, UpdateSourceTrigger=PropertyChanged}"
                                   Margin="0,0,0,8"/>
 
                         <TextBlock Text="Schicht"
@@ -196,7 +196,7 @@
                         <ComboBox Height="32"
                                   ItemsSource="{Binding SchichtListe}"
                                   DisplayMemberPath="Name"
-                                  SelectedItem="{Binding AusgewaehlteSchicht}"
+                                  SelectedItem="{Binding AusgewaehlteSchicht, UpdateSourceTrigger=PropertyChanged}"
                                   Margin="0,0,0,12"/>
 
                         <Button Content="Mitarbeiter zuweisen"
