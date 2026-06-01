@@ -96,6 +96,10 @@ namespace Dienstplaner.ViewModels
         public ICommand IntegrationenAktualisierenCommand { get; }
         public ICommand ForecastImportCommand { get; }
 
+        private RelayCommand MitarbeiterHinzufuegenRelayCommand { get; }
+        private RelayCommand SchichtHinzufuegenRelayCommand { get; }
+        private RelayCommand ZuweisenRelayCommand { get; }
+
         private readonly ZuweisungsService _service;
         private readonly DienstplanExportService _exportService;
         private readonly ReportingService _reportingService;
@@ -180,8 +184,18 @@ namespace Dienstplaner.ViewModels
                 IstAktiv = true
             });
 
+            NeuerMitarbeiterName = string.Empty;
+            NeueMitarbeiterAbteilung = string.Empty;
+            NeuerMitarbeiterQualifikation = string.Empty;
             StatusNachricht = "Mitarbeiter hinzugefügt";
             OnPropertyChanged("StatusNachricht");
+        }
+
+        private bool CanAddMitarbeiter(object obj)
+        {
+            return !string.IsNullOrWhiteSpace(NeuerMitarbeiterName)
+                && !string.IsNullOrWhiteSpace(NeueMitarbeiterAbteilung)
+                && !string.IsNullOrWhiteSpace(NeuerMitarbeiterQualifikation);
         }
 
         private void AddSchicht(object obj)
@@ -203,8 +217,20 @@ namespace Dienstplaner.ViewModels
                 Ende = DateTime.Today.AddHours(16)
             });
 
+            NeueSchichtName = string.Empty;
+            NeueSchichtAbteilung = string.Empty;
+            NeueSchichtWochentag = string.Empty;
+            NeueSchichtKapazitaet = 2;
             StatusNachricht = "Schicht hinzugefügt";
             OnPropertyChanged("StatusNachricht");
+        }
+
+        private bool CanAddSchicht(object obj)
+        {
+            return !string.IsNullOrWhiteSpace(NeueSchichtName)
+                && !string.IsNullOrWhiteSpace(NeueSchichtAbteilung)
+                && !string.IsNullOrWhiteSpace(NeueSchichtWochentag)
+                && NeueSchichtKapazitaet > 0;
         }
 
         private void Zuweisen(object obj)

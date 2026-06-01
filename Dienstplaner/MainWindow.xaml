@@ -165,7 +165,7 @@
                         <ComboBox Height="32"
                                   ItemsSource="{Binding MitarbeiterView}"
                                   DisplayMemberPath="Name"
-                                  SelectedItem="{Binding AusgewaehlterMitarbeiter}"
+                                  SelectedItem="{Binding AusgewaehlterMitarbeiter, UpdateSourceTrigger=PropertyChanged}"
                                   Margin="0,0,0,8"/>
 
                         <TextBlock Text="Schicht"
@@ -175,7 +175,7 @@
                         <ComboBox Height="32"
                                   ItemsSource="{Binding SchichtView}"
                                   DisplayMemberPath="Name"
-                                  SelectedItem="{Binding AusgewaehlteSchicht}"
+                                  SelectedItem="{Binding AusgewaehlteSchicht, UpdateSourceTrigger=PropertyChanged}"
                                   Margin="0,0,0,12"/>
 
                         <Button Content="Mitarbeiter zuweisen"
