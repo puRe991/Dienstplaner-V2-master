@@ -120,20 +120,63 @@
                                      Text="{Binding NeueSchichtName}"
                                      Margin="0,0,0,8"/>
 
-                            <TextBlock Text="Abteilung"
+                            <TextBlock Text="Filiale (StoreId)"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeueSchichtAbteilung}"
+                                     Text="{Binding NeueSchichtStoreId}"
                                      Margin="0,0,0,8"/>
 
-                            <TextBlock Text="Wochentag"
+                            <TextBlock Text="Bereich (DepartmentId)"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
-                                     Text="{Binding NeueSchichtWochentag}"
+                                     Text="{Binding NeueSchichtDepartmentId}"
+                                     Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Rolle (RoleId)"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueSchichtRoleId}"
+                                     Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Datum"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <DatePicker Height="32"
+                                        SelectedDate="{Binding NeueSchichtDatum}"
+                                        Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Start / Ende (HH:mm)"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBox Grid.Column="0"
+                                         Height="32"
+                                         Text="{Binding NeueSchichtStartzeit}"/>
+                                <TextBox Grid.Column="2"
+                                         Height="32"
+                                         Text="{Binding NeueSchichtEndzeit}"/>
+                            </Grid>
+
+                            <TextBlock Text="Pause (Minuten)"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueSchichtPauseMinuten}"
                                      Margin="0,0,0,8"/>
 
                             <TextBlock Text="Benötigte Mitarbeiter"
@@ -142,7 +185,51 @@
 
                             <TextBox Height="32"
                                      Text="{Binding NeueSchichtKapazitaet}"
-                                     Margin="0,0,0,12"/>
+                                     Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Besetzung Min / Soll / Max"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBox Grid.Column="0"
+                                         Height="32"
+                                         Text="{Binding NeueSchichtMindestbesetzung}"/>
+                                <TextBox Grid.Column="2"
+                                         Height="32"
+                                         Text="{Binding NeueSchichtSollbesetzung}"/>
+                                <TextBox Grid.Column="4"
+                                         Height="32"
+                                         Text="{Binding NeueSchichtMaximalbesetzung}"/>
+                            </Grid>
+
+                            <TextBlock Text="Skill-IDs (kommagetrennt)"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueSchichtRequiredSkillIds}"
+                                     Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Kostenstelle"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueSchichtCostCenter}"
+                                     Margin="0,0,0,8"/>
+
+                            <CheckBox Content="Als wöchentliche Vorlage speichern"
+                                      IsChecked="{Binding NeueSchichtAlsWoechentlicheVorlage}"
+                                      Margin="0,0,0,12"/>
 
                             <Button Content="Schicht erstellen"
                                     Height="36"
@@ -241,23 +328,41 @@
                                                            FontWeight="Bold"
                                                            FontSize="14"/>
 
-                                                <TextBlock Text="{Binding Abteilung,
-                                                    StringFormat=Abteilung: {0}}"
+                                                <TextBlock Text="{Binding StoreId,
+                                                    StringFormat=Filiale: {0}}"
                                                            FontSize="11"
                                                            Opacity="0.7"/>
 
-                                                <TextBlock Text="{Binding Wochentag,
-                                                    StringFormat=Tag: {0}}"
+                                                <TextBlock Text="{Binding DepartmentId,
+                                                    StringFormat=Bereich: {0}}"
+                                                           FontSize="11"
+                                                           Opacity="0.7"/>
+
+                                                <TextBlock Text="{Binding ZeitraumAnzeige,
+                                                    StringFormat=Zeitraum: {0}}"
                                                            FontSize="11"/>
 
-                                                <TextBlock Text="{Binding BenoetigteMitarbeiter,
+                                                <TextBlock Text="{Binding BreakDuration,
+                                                    StringFormat=Pause: {0:hh\:mm}}"
+                                                           FontSize="11"/>
+
+                                                <TextBlock Text="{Binding RequiredHeadcount,
                                                     StringFormat=Benötigt: {0} Mitarbeiter}"
                                                            FontSize="11"/>
 
                                                 <TextBlock Text="{Binding MitarbeiterNamen.Count,
                                                     StringFormat=Zugewiesen: {0}}"
-                                                           FontSize="11"
-                                                           Margin="0,0,0,5"/>
+                                                           FontSize="11"/>
+
+                                                <ItemsControl ItemsSource="{Binding Besetzungsfenster}"
+                                                              Margin="0,0,0,5">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Anzeige}"
+                                                                       FontSize="11"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
 
                                                 <TextBlock Text="Eingeplante Mitarbeiter:"
                                                            FontSize="11"

@@ -14,8 +14,17 @@ namespace Dienstplaner.Services
                 return "Schicht ist bereits voll";
 
             if (m.Schichten.Any(x =>
-                s.Start < x.Ende && s.Ende > x.Start))
+                s.StartUtc < x.EndUtc && s.EndUtc > x.StartUtc))
                 return "Zeitkonflikt";
+
+            if (s.DepartmentId > 0 && m.DepartmentId > 0 && m.DepartmentId != s.DepartmentId)
+                return "Bereich passt nicht";
+
+            if (s.RoleId > 0 && m.RoleId > 0 && m.RoleId != s.RoleId)
+                return "Rolle passt nicht";
+
+            if (s.RequiredSkillIds.Any() && !s.RequiredSkillIds.All(id => m.SkillIds.Contains(id)))
+                return "Skills passen nicht";
 
             if (!string.IsNullOrEmpty(s.BenoetigteQualifikation) &&
                 m.Qualifikation != s.BenoetigteQualifikation)

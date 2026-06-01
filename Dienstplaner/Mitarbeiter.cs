@@ -9,6 +9,11 @@ namespace Dienstplaner.Models
         public string Abteilung { get; set; }
         public string Qualifikation { get; set; }
 
+        public int StoreId { get; set; }
+        public int DepartmentId { get; set; }
+        public int RoleId { get; set; }
+        public List<int> SkillIds { get; set; }
+
         public int WochenstundenLimit { get; set; }
         public bool IstAktiv { get; set; }
 
@@ -18,6 +23,7 @@ namespace Dienstplaner.Models
 
         public Mitarbeiter()
         {
+            SkillIds = new List<int>();
             Schichten = new List<Schicht>();
         }
     }
