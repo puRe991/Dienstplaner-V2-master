@@ -21,6 +21,9 @@ namespace Dienstplaner.Services
             if (m == null || s == null)
                 return "Ungültige Auswahl";
 
+            if (!m.IstAktiv)
+                return "Mitarbeiter ist nicht verfügbar";
+
             if (s.IstVoll)
                 return "Schicht ist bereits voll";
 
@@ -37,6 +40,7 @@ namespace Dienstplaner.Services
 
             m.Schichten.Add(s);
             s.MitarbeiterNamen.Add(m.Name);
+            m.AktuelleWochenstunden += s.DauerInStunden;
 
             _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", m.Id, benutzer, alteMitarbeiterWerte, m.ToAuditString(), "Schicht zugewiesen");
             _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", s.Id, benutzer, alteSchichtWerte, s.ToAuditString(), "Mitarbeiter zugewiesen");
