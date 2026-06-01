@@ -70,6 +70,19 @@
     <Compile Include="Schicht.cs" />
     <Compile Include="Zuweisung.cs" />
     <Compile Include="ZuweisungsService.cs" />
+    <Compile Include="Abwesenheit.cs" />
+    <Compile Include="BenutzerRolle.cs" />
+    <Compile Include="ExportFormat.cs" />
+    <Compile Include="MandantKontext.cs" />
+    <Compile Include="PayrollRecord.cs" />
+    <Compile Include="ReportKennzahl.cs" />
+    <Compile Include="TimeTrackingRecord.cs" />
+    <Compile Include="UmsatzForecast.cs" />
+    <Compile Include="Services\DienstplanExportService.cs" />
+    <Compile Include="Services\ExportSecurityService.cs" />
+    <Compile Include="Services\ForecastImportService.cs" />
+    <Compile Include="Services\IntegrationsService.cs" />
+    <Compile Include="Services\ReportingService.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

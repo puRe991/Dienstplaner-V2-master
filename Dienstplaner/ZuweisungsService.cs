@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using Dienstplaner.Models;
 
 namespace Dienstplaner.Services
@@ -30,6 +30,12 @@ namespace Dienstplaner.Services
             if (m.Schichten.Any(x =>
                 s.Start < x.Ende && s.Ende > x.Start))
                 return "Zeitkonflikt";
+
+            if (m.Abwesenheiten.Any(a => a.Ueberschneidet(s.Start, s.Ende)))
+                return "Mitarbeiter ist abwesend";
+
+            if (m.Iststunden + s.NettoDauerInStunden > m.WochenstundenLimit)
+                return "Wochenstundenlimit würde überschritten";
 
             if (!string.IsNullOrEmpty(s.BenoetigteQualifikation) &&
                 m.Qualifikation != s.BenoetigteQualifikation)

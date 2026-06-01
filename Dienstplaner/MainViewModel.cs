@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -14,7 +15,10 @@ namespace Dienstplaner.ViewModels
     {
         public ObservableCollection<Mitarbeiter> MitarbeiterListe { get; set; }
         public ObservableCollection<Schicht> SchichtListe { get; set; }
-        public ObservableCollection<AuditLogEintrag> AuditLog { get; }
+        public ObservableCollection<ReportKennzahl> ReportListe { get; set; }
+        public ObservableCollection<UmsatzForecast> ForecastListe { get; set; }
+        public ObservableCollection<PayrollRecord> LohnabrechnungListe { get; set; }
+        public ObservableCollection<TimeTrackingRecord> ZeiterfassungListe { get; set; }
 
         public ICollectionView MitarbeiterView { get; }
         public ICollectionView SchichtView { get; }
@@ -22,15 +26,22 @@ namespace Dienstplaner.ViewModels
         public Mitarbeiter AusgewaehlterMitarbeiter { get; set; }
         public Schicht AusgewaehlteSchicht { get; set; }
 
+        public MandantKontext AktuellerKontext { get; set; }
+
         // Inputs
         public string NeuerMitarbeiterName { get; set; }
         public string NeueMitarbeiterAbteilung { get; set; }
         public string NeuerMitarbeiterQualifikation { get; set; }
+        public decimal NeueMitarbeiterSollstunden { get; set; } = 40;
+        public decimal NeuerMitarbeiterStundenlohn { get; set; } = 15;
 
         public string NeueSchichtName { get; set; }
         public string NeueSchichtAbteilung { get; set; }
         public string NeueSchichtWochentag { get; set; }
         public int NeueSchichtKapazitaet { get; set; } = 2;
+        public decimal NeueSchichtPausenstunden { get; set; } = 0.5m;
+        public decimal NeueSchichtZuschlagsstunden { get; set; }
+        public string ForecastImportPfad { get; set; }
 
         public string StatusNachricht { get; set; }
         public string DsgvoExportText { get; set; }
@@ -40,81 +51,101 @@ namespace Dienstplaner.ViewModels
         public ICommand MitarbeiterHinzufuegenCommand { get; }
         public ICommand SchichtHinzufuegenCommand { get; }
         public ICommand ZuweisenCommand { get; }
-        public ICommand SchichtLoeschenCommand { get; }
-        public ICommand DienstplanVeroeffentlichenCommand { get; }
-        public ICommand DsgvoAuskunftCommand { get; }
-        public ICommand DsgvoLoeschenCommand { get; }
+        public ICommand CsvExportCommand { get; }
+        public ICommand ExcelExportCommand { get; }
+        public ICommand PdfExportCommand { get; }
+        public ICommand ReportsAktualisierenCommand { get; }
+        public ICommand IntegrationenAktualisierenCommand { get; }
+        public ICommand ForecastImportCommand { get; }
 
         private readonly ZuweisungsService _service;
-        private readonly AuditService _auditService;
-        private readonly RollenService _rollenService;
-        private readonly DsgvoService _dsgvoService;
+        private readonly DienstplanExportService _exportService;
+        private readonly ReportingService _reportingService;
+        private readonly IntegrationsService _integrationsService;
+        private readonly ForecastImportService _forecastImportService;
 
         public MainViewModel()
         {
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
+            ReportListe = new ObservableCollection<ReportKennzahl>();
+            ForecastListe = new ObservableCollection<UmsatzForecast>();
+            LohnabrechnungListe = new ObservableCollection<PayrollRecord>();
+            ZeiterfassungListe = new ObservableCollection<TimeTrackingRecord>();
 
             MitarbeiterView = CollectionViewSource.GetDefaultView(MitarbeiterListe);
             SchichtView = CollectionViewSource.GetDefaultView(SchichtListe);
 
-            var dataProtectionService = new DataProtectionService();
-            _rollenService = new RollenService();
-            _auditService = new AuditService(dataProtectionService);
-            _service = new ZuweisungsService(_auditService, _rollenService);
-            _dsgvoService = new DsgvoService(_rollenService, _auditService);
+            AktuellerKontext = new MandantKontext
+            {
+                MandantId = 1,
+                MandantName = "DemoMandant",
+                FilialeId = 1,
+                FilialeName = "Zentrale",
+                Rolle = BenutzerRolle.Personalwesen
+            };
 
-            AuditLog = _auditService.Eintraege;
-            ComplianceRichtlinie = new ComplianceRichtlinie();
-            AktuellerBenutzer = BenutzerKontext.StandardAdmin();
+            _service = new ZuweisungsService();
+            _exportService = new DienstplanExportService();
+            _reportingService = new ReportingService();
+            _integrationsService = new IntegrationsService();
+            _forecastImportService = new ForecastImportService();
 
             MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter);
             SchichtHinzufuegenCommand = new RelayCommand(AddSchicht);
             ZuweisenCommand = new RelayCommand(Zuweisen);
-            SchichtLoeschenCommand = new RelayCommand(SchichtLoeschen);
-            DienstplanVeroeffentlichenCommand = new RelayCommand(DienstplanVeroeffentlichen);
-            DsgvoAuskunftCommand = new RelayCommand(DsgvoAuskunftErstellen);
-            DsgvoLoeschenCommand = new RelayCommand(DsgvoLoeschanfrageBearbeiten);
+            CsvExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Csv));
+            ExcelExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Excel));
+            PdfExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Pdf));
+            ReportsAktualisierenCommand = new RelayCommand(AktualisiereReports);
+            IntegrationenAktualisierenCommand = new RelayCommand(AktualisiereIntegrationen);
+            ForecastImportCommand = new RelayCommand(ImportiereForecast);
 
             Seed();
+            AktualisiereReports(null);
+            AktualisiereIntegrationen(null);
         }
 
         private void AddMitarbeiter(object obj)
         {
             FuehreMitRollenpruefungAus("Mitarbeiter erstellen", () =>
             {
-                var mitarbeiter = new Mitarbeiter
-                {
-                    Id = MitarbeiterListe.Count + 1,
-                    Name = NeuerMitarbeiterName,
-                    Abteilung = NeueMitarbeiterAbteilung,
-                    Qualifikation = NeuerMitarbeiterQualifikation,
-                    IstAktiv = true
-                };
-
-                MitarbeiterListe.Add(mitarbeiter);
-                _auditService.Protokolliere(AuditAction.DienstplanErstellt, "Mitarbeiter", mitarbeiter.Id, AktuellerBenutzer, string.Empty, mitarbeiter.ToAuditString(), "Mitarbeiter für Dienstplanung angelegt");
-                SetStatus("Mitarbeiter hinzugefügt");
+                Id = MitarbeiterListe.Count + 1,
+                MandantId = AktuellerKontext.MandantId,
+                FilialeId = AktuellerKontext.FilialeId,
+                Name = NeuerMitarbeiterName,
+                Abteilung = NeueMitarbeiterAbteilung,
+                Qualifikation = NeuerMitarbeiterQualifikation,
+                SollstundenProWoche = NeueMitarbeiterSollstunden,
+                WochenstundenLimit = 48,
+                Stundenlohn = NeuerMitarbeiterStundenlohn,
+                IstAktiv = true
             });
+
+            StatusNachricht = "Mitarbeiter hinzugefügt";
+            OnPropertyChanged("StatusNachricht");
         }
 
         private void AddSchicht(object obj)
         {
             FuehreMitRollenpruefungAus("Schicht erstellen", () =>
             {
-                var schicht = new Schicht
-                {
-                    Id = SchichtListe.Count + 1,
-                    Name = NeueSchichtName,
-                    Abteilung = NeueSchichtAbteilung,
-                    Wochentag = NeueSchichtWochentag,
-                    BenoetigteMitarbeiter = NeueSchichtKapazitaet
-                };
-
-                SchichtListe.Add(schicht);
-                _auditService.Protokolliere(AuditAction.DienstplanErstellt, "Schicht", schicht.Id, AktuellerBenutzer, string.Empty, schicht.ToAuditString(), "Dienstplan-Schicht erstellt");
-                SetStatus("Schicht hinzugefügt");
+                Id = SchichtListe.Count + 1,
+                MandantId = AktuellerKontext.MandantId,
+                FilialeId = AktuellerKontext.FilialeId,
+                FilialeName = AktuellerKontext.FilialeName,
+                Name = NeueSchichtName,
+                Abteilung = NeueSchichtAbteilung,
+                Wochentag = NeueSchichtWochentag,
+                BenoetigteMitarbeiter = NeueSchichtKapazitaet,
+                Pausenstunden = NeueSchichtPausenstunden,
+                Zuschlagsstunden = NeueSchichtZuschlagsstunden,
+                Start = DateTime.Today.AddHours(8),
+                Ende = DateTime.Today.AddHours(16)
             });
+
+            StatusNachricht = "Schicht hinzugefügt";
+            OnPropertyChanged("StatusNachricht");
         }
 
         private void Zuweisen(object obj)
@@ -196,22 +227,45 @@ namespace Dienstplaner.ViewModels
 
         private void Seed()
         {
-            MitarbeiterListe.Add(new Mitarbeiter
+            Mitarbeiter max = new Mitarbeiter
             {
                 Id = 1,
+                MandantId = 1,
+                FilialeId = 1,
                 Name = "Max Mustermann",
                 Abteilung = "Kasse",
                 Qualifikation = "Standard",
                 IstAktiv = true
             });
 
-            SchichtListe.Add(new Schicht
+            Schicht frueh = new Schicht
             {
                 Id = 1,
+                MandantId = 1,
+                FilialeId = 1,
+                FilialeName = "Zentrale",
                 Name = "Frühschicht",
                 Abteilung = "Kasse",
                 Wochentag = "Montag",
-                BenoetigteMitarbeiter = 2
+                Start = DateTime.Today.AddHours(6),
+                Ende = DateTime.Today.AddHours(14),
+                BenoetigteMitarbeiter = 2,
+                Pausenstunden = 0.5m,
+                Zuschlagsstunden = 1.0m,
+                BenoetigteQualifikation = "Standard"
+            };
+
+            MitarbeiterListe.Add(max);
+            SchichtListe.Add(frueh);
+            _service.Zuweisen(max, frueh);
+
+            ForecastListe.Add(new UmsatzForecast
+            {
+                FilialeId = 1,
+                FilialeName = "Zentrale",
+                Datum = DateTime.Today,
+                ErwarteterUmsatz = 12500,
+                ErwarteteKundenfrequenz = 980
             });
         }
 

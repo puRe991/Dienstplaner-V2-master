@@ -7,171 +7,81 @@
         Background="#F3F4F6">
 
     <Grid>
-
-        <!-- ROWS -->
         <Grid.RowDefinitions>
             <RowDefinition Height="60"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="32"/>
         </Grid.RowDefinitions>
 
-        <!-- HEADER -->
-        <Border Grid.Row="0"
-                Background="#1B3A5C">
-
+        <Border Grid.Row="0" Background="#1B3A5C">
             <Grid>
-
-                <TextBlock Text="Dienstplaner"
+                <TextBlock Text="Dienstplaner · Integrationen, Exporte und Auswertungen"
                            Foreground="White"
                            FontSize="18"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"
                            Margin="20,0"/>
-
             </Grid>
-
         </Border>
 
-        <!-- MAIN -->
-        <Grid Grid.Row="1"
-              Margin="10">
-
-            <!-- COLUMNS -->
+        <Grid Grid.Row="1" Margin="10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="320"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="420"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ===================================================== -->
-            <!-- LEFT PANEL -->
-            <!-- ===================================================== -->
-
-            <ScrollViewer Grid.Column="0"
-                          VerticalScrollBarVisibility="Auto">
-
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-
-                    <!-- MITARBEITER -->
-                    <Border Background="White"
-                            CornerRadius="6"
-                            Padding="14"
-                            Margin="0,0,0,10">
-
+                    <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
                         <StackPanel>
-
-                            <TextBlock Text="Mitarbeiter hinzufügen"
-                                       FontWeight="Bold"
-                                       FontSize="15"
-                                       Margin="0,0,0,12"/>
-
-                            <TextBlock Text="Name"
-                                       FontSize="11"
-                                       Margin="0,0,0,3"/>
-
-                            <TextBox Height="32"
-                                     Text="{Binding NeuerMitarbeiterName}"
-                                     Margin="0,0,0,8"/>
-
-                            <TextBlock Text="Abteilung"
-                                       FontSize="11"
-                                       Margin="0,0,0,3"/>
-
-                            <TextBox Height="32"
-                                     Text="{Binding NeueMitarbeiterAbteilung}"
-                                     Margin="0,0,0,8"/>
-
-                            <TextBlock Text="Qualifikation"
-                                       FontSize="11"
-                                       Margin="0,0,0,3"/>
-
-                            <TextBox Height="32"
-                                     Text="{Binding NeuerMitarbeiterQualifikation}"
-                                     Margin="0,0,0,8"/>
-
-                            <Button Content="Mitarbeiter hinzufügen"
-                                    Height="36"
-                                    Background="#2563EB"
-                                    Foreground="White"
-                                    BorderThickness="0"
-                                    Command="{Binding MitarbeiterHinzufuegenCommand}"/>
-
+                            <TextBlock Text="Mitarbeiter hinzufügen" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
+                            <TextBlock Text="Name" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeuerMitarbeiterName}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Abteilung" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueMitarbeiterAbteilung}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Qualifikation" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeuerMitarbeiterQualifikation}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Sollstunden/Woche" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueMitarbeiterSollstunden}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Stundenlohn" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeuerMitarbeiterStundenlohn}" Margin="0,0,0,12"/>
+                            <Button Content="Mitarbeiter hinzufügen" Height="36" Background="#2563EB" Foreground="White" BorderThickness="0" Command="{Binding MitarbeiterHinzufuegenCommand}"/>
                         </StackPanel>
-
                     </Border>
 
-                    <!-- SCHICHT -->
-                    <Border Background="White"
-                            CornerRadius="6"
-                            Padding="14">
-
+                    <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
                         <StackPanel>
-
-                            <TextBlock Text="Schicht hinzufügen"
-                                       FontWeight="Bold"
-                                       FontSize="15"
-                                       Margin="0,0,0,12"/>
-
-                            <TextBlock Text="Schichtname"
-                                       FontSize="11"
-                                       Margin="0,0,0,3"/>
-
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtName}"
-                                     Margin="0,0,0,8"/>
-
-                            <TextBlock Text="Abteilung"
-                                       FontSize="11"
-                                       Margin="0,0,0,3"/>
-
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtAbteilung}"
-                                     Margin="0,0,0,8"/>
-
-                            <TextBlock Text="Wochentag"
-                                       FontSize="11"
-                                       Margin="0,0,0,3"/>
-
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtWochentag}"
-                                     Margin="0,0,0,8"/>
-
-                            <TextBlock Text="Benötigte Mitarbeiter"
-                                       FontSize="11"
-                                       Margin="0,0,0,3"/>
-
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtKapazitaet}"
-                                     Margin="0,0,0,12"/>
-
-                            <Button Content="Schicht erstellen"
-                                    Height="36"
-                                    Background="#059669"
-                                    Foreground="White"
-                                    BorderThickness="0"
-                                    Command="{Binding SchichtHinzufuegenCommand}"/>
-
+                            <TextBlock Text="Schicht hinzufügen" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
+                            <TextBlock Text="Schichtname" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtName}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Abteilung" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtAbteilung}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Wochentag" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtWochentag}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Benötigte Mitarbeiter" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtKapazitaet}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Pausenstunden" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtPausenstunden}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Zuschlagsstunden" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtZuschlagsstunden}" Margin="0,0,0,12"/>
+                            <Button Content="Schicht erstellen" Height="36" Background="#059669" Foreground="White" BorderThickness="0" Command="{Binding SchichtHinzufuegenCommand}"/>
                         </StackPanel>
-
                     </Border>
 
+                    <Border Background="White" CornerRadius="6" Padding="14">
+                        <StackPanel>
+                            <TextBlock Text="Forecast importieren" FontWeight="Bold" FontSize="15" Margin="0,0,0,8"/>
+                            <TextBlock Text="CSV: FilialeId;Filiale;Datum;Umsatz;Kunden" FontSize="11" Opacity="0.7" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <TextBox Height="32" Text="{Binding ForecastImportPfad}" Margin="0,0,0,8"/>
+                            <Button Content="Umsatz/Kundenfrequenz importieren" Height="36" Background="#7C3AED" Foreground="White" BorderThickness="0" Command="{Binding ForecastImportCommand}"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-
             </ScrollViewer>
 
-            <!-- ===================================================== -->
-            <!-- CENTER PANEL -->
-            <!-- ===================================================== -->
-
-            <StackPanel Grid.Column="1"
-                        Margin="10,0">
-
-                <!-- ZUWEISUNG -->
-                <Border Background="White"
-                        CornerRadius="6"
-                        Padding="14"
-                        Margin="0,0,0,10">
-
+            <StackPanel Grid.Column="1" Margin="10,0">
+                <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
                     <StackPanel>
 
                         <TextBlock Text="Zuweisung"
@@ -223,101 +133,55 @@
                                 Command="{Binding DienstplanVeroeffentlichenCommand}"/>
 
                     </StackPanel>
-
                 </Border>
 
-                <!-- SCHICHTEN -->
-                <Border Background="White"
-                        CornerRadius="6"
-                        Padding="14">
-
+                <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
                     <StackPanel>
-
-                        <TextBlock Text="Geplante Schichten"
-                                   FontWeight="Bold"
-                                   FontSize="15"
-                                   Margin="0,0,0,12"/>
-
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      Height="600">
-
-                            <ItemsControl ItemsSource="{Binding SchichtListe}">
-
-                                <ItemsControl.ItemTemplate>
-
-                                    <DataTemplate>
-
-                                        <Border BorderBrush="#E5E7EB"
-                                                BorderThickness="0,0,0,1"
-                                                Padding="8">
-
-                                            <StackPanel>
-
-                                                <TextBlock Text="{Binding Name}"
-                                                           FontWeight="Bold"
-                                                           FontSize="14"/>
-
-                                                <TextBlock Text="{Binding Abteilung,
-                                                    StringFormat=Abteilung: {0}}"
-                                                           FontSize="11"
-                                                           Opacity="0.7"/>
-
-                                                <TextBlock Text="{Binding Wochentag,
-                                                    StringFormat=Tag: {0}}"
-                                                           FontSize="11"/>
-
-                                                <TextBlock Text="{Binding BenoetigteMitarbeiter,
-                                                    StringFormat=Benötigt: {0} Mitarbeiter}"
-                                                           FontSize="11"/>
-
-                                                <TextBlock Text="{Binding MitarbeiterNamen.Count,
-                                                    StringFormat=Zugewiesen: {0}}"
-                                                           FontSize="11"
-                                                           Margin="0,0,0,5"/>
-
-                                                <TextBlock Text="Eingeplante Mitarbeiter:"
-                                                           FontSize="11"
-                                                           FontWeight="SemiBold"
-                                                           Margin="0,4,0,2"/>
-
-                                                <ItemsControl ItemsSource="{Binding MitarbeiterNamen}">
-
-                                                    <ItemsControl.ItemTemplate>
-
-                                                        <DataTemplate>
-
-                                                            <Border Background="#EEF2FF"
-                                                                    CornerRadius="4"
-                                                                    Padding="4"
-                                                                    Margin="0,2,0,2">
-
-                                                                <TextBlock Text="{Binding}"
-                                                                           FontSize="11"/>
-
-                                                            </Border>
-
-                                                        </DataTemplate>
-
-                                                    </ItemsControl.ItemTemplate>
-
-                                                </ItemsControl>
-
-                                            </StackPanel>
-
-                                        </Border>
-
-                                    </DataTemplate>
-
-                                </ItemsControl.ItemTemplate>
-
-                            </ItemsControl>
-
-                        </ScrollViewer>
-
+                        <TextBlock Text="Geschützte Exporte" FontWeight="Bold" FontSize="15" Margin="0,0,0,8"/>
+                        <TextBlock Text="Mandant und Rolle werden vor jedem CSV-, Excel- oder PDF-Export geprüft." FontSize="11" Opacity="0.7" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="CSV" Width="90" Height="32" Margin="0,0,8,0" Command="{Binding CsvExportCommand}"/>
+                            <Button Content="Excel" Width="90" Height="32" Margin="0,0,8,0" Command="{Binding ExcelExportCommand}"/>
+                            <Button Content="PDF" Width="90" Height="32" Command="{Binding PdfExportCommand}"/>
+                        </StackPanel>
                     </StackPanel>
-
                 </Border>
 
+                <Border Background="White" CornerRadius="6" Padding="14">
+                    <StackPanel>
+                        <TextBlock Text="Geplante Schichten" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Height="560">
+                            <ItemsControl ItemsSource="{Binding SchichtListe}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="#E5E7EB" BorderThickness="0,0,0,1" Padding="8">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="14"/>
+                                                <TextBlock Text="{Binding FilialeName, StringFormat=Filiale: {0}}" FontSize="11" Opacity="0.7"/>
+                                                <TextBlock Text="{Binding Abteilung, StringFormat=Abteilung: {0}}" FontSize="11"/>
+                                                <TextBlock Text="{Binding Wochentag, StringFormat=Tag: {0}}" FontSize="11"/>
+                                                <TextBlock Text="{Binding NettoDauerInStunden, StringFormat=Netto-Iststunden: {0} h}" FontSize="11"/>
+                                                <TextBlock Text="{Binding Pausenstunden, StringFormat=Pause: {0} h}" FontSize="11"/>
+                                                <TextBlock Text="{Binding Zuschlagsstunden, StringFormat=Zuschlag: {0} h}" FontSize="11"/>
+                                                <TextBlock Text="{Binding BenoetigteMitarbeiter, StringFormat=Benötigt: {0} Mitarbeiter}" FontSize="11"/>
+                                                <TextBlock Text="{Binding MitarbeiterNamen.Count, StringFormat=Zugewiesen: {0}}" FontSize="11" Margin="0,0,0,5"/>
+                                                <ItemsControl ItemsSource="{Binding MitarbeiterNamen}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="#EEF2FF" CornerRadius="4" Padding="4" Margin="0,2,0,2">
+                                                                <TextBlock Text="{Binding}" FontSize="11"/>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
             </StackPanel>
 
             <!-- ===================================================== -->
@@ -336,56 +200,64 @@
                         Margin="0,0,0,10">
 
                     <StackPanel>
-
-                        <TextBlock Text="Mitarbeiter Übersicht"
-                                   FontWeight="Bold"
-                                   FontSize="15"
-                                   Margin="0,0,0,12"/>
-
-                        <ScrollViewer Height="500">
-
-                            <ItemsControl ItemsSource="{Binding MitarbeiterListe}">
-
-                                <ItemsControl.ItemTemplate>
-
-                                    <DataTemplate>
-
-                                        <Border BorderBrush="#E5E7EB"
-                                                BorderThickness="0,0,0,1"
-                                                Padding="8">
-
-                                            <StackPanel>
-
-                                                <TextBlock Text="{Binding Name}"
-                                                           FontWeight="Bold"/>
-
-                                                <TextBlock Text="{Binding Abteilung,
-                                                    StringFormat=Abteilung: {0}}"
-                                                           FontSize="11"
-                                                           Opacity="0.7"/>
-
-                                                <TextBlock Text="{Binding Qualifikation,
-                                                    StringFormat=Qualifikation: {0}}"
-                                                           FontSize="11"/>
-
-                                                <TextBlock Text="{Binding Schichten.Count,
-                                                    StringFormat=Schichten: {0}}"
-                                                           FontSize="11"/>
-
-                                            </StackPanel>
-
-                                        </Border>
-
-                                    </DataTemplate>
-
-                                </ItemsControl.ItemTemplate>
-
-                            </ItemsControl>
-
-                        </ScrollViewer>
-
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Reports" FontWeight="Bold" FontSize="15" Width="250"/>
+                            <Button Content="Aktualisieren" Command="{Binding ReportsAktualisierenCommand}"/>
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding ReportListe}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#E5E7EB" BorderThickness="0,0,0,1" Padding="6">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Wert}" FontSize="18" Foreground="#1B3A5C"/>
+                                            <TextBlock Text="{Binding Hinweis}" FontSize="11" Opacity="0.7" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
+                </Border>
 
+                <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Lohn &amp; Zeiterfassung" FontWeight="Bold" FontSize="15" Width="250"/>
+                            <Button Content="Aktualisieren" Command="{Binding IntegrationenAktualisierenCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="Lohnabrechnung" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <ItemsControl ItemsSource="{Binding LohnabrechnungListe}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock FontSize="11" Text="{Binding MitarbeiterName, StringFormat={}{0}: Soll/Ist, Überstunden und Kosten bereitgestellt}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="Zeiterfassung" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                        <ItemsControl ItemsSource="{Binding ZeiterfassungListe}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock FontSize="11" Text="{Binding SchichtName, StringFormat={}{0}: Start/Ende/Pause/Kostenstelle}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+                    <StackPanel>
+                        <TextBlock Text="Forecasts je Filiale" FontWeight="Bold" FontSize="15" Margin="0,0,0,8"/>
+                        <ScrollViewer Height="120">
+                            <ItemsControl ItemsSource="{Binding ForecastListe}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock FontSize="11" Text="{Binding FilialeName, StringFormat={}{0}: Umsatz/Kunden importiert}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
                 </Border>
 
                 <!-- DSGVO ADMIN -->
@@ -505,17 +377,9 @@
                         Padding="14">
 
                     <StackPanel>
-
-                        <TextBlock Text="Systemstatus"
-                                   FontWeight="Bold"
-                                   FontSize="15"
-                                   Margin="0,0,0,8"/>
-
-                        <TextBlock Text="{Binding StatusNachricht}"
-                                   TextWrapping="Wrap"/>
-
+                        <TextBlock Text="Systemstatus" FontWeight="Bold" FontSize="15" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding StatusNachricht}" TextWrapping="Wrap"/>
                     </StackPanel>
-
                 </Border>
 
                 </StackPanel>
@@ -524,17 +388,8 @@
 
         </Grid>
 
-        <!-- FOOTER -->
-        <Border Grid.Row="2"
-                Background="#1B3A5C">
-
-            <TextBlock Text="{Binding StatusNachricht}"
-                       Foreground="White"
-                       VerticalAlignment="Center"
-                       Margin="10,0"/>
-
+        <Border Grid.Row="2" Background="#1B3A5C">
+            <TextBlock Text="{Binding StatusNachricht}" Foreground="White" VerticalAlignment="Center" Margin="10,0"/>
         </Border>
-
     </Grid>
-
 </Window>
