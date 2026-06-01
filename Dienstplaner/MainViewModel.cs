@@ -13,6 +13,10 @@ namespace Dienstplaner.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
+        private readonly ZuweisungsService _service;
+        private readonly ApprovalService _approvalService;
+        private string _statusNachricht;
+
         public ObservableCollection<Mitarbeiter> MitarbeiterListe { get; set; }
         public ObservableCollection<Schicht> SchichtListe { get; set; }
         public ObservableCollection<ReportKennzahl> ReportListe { get; set; }
@@ -25,6 +29,9 @@ namespace Dienstplaner.ViewModels
 
         public Mitarbeiter AusgewaehlterMitarbeiter { get; set; }
         public Schicht AusgewaehlteSchicht { get; set; }
+        public Availability AusgewaehlteVerfuegbarkeit { get; set; }
+        public Absence AusgewaehlteAbwesenheit { get; set; }
+        public ShiftSwapRequest AusgewaehlterTauschAntrag { get; set; }
 
         public MandantKontext AktuellerKontext { get; set; }
 
@@ -267,6 +274,32 @@ namespace Dienstplaner.ViewModels
                 ErwarteterUmsatz = 12500,
                 ErwarteteKundenfrequenz = 980
             });
+
+            Verfuegbarkeiten.Add(new Availability
+            {
+                Id = 1,
+                MitarbeiterId = 1,
+                MitarbeiterName = "Max Mustermann",
+                Wochentag = "Montag",
+                Von = new TimeSpan(8, 0, 0),
+                Bis = new TimeSpan(16, 0, 0),
+                Status = RequestStatus.Approved,
+                Kommentar = "Regelverfügbarkeit"
+            });
+
+            Abwesenheiten.Add(new LeaveRequest
+            {
+                Id = 1,
+                MitarbeiterId = 2,
+                MitarbeiterName = "Erika Beispiel",
+                Von = DateTime.Today.AddHours(8),
+                Bis = DateTime.Today.AddHours(16),
+                Grund = "Urlaub",
+                Status = RequestStatus.Submitted,
+                Kommentar = "Familientermin"
+            });
+
+            StatusNachricht = "Bereit";
         }
 
         private void SetStatus(string nachricht)
