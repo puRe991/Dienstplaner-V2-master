@@ -212,9 +212,9 @@ namespace Dienstplaner.ViewModels
             MitarbeiterListe.Add(new Mitarbeiter
             {
                 Id = MitarbeiterListe.Count + 1,
-                Name = NeuerMitarbeiterName,
-                Abteilung = NeueMitarbeiterAbteilung,
-                Qualifikation = NeuerMitarbeiterQualifikation,
+                Name = NeuerMitarbeiterName.Trim(),
+                Abteilung = NeueMitarbeiterAbteilung.Trim(),
+                Qualifikation = NeuerMitarbeiterQualifikation.Trim(),
                 IstAktiv = true
             });
 
@@ -359,6 +359,12 @@ namespace Dienstplaner.ViewModels
 
             AnfrageListe.Add(new MitarbeiterAnfrage { Id = 1, MitarbeiterId = 1, Titel = "Urlaub am Freitag", Status = "Offen" });
             AnfrageListe.Add(new MitarbeiterAnfrage { Id = 2, MitarbeiterId = 2, Titel = "Schichttausch Dienstag", Status = "In Prüfung" });
+        }
+
+        private void SetStatus(string message)
+        {
+            StatusNachricht = message;
+            OnPropertyChanged(nameof(StatusNachricht));
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
