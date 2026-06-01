@@ -55,7 +55,17 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Auth\AuthenticatedUser.cs" />
+    <Compile Include="Auth\AuthorizationService.cs" />
+    <Compile Include="Auth\AuthService.cs" />
+    <Compile Include="Auth\EndpointAuthorizationService.cs" />
+    <Compile Include="Auth\JwtAuthenticationService.cs" />
+    <Compile Include="Auth\JwtValidationOptions.cs" />
+    <Compile Include="Auth\Permission.cs" />
+    <Compile Include="Auth\UserAccount.cs" />
+    <Compile Include="Auth\UserRole.cs" />
     <Compile Include="MainViewModel.cs" />
+    <Compile Include="MitarbeiterAnfrage.cs" />
     <Compile Include="RelayCommand.cs" />
     <Compile Include="Schicht.cs" />
     <Compile Include="Zuweisung.cs" />

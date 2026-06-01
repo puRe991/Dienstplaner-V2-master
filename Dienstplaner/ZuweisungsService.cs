@@ -23,6 +23,8 @@ namespace Dienstplaner.Services
 
             m.Schichten.Add(s);
             s.MitarbeiterNamen.Add(m.Name);
+            if (!s.MitarbeiterIds.Contains(m.Id))
+                s.MitarbeiterIds.Add(m.Id);
 
             return "Zuweisung erfolgreich";
         }

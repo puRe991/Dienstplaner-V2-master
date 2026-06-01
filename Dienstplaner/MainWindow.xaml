@@ -6,6 +6,10 @@
         Width="1440"
         Background="#F3F4F6">
 
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </Window.Resources>
+
     <Grid>
 
         <!-- ROWS -->
@@ -21,12 +25,36 @@
 
             <Grid>
 
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="420"/>
+                </Grid.ColumnDefinitions>
+
                 <TextBlock Text="Dienstplaner"
                            Foreground="White"
                            FontSize="18"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"
                            Margin="20,0"/>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,20,0">
+
+                    <TextBlock Text="Benutzer"
+                               Foreground="White"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+
+                    <ComboBox Width="250"
+                              Height="30"
+                              ItemsSource="{Binding Benutzerkonten}"
+                              DisplayMemberPath="AnzeigeName"
+                              SelectedItem="{Binding AusgewaehltesBenutzerkonto}"/>
+
+                </StackPanel>
 
             </Grid>
 
@@ -56,7 +84,8 @@
                     <Border Background="White"
                             CornerRadius="6"
                             Padding="14"
-                            Margin="0,0,0,10">
+                            Margin="0,0,0,10"
+                            IsEnabled="{Binding KannMitarbeiterBearbeiten}">
 
                         <StackPanel>
 
@@ -103,7 +132,8 @@
                     <!-- SCHICHT -->
                     <Border Background="White"
                             CornerRadius="6"
-                            Padding="14">
+                            Padding="14"
+                            IsEnabled="{Binding KannDienstplanBearbeiten}">
 
                         <StackPanel>
 
@@ -170,7 +200,8 @@
                 <Border Background="White"
                         CornerRadius="6"
                         Padding="14"
-                        Margin="0,0,0,10">
+                        Margin="0,0,0,10"
+                        IsEnabled="{Binding KannDienstplanBearbeiten}">
 
                     <StackPanel>
 
@@ -184,7 +215,7 @@
                                    Margin="0,0,0,3"/>
 
                         <ComboBox Height="32"
-                                  ItemsSource="{Binding MitarbeiterListe}"
+                                  ItemsSource="{Binding MitarbeiterView}"
                                   DisplayMemberPath="Name"
                                   SelectedItem="{Binding AusgewaehlterMitarbeiter}"
                                   Margin="0,0,0,8"/>
@@ -194,7 +225,7 @@
                                    Margin="0,0,0,3"/>
 
                         <ComboBox Height="32"
-                                  ItemsSource="{Binding SchichtListe}"
+                                  ItemsSource="{Binding SchichtView}"
                                   DisplayMemberPath="Name"
                                   SelectedItem="{Binding AusgewaehlteSchicht}"
                                   Margin="0,0,0,12"/>
@@ -225,7 +256,7 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       Height="600">
 
-                            <ItemsControl ItemsSource="{Binding SchichtListe}">
+                            <ItemsControl ItemsSource="{Binding SchichtView}">
 
                                 <ItemsControl.ItemTemplate>
 
@@ -298,6 +329,24 @@
 
                         </ScrollViewer>
 
+                        <StackPanel Orientation="Horizontal"
+                                    Margin="0,12,0,0">
+
+                            <Button Content="Freigeben"
+                                    Width="110"
+                                    Height="32"
+                                    Margin="0,0,8,0"
+                                    IsEnabled="{Binding KannFreigeben}"
+                                    Command="{Binding DienstplanFreigebenCommand}"/>
+
+                            <Button Content="Export"
+                                    Width="110"
+                                    Height="32"
+                                    IsEnabled="{Binding KannExportieren}"
+                                    Command="{Binding ExportCommand}"/>
+
+                        </StackPanel>
+
                     </StackPanel>
 
                 </Border>
@@ -325,7 +374,7 @@
 
                         <ScrollViewer Height="500">
 
-                            <ItemsControl ItemsSource="{Binding MitarbeiterListe}">
+                            <ItemsControl ItemsSource="{Binding MitarbeiterView}">
 
                                 <ItemsControl.ItemTemplate>
 
@@ -381,8 +430,54 @@
                                    FontSize="15"
                                    Margin="0,0,0,8"/>
 
+                        <TextBlock Text="{Binding AktuellerBenutzerText}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"/>
+
                         <TextBlock Text="{Binding StatusNachricht}"
-                                   TextWrapping="Wrap"/>
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,12"/>
+
+                        <Button Content="Admin-Bereich"
+                                Height="32"
+                                Margin="0,0,0,12"
+                                Visibility="{Binding KannAdminFunktionenNutzen, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Command="{Binding AdminCommand}"/>
+
+                        <TextBlock Text="Anfragen"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,6"/>
+
+                        <ItemsControl ItemsSource="{Binding AnfrageView}">
+
+                            <ItemsControl.ItemTemplate>
+
+                                <DataTemplate>
+
+                                    <Border Background="#F9FAFB"
+                                            BorderBrush="#E5E7EB"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6"
+                                            Margin="0,0,0,6">
+
+                                        <StackPanel>
+
+                                            <TextBlock Text="{Binding Titel}"
+                                                       FontWeight="SemiBold"/>
+
+                                            <TextBlock Text="{Binding Status, StringFormat=Status: {0}}"
+                                                       FontSize="11"/>
+
+                                        </StackPanel>
+
+                                    </Border>
+
+                                </DataTemplate>
+
+                            </ItemsControl.ItemTemplate>
+
+                        </ItemsControl>
 
                     </StackPanel>
 
