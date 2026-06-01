@@ -50,10 +50,36 @@ namespace Dienstplaner.ViewModels
         public decimal NeueSchichtZuschlagsstunden { get; set; }
         public string ForecastImportPfad { get; set; }
 
+        public string FilterFiliale { get; set; }
+        public string FilterAbteilung { get; set; }
+        public string FilterWoche { get; set; }
+        public string FilterRolle { get; set; }
+        public Mitarbeiter FilterMitarbeiter { get; set; }
+
         public string StatusNachricht { get; set; }
         public string DsgvoExportText { get; set; }
         public ComplianceRichtlinie ComplianceRichtlinie { get; }
         public BenutzerKontext AktuellerBenutzer { get; }
+
+        public int BesetzungSoll
+        {
+            get { return SchichtListe.Sum(s => s.BenoetigteMitarbeiter); }
+        }
+
+        public int BesetzungIst
+        {
+            get { return SchichtListe.Sum(s => s.MitarbeiterNamen.Count); }
+        }
+
+        public int BesetzungsDifferenz
+        {
+            get { return BesetzungIst - BesetzungSoll; }
+        }
+
+        public int KonfliktAnzahl
+        {
+            get { return SchichtListe.Count(s => !s.IstVoll || s.MitarbeiterNamen.Count > s.BenoetigteMitarbeiter); }
+        }
 
         public ICommand MitarbeiterHinzufuegenCommand { get; }
         public ICommand SchichtHinzufuegenCommand { get; }
@@ -82,6 +108,7 @@ namespace Dienstplaner.ViewModels
 
             MitarbeiterView = CollectionViewSource.GetDefaultView(MitarbeiterListe);
             SchichtView = CollectionViewSource.GetDefaultView(SchichtListe);
+            SchichtView.Filter = FilterSchicht;
 
             AktuellerKontext = new MandantKontext
             {
@@ -143,6 +170,7 @@ namespace Dienstplaner.ViewModels
                 FilialeName = AktuellerKontext.FilialeName,
                 Name = NeueSchichtName,
                 Abteilung = NeueSchichtAbteilung,
+                Rolle = NeueSchichtAbteilung,
                 Wochentag = NeueSchichtWochentag,
                 BenoetigteMitarbeiter = NeueSchichtKapazitaet,
                 Pausenstunden = NeueSchichtPausenstunden,
@@ -253,6 +281,7 @@ namespace Dienstplaner.ViewModels
                 FilialeName = "Zentrale",
                 Name = "Frühschicht",
                 Abteilung = "Kasse",
+                Rolle = "Kassenleitung",
                 Wochentag = "Montag",
                 Start = DateTime.Today.AddHours(6),
                 Ende = DateTime.Today.AddHours(14),

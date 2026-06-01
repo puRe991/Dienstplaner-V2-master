@@ -11,6 +11,9 @@ namespace Dienstplaner.Models
         public string FilialeName { get; set; }
         public string Name { get; set; }
         public string Abteilung { get; set; }
+        public string Filiale { get; set; }
+        public string Rolle { get; set; }
+        public string Kalenderwoche { get; set; }
 
         public string Wochentag { get; set; }
 

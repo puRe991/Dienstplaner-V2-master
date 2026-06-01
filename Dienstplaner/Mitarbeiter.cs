@@ -11,6 +11,7 @@ namespace Dienstplaner.Models
         public string Name { get; set; }
         public string Abteilung { get; set; }
         public string Qualifikation { get; set; }
+        public string Filiale { get; set; }
 
         public int WochenstundenLimit { get; set; }
         public decimal SollstundenProWoche { get; set; }
