@@ -1,319 +1,424 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
 using System.Windows.Input;
 using Dienstplaner.Auth;
 using Dienstplaner.Helpers;
+using Dienstplaner.Infrastructure.Services;
 using Dienstplaner.Models;
-using Dienstplaner.Services;
 
 namespace Dienstplaner.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged
+    public class MainViewModel : INotifyPropertyChanged, IDataErrorInfo
     {
         private readonly ZuweisungsService _service;
-        private readonly AuthService _authService;
-        private readonly AuthorizationService _authorizationService;
-
-        private Mitarbeiter _ausgewaehlterMitarbeiter;
-        private Schicht _ausgewaehlteSchicht;
-        private UserAccount _ausgewaehltesBenutzerkonto;
-        private AuthenticatedUser _aktuellerBenutzer;
-        private string _neuerMitarbeiterName;
-        private string _neueMitarbeiterAbteilung;
-        private string _neuerMitarbeiterQualifikation;
-        private string _neueSchichtName;
-        private string _neueSchichtAbteilung;
-        private string _neueSchichtWochentag;
-        private int _neueSchichtKapazitaet = 2;
+        private readonly ApprovalService _approvalService;
         private string _statusNachricht;
 
-        public ObservableCollection<Mitarbeiter> MitarbeiterListe { get; private set; }
-        public ObservableCollection<Schicht> SchichtListe { get; private set; }
-        public ObservableCollection<MitarbeiterAnfrage> AnfrageListe { get; private set; }
-        public ObservableCollection<UserAccount> Benutzerkonten { get; private set; }
+        public ObservableCollection<Mitarbeiter> MitarbeiterListe { get; set; }
+        public ObservableCollection<Schicht> SchichtListe { get; set; }
+        public ObservableCollection<ReportKennzahl> ReportListe { get; set; }
+        public ObservableCollection<UmsatzForecast> ForecastListe { get; set; }
+        public ObservableCollection<PayrollRecord> LohnabrechnungListe { get; set; }
+        public ObservableCollection<TimeTrackingRecord> ZeiterfassungListe { get; set; }
 
-        public ICollectionView MitarbeiterView { get; private set; }
-        public ICollectionView SchichtView { get; private set; }
-        public ICollectionView AnfrageView { get; private set; }
+        public ICollectionView MitarbeiterView { get; }
+        public ICollectionView SchichtView { get; }
+
+        public Mitarbeiter AusgewaehlterMitarbeiter { get; set; }
+        public Schicht AusgewaehlteSchicht { get; set; }
+        public Availability AusgewaehlteVerfuegbarkeit { get; set; }
+        public Absence AusgewaehlteAbwesenheit { get; set; }
+        public ShiftSwapRequest AusgewaehlterTauschAntrag { get; set; }
+
+        public MandantKontext AktuellerKontext { get; set; }
+
+        public string NeuerMitarbeiterName { get; set; }
+        public string NeueMitarbeiterAbteilung { get; set; }
+        public string NeuerMitarbeiterQualifikation { get; set; }
+        public decimal NeueMitarbeiterSollstunden { get; set; } = 40;
+        public decimal NeuerMitarbeiterStundenlohn { get; set; } = 15;
+
+        public string NeueSchichtName { get; set; }
+        public string NeueSchichtAbteilung { get; set; }
+        public string NeueSchichtWochentag { get; set; }
+        public int NeueSchichtKapazitaet { get; set; } = 2;
+        public decimal NeueSchichtPausenstunden { get; set; } = 0.5m;
+        public decimal NeueSchichtZuschlagsstunden { get; set; }
+        public string ForecastImportPfad { get; set; }
+
+        public string FilterFiliale { get; set; }
+        public string FilterAbteilung { get; set; }
+        public string FilterWoche { get; set; }
+        public string FilterRolle { get; set; }
+        public Mitarbeiter FilterMitarbeiter { get; set; }
+
+        public string StatusNachricht { get; set; }
+        public string DsgvoExportText { get; set; }
+        public ComplianceRichtlinie ComplianceRichtlinie { get; }
+        public BenutzerKontext AktuellerBenutzer { get; }
+
+        public int BesetzungSoll
+        {
+            get { return SchichtListe.Sum(s => s.BenoetigteMitarbeiter); }
+        }
+
+        public int BesetzungIst
+        {
+            get { return SchichtListe.Sum(s => s.MitarbeiterNamen.Count); }
+        }
+
+        public int BesetzungsDifferenz
+        {
+            get { return BesetzungIst - BesetzungSoll; }
+        }
+
+        public int KonfliktAnzahl
+        {
+            get { return SchichtListe.Count(s => !s.IstVoll || s.MitarbeiterNamen.Count > s.BenoetigteMitarbeiter); }
+        }
+
+        public ICommand MitarbeiterHinzufuegenCommand { get; }
+        public ICommand SchichtHinzufuegenCommand { get; }
+        public ICommand ZuweisenCommand { get; }
+        public ICommand CsvExportCommand { get; }
+        public ICommand ExcelExportCommand { get; }
+        public ICommand PdfExportCommand { get; }
+        public ICommand ReportsAktualisierenCommand { get; }
+        public ICommand IntegrationenAktualisierenCommand { get; }
+        public ICommand ForecastImportCommand { get; }
+
+        private readonly ZuweisungsService _service;
+        private readonly DienstplanExportService _exportService;
+        private readonly ReportingService _reportingService;
+        private readonly IntegrationsService _integrationsService;
+        private readonly ForecastImportService _forecastImportService;
 
         public MainViewModel()
+            : this(new DienstplanDataService())
         {
+        }
+
+        public MainViewModel(DienstplanDataService dataService)
+        {
+            _dataService = dataService;
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
-            AnfrageListe = new ObservableCollection<MitarbeiterAnfrage>();
+            ReportListe = new ObservableCollection<ReportKennzahl>();
+            ForecastListe = new ObservableCollection<UmsatzForecast>();
+            LohnabrechnungListe = new ObservableCollection<PayrollRecord>();
+            ZeiterfassungListe = new ObservableCollection<TimeTrackingRecord>();
 
             MitarbeiterView = CollectionViewSource.GetDefaultView(MitarbeiterListe);
             SchichtView = CollectionViewSource.GetDefaultView(SchichtListe);
-            AnfrageView = CollectionViewSource.GetDefaultView(AnfrageListe);
-            MitarbeiterView.Filter = CanCurrentUserViewEmployee;
-            SchichtView.Filter = CanCurrentUserViewShift;
-            AnfrageView.Filter = CanCurrentUserViewRequest;
+            SchichtView.Filter = FilterSchicht;
+
+            AktuellerKontext = new MandantKontext
+            {
+                MandantId = 1,
+                MandantName = "DemoMandant",
+                FilialeId = 1,
+                FilialeName = "Zentrale",
+                Rolle = BenutzerRolle.Personalwesen
+            };
 
             _service = new ZuweisungsService();
-            _authorizationService = new AuthorizationService();
-            _authService = new AuthService(_authorizationService);
-            Benutzerkonten = _authService.DemoAccounts;
+            _exportService = new DienstplanExportService();
+            _reportingService = new ReportingService();
+            _integrationsService = new IntegrationsService();
+            _forecastImportService = new ForecastImportService();
 
-            MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter, _ => KannMitarbeiterBearbeiten);
-            SchichtHinzufuegenCommand = new RelayCommand(AddSchicht, _ => KannDienstplanBearbeiten);
-            ZuweisenCommand = new RelayCommand(Zuweisen, _ => KannDienstplanBearbeiten);
-            DienstplanFreigebenCommand = new RelayCommand(Freigeben, _ => KannFreigeben);
-            ExportCommand = new RelayCommand(Exportieren, _ => KannExportieren);
-            AdminCommand = new RelayCommand(AdminOeffnen, _ => KannAdminFunktionenNutzen);
+            MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter, CanAddMitarbeiter);
+            SchichtHinzufuegenCommand = new RelayCommand(AddSchicht, CanAddSchicht);
+            ZuweisenCommand = new RelayCommand(Zuweisen);
+            CsvExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Csv));
+            ExcelExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Excel));
+            PdfExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Pdf));
+            ReportsAktualisierenCommand = new RelayCommand(AktualisiereReports);
+            IntegrationenAktualisierenCommand = new RelayCommand(AktualisiereIntegrationen);
+            ForecastImportCommand = new RelayCommand(ImportiereForecast);
 
             Seed();
-            AusgewaehltesBenutzerkonto = Benutzerkonten[0];
+            AktualisiereReports(null);
+            AktualisiereIntegrationen(null);
         }
 
-        public Mitarbeiter AusgewaehlterMitarbeiter
+        private bool CanAddMitarbeiter(object obj)
         {
-            get { return _ausgewaehlterMitarbeiter; }
-            set { SetProperty(ref _ausgewaehlterMitarbeiter, value); }
+            string fehler;
+            return IstMitarbeiterGueltig(out fehler);
         }
 
-        public Schicht AusgewaehlteSchicht
+        private bool CanAddSchicht(object obj)
         {
-            get { return _ausgewaehlteSchicht; }
-            set { SetProperty(ref _ausgewaehlteSchicht, value); }
-        }
-
-        public UserAccount AusgewaehltesBenutzerkonto
-        {
-            get { return _ausgewaehltesBenutzerkonto; }
-            set
-            {
-                if (SetProperty(ref _ausgewaehltesBenutzerkonto, value))
-                    SignIn(value);
-            }
-        }
-
-        public AuthenticatedUser AktuellerBenutzer
-        {
-            get { return _aktuellerBenutzer; }
-            private set { SetProperty(ref _aktuellerBenutzer, value); }
-        }
-
-        public string NeuerMitarbeiterName
-        {
-            get { return _neuerMitarbeiterName; }
-            set { SetProperty(ref _neuerMitarbeiterName, value); }
-        }
-
-        public string NeueMitarbeiterAbteilung
-        {
-            get { return _neueMitarbeiterAbteilung; }
-            set { SetProperty(ref _neueMitarbeiterAbteilung, value); }
-        }
-
-        public string NeuerMitarbeiterQualifikation
-        {
-            get { return _neuerMitarbeiterQualifikation; }
-            set { SetProperty(ref _neuerMitarbeiterQualifikation, value); }
-        }
-
-        public string NeueSchichtName
-        {
-            get { return _neueSchichtName; }
-            set { SetProperty(ref _neueSchichtName, value); }
-        }
-
-        public string NeueSchichtAbteilung
-        {
-            get { return _neueSchichtAbteilung; }
-            set { SetProperty(ref _neueSchichtAbteilung, value); }
-        }
-
-        public string NeueSchichtWochentag
-        {
-            get { return _neueSchichtWochentag; }
-            set { SetProperty(ref _neueSchichtWochentag, value); }
-        }
-
-        public int NeueSchichtKapazitaet
-        {
-            get { return _neueSchichtKapazitaet; }
-            set { SetProperty(ref _neueSchichtKapazitaet, value); }
-        }
-
-        public string StatusNachricht
-        {
-            get { return _statusNachricht; }
-            set { SetProperty(ref _statusNachricht, value); }
-        }
-
-        public string AktuellerBenutzerText
-        {
-            get
-            {
-                return AktuellerBenutzer == null
-                    ? "Nicht angemeldet"
-                    : string.Format("Angemeldet: {0} · Rolle: {1}", AktuellerBenutzer.DisplayName, AktuellerBenutzer.Role);
-            }
-        }
-
-        public bool KannMitarbeiterBearbeiten
-        {
-            get { return _authorizationService.CanEditEmployeeData(AktuellerBenutzer); }
-        }
-
-        public bool KannDienstplanBearbeiten
-        {
-            get { return _authorizationService.CanEditSchedule(AktuellerBenutzer); }
-        }
-
-        public bool KannFreigeben
-        {
-            get { return _authorizationService.HasPermission(AktuellerBenutzer, Permission.ApproveSchedule); }
-        }
-
-        public bool KannExportieren
-        {
-            get { return _authorizationService.HasPermission(AktuellerBenutzer, Permission.ExportSchedule); }
-        }
-
-        public bool KannAdminFunktionenNutzen
-        {
-            get { return _authorizationService.HasPermission(AktuellerBenutzer, Permission.ManageAdminFunctions); }
-        }
-
-        public bool IstEmployee
-        {
-            get { return AktuellerBenutzer != null && AktuellerBenutzer.Role == UserRole.Employee; }
-        }
-
-        public ICommand MitarbeiterHinzufuegenCommand { get; private set; }
-        public ICommand SchichtHinzufuegenCommand { get; private set; }
-        public ICommand ZuweisenCommand { get; private set; }
-        public ICommand DienstplanFreigebenCommand { get; private set; }
-        public ICommand ExportCommand { get; private set; }
-        public ICommand AdminCommand { get; private set; }
-
-        private void SignIn(UserAccount account)
-        {
-            AktuellerBenutzer = _authService.SignIn(account);
-            StatusNachricht = AktuellerBenutzer == null
-                ? "Anmeldung fehlgeschlagen"
-                : string.Format("{0} ist angemeldet. Rechte wurden angewendet.", AktuellerBenutzer.DisplayName);
-
-            RefreshSecurityState();
+            string fehler;
+            return IstSchichtGueltig(out fehler);
         }
 
         private void AddMitarbeiter(object obj)
         {
-            if (!KannMitarbeiterBearbeiten)
-            {
-                StatusNachricht = "Keine Berechtigung zum Bearbeiten von Mitarbeiterdaten.";
-                return;
-            }
-
-            MitarbeiterListe.Add(new Mitarbeiter
+            FuehreMitRollenpruefungAus("Mitarbeiter erstellen", () =>
             {
                 Id = MitarbeiterListe.Count + 1,
-                Name = NeuerMitarbeiterName.Trim(),
-                Abteilung = NeueMitarbeiterAbteilung.Trim(),
-                Qualifikation = NeuerMitarbeiterQualifikation.Trim(),
+                MandantId = AktuellerKontext.MandantId,
+                FilialeId = AktuellerKontext.FilialeId,
+                Name = NeuerMitarbeiterName,
+                Abteilung = NeueMitarbeiterAbteilung,
+                Qualifikation = NeuerMitarbeiterQualifikation,
+                SollstundenProWoche = NeueMitarbeiterSollstunden,
+                WochenstundenLimit = 48,
+                Stundenlohn = NeuerMitarbeiterStundenlohn,
                 IstAktiv = true
             });
 
             StatusNachricht = "Mitarbeiter hinzugefügt";
-            MitarbeiterView.Refresh();
+            OnPropertyChanged("StatusNachricht");
         }
 
         private void AddSchicht(object obj)
         {
-            if (!KannDienstplanBearbeiten)
-            {
-                StatusNachricht = "Keine Berechtigung zum Bearbeiten des Dienstplans.";
-                return;
-            }
-
-            SchichtListe.Add(new Schicht
+            FuehreMitRollenpruefungAus("Schicht erstellen", () =>
             {
                 Id = SchichtListe.Count + 1,
+                MandantId = AktuellerKontext.MandantId,
+                FilialeId = AktuellerKontext.FilialeId,
+                FilialeName = AktuellerKontext.FilialeName,
                 Name = NeueSchichtName,
                 Abteilung = NeueSchichtAbteilung,
+                Rolle = NeueSchichtAbteilung,
                 Wochentag = NeueSchichtWochentag,
-                Start = DateTime.Today.AddHours(9),
-                Ende = DateTime.Today.AddHours(17),
-                BenoetigteMitarbeiter = NeueSchichtKapazitaet
+                BenoetigteMitarbeiter = NeueSchichtKapazitaet,
+                Pausenstunden = NeueSchichtPausenstunden,
+                Zuschlagsstunden = NeueSchichtZuschlagsstunden,
+                Start = DateTime.Today.AddHours(8),
+                Ende = DateTime.Today.AddHours(16)
             });
 
             StatusNachricht = "Schicht hinzugefügt";
-            SchichtView.Refresh();
+            OnPropertyChanged("StatusNachricht");
         }
 
         private void Zuweisen(object obj)
         {
-            if (!KannDienstplanBearbeiten)
+            FuehreMitRollenpruefungAus("Dienstplan ändern", () => SetStatus(_service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht, AktuellerBenutzer)));
+        }
+
+        private void SchichtLoeschen(object obj)
+        {
+            FuehreMitRollenpruefungAus("Schicht löschen", () =>
             {
-                StatusNachricht = "Keine Berechtigung zum Zuweisen von Schichten.";
-                return;
+                if (AusgewaehlteSchicht == null)
+                {
+                    SetStatus("Keine Schicht zum Löschen ausgewählt");
+                    return;
+                }
+
+                var schicht = AusgewaehlteSchicht;
+                var alteWerte = schicht.ToAuditString();
+                foreach (var mitarbeiter in MitarbeiterListe)
+                    mitarbeiter.Schichten.Remove(schicht);
+
+                SchichtListe.Remove(schicht);
+                _auditService.Protokolliere(AuditAction.DienstplanGeloescht, "Schicht", schicht.Id, AktuellerBenutzer, alteWerte, string.Empty, "Dienstplan-Schicht gelöscht");
+                SetStatus("Schicht gelöscht");
+            });
+        }
+
+        private void DienstplanVeroeffentlichen(object obj)
+        {
+            FuehreMitRollenpruefungAus("Dienstplan veröffentlichen", () =>
+            {
+                var neueWerte = $"Schichten={SchichtListe.Count};Mitarbeiter={MitarbeiterListe.Count}";
+                _auditService.Protokolliere(AuditAction.DienstplanVeroeffentlicht, "Dienstplan", 0, AktuellerBenutzer, string.Empty, neueWerte, "Dienstplan veröffentlicht");
+                SetStatus("Dienstplan veröffentlicht");
+            });
+        }
+
+        private void DsgvoAuskunftErstellen(object obj)
+        {
+            try
+            {
+                DsgvoExportText = _dsgvoService.ExportierePersonenDaten(AusgewaehlterMitarbeiter, SchichtListe, AktuellerBenutzer);
+                OnPropertyChanged(nameof(DsgvoExportText));
+                SetStatus("DSGVO-Auskunft erstellt");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
+        }
+
+        private void DsgvoLoeschanfrageBearbeiten(object obj)
+        {
+            try
+            {
+                SetStatus(_dsgvoService.BearbeiteLoeschanfrage(AusgewaehlterMitarbeiter, SchichtListe, AktuellerBenutzer));
+                MitarbeiterView.Refresh();
+                SchichtView.Refresh();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
+        }
+
+        private void FuehreMitRollenpruefungAus(string aktion, Action aktionAusfuehren)
+        {
+            try
+            {
+                _rollenService.StellePersonenDatenZugriffSicher(AktuellerBenutzer, aktion);
+                aktionAusfuehren();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
+        }
+
+        private string ValidiereProperty(string propertyName)
+        {
+            switch (propertyName)
+            {
+                case nameof(NeuerMitarbeiterName):
+                    return PflichtfeldFehler(NeuerMitarbeiterName, "Name");
+                case nameof(NeueMitarbeiterAbteilung):
+                    return PflichtfeldFehler(NeueMitarbeiterAbteilung, "Abteilung");
+                case nameof(NeuerMitarbeiterQualifikation):
+                    return PflichtfeldFehler(NeuerMitarbeiterQualifikation, "Qualifikation");
+                case nameof(NeueSchichtName):
+                    return PflichtfeldFehler(NeueSchichtName, "Schichtname");
+                case nameof(NeueSchichtAbteilung):
+                    return PflichtfeldFehler(NeueSchichtAbteilung, "Abteilung");
+                case nameof(NeueSchichtWochentag):
+                    return PflichtfeldFehler(NeueSchichtWochentag, "Wochentag");
+                case nameof(NeueSchichtKapazitaet):
+                    return ValidiereKapazitaet(NeueSchichtKapazitaet);
+                case nameof(NeueSchichtStartzeit):
+                    return ValidiereUhrzeit(NeueSchichtStartzeit, "Startzeit");
+                case nameof(NeueSchichtEndzeit):
+                    return ValidiereEndzeit();
+                default:
+                    return string.Empty;
+            }
+        }
+
+        private bool IstMitarbeiterGueltig(out string fehler)
+        {
+            fehler = ErsterFehler(
+                ValidiereProperty(nameof(NeuerMitarbeiterName)),
+                ValidiereProperty(nameof(NeueMitarbeiterAbteilung)),
+                ValidiereProperty(nameof(NeuerMitarbeiterQualifikation)));
+
+            if (!string.IsNullOrEmpty(fehler))
+                fehler = "Mitarbeiter kann nicht gespeichert werden: " + fehler;
+
+            return string.IsNullOrEmpty(fehler);
+        }
+
+        private bool IstSchichtGueltig(out string fehler)
+        {
+            int kapazitaet;
+            TimeSpan startzeit;
+            TimeSpan endzeit;
+            return IstSchichtGueltig(out fehler, out kapazitaet, out startzeit, out endzeit);
+        }
+
+        private bool IstSchichtGueltig(out string fehler, out int kapazitaet, out TimeSpan startzeit, out TimeSpan endzeit)
+        {
+            int.TryParse(NeueSchichtKapazitaet, out kapazitaet);
+            TimeSpan.TryParse(NeueSchichtStartzeit, out startzeit);
+            TimeSpan.TryParse(NeueSchichtEndzeit, out endzeit);
+
+            fehler = ErsterFehler(
+                ValidiereProperty(nameof(NeueSchichtName)),
+                ValidiereProperty(nameof(NeueSchichtAbteilung)),
+                ValidiereProperty(nameof(NeueSchichtWochentag)),
+                ValidiereProperty(nameof(NeueSchichtKapazitaet)),
+                ValidiereProperty(nameof(NeueSchichtStartzeit)),
+                ValidiereProperty(nameof(NeueSchichtEndzeit)));
+
+            if (!string.IsNullOrEmpty(fehler))
+                fehler = "Schicht kann nicht gespeichert werden: " + fehler;
+
+            return string.IsNullOrEmpty(fehler);
+        }
+
+        private static string PflichtfeldFehler(string wert, string feldname)
+        {
+            return string.IsNullOrWhiteSpace(wert) ? feldname + " ist ein Pflichtfeld." : string.Empty;
+        }
+
+        private static string ValidiereKapazitaet(string wert)
+        {
+            int kapazitaet;
+
+            if (string.IsNullOrWhiteSpace(wert))
+                return "Kapazität ist ein Pflichtfeld.";
+
+            if (!int.TryParse(wert, out kapazitaet))
+                return "Kapazität muss eine ganze Zahl sein.";
+
+            if (kapazitaet < 1)
+                return "Kapazität muss mindestens 1 sein.";
+
+            return string.Empty;
+        }
+
+        private static string ValidiereUhrzeit(string wert, string feldname)
+        {
+            TimeSpan zeit;
+
+            if (string.IsNullOrWhiteSpace(wert))
+                return feldname + " ist ein Pflichtfeld.";
+
+            if (!TimeSpan.TryParse(wert, out zeit))
+                return feldname + " muss im Format HH:mm eingegeben werden.";
+
+            if (zeit < TimeSpan.Zero || zeit >= TimeSpan.FromDays(1))
+                return feldname + " muss zwischen 00:00 und 23:59 liegen.";
+
+            return string.Empty;
+        }
+
+        private string ValidiereEndzeit()
+        {
+            TimeSpan startzeit;
+            TimeSpan endzeit;
+            string endzeitFehler = ValidiereUhrzeit(NeueSchichtEndzeit, "Endzeit");
+
+            if (!string.IsNullOrEmpty(endzeitFehler))
+                return endzeitFehler;
+
+            if (!TimeSpan.TryParse(NeueSchichtStartzeit, out startzeit) || !TimeSpan.TryParse(NeueSchichtEndzeit, out endzeit))
+                return string.Empty;
+
+            if (endzeit <= startzeit)
+                return "Endzeit muss nach der Startzeit liegen.";
+
+            return string.Empty;
+        }
+
+        private static string ErsterFehler(params string[] fehler)
+        {
+            foreach (string einzelnerFehler in fehler)
+            {
+                if (!string.IsNullOrEmpty(einzelnerFehler))
+                    return einzelnerFehler;
             }
 
-            StatusNachricht = _service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht);
-            SchichtView.Refresh();
-            MitarbeiterView.Refresh();
+            return string.Empty;
         }
 
-        private void Freigeben(object obj)
+        private void LadeDaten()
         {
-            StatusNachricht = KannFreigeben
-                ? "Dienstplan wurde freigegeben."
-                : "Keine Berechtigung für Freigaben.";
-        }
-
-        private void Exportieren(object obj)
-        {
-            StatusNachricht = KannExportieren
-                ? "Export wurde für die sichtbaren Daten vorbereitet."
-                : "Keine Berechtigung für Exporte.";
-        }
-
-        private void AdminOeffnen(object obj)
-        {
-            StatusNachricht = KannAdminFunktionenNutzen
-                ? "Admin-Funktionen sind verfügbar."
-                : "Keine Berechtigung für Admin-Funktionen.";
-        }
-
-        private bool CanCurrentUserViewEmployee(object item)
-        {
-            return _authorizationService.CanViewEmployee(AktuellerBenutzer, item as Mitarbeiter);
-        }
-
-        private bool CanCurrentUserViewShift(object item)
-        {
-            return _authorizationService.CanViewShift(AktuellerBenutzer, item as Schicht);
-        }
-
-        private bool CanCurrentUserViewRequest(object item)
-        {
-            return _authorizationService.CanViewRequest(AktuellerBenutzer, item as MitarbeiterAnfrage);
-        }
-
-        private void RefreshSecurityState()
-        {
-            MitarbeiterView.Refresh();
-            SchichtView.Refresh();
-            AnfrageView.Refresh();
-            OnPropertyChanged(nameof(AktuellerBenutzerText));
-            OnPropertyChanged(nameof(KannMitarbeiterBearbeiten));
-            OnPropertyChanged(nameof(KannDienstplanBearbeiten));
-            OnPropertyChanged(nameof(KannFreigeben));
-            OnPropertyChanged(nameof(KannExportieren));
-            OnPropertyChanged(nameof(KannAdminFunktionenNutzen));
-            OnPropertyChanged(nameof(IstEmployee));
-            CommandManager.InvalidateRequerySuggested();
-        }
-
-        private void Seed()
-        {
-            var max = new Mitarbeiter
+            Mitarbeiter max = new Mitarbeiter
             {
                 Id = 1,
+                MandantId = 1,
+                FilialeId = 1,
                 Name = "Max Mustermann",
                 Abteilung = "Kasse",
                 Qualifikation = "Standard",
@@ -328,53 +433,91 @@ namespace Dienstplaner.ViewModels
                 IstAktiv = true
             };
 
-            var fruehschicht = new Schicht
+            Schicht frueh = new Schicht
             {
                 Id = 1,
+                MandantId = 1,
+                FilialeId = 1,
+                FilialeName = "Zentrale",
                 Name = "Frühschicht",
                 Abteilung = "Kasse",
+                Rolle = "Kassenleitung",
                 Wochentag = "Montag",
                 Start = DateTime.Today.AddHours(6),
                 Ende = DateTime.Today.AddHours(14),
-                BenoetigteMitarbeiter = 2
-            };
-            var spaetschicht = new Schicht
-            {
-                Id = 2,
-                Name = "Spätschicht",
-                Abteilung = "Lager",
-                Wochentag = "Dienstag",
-                Start = DateTime.Today.AddHours(14),
-                Ende = DateTime.Today.AddHours(22),
-                BenoetigteMitarbeiter = 1
+                BenoetigteMitarbeiter = 2,
+                Pausenstunden = 0.5m,
+                Zuschlagsstunden = 1.0m,
+                BenoetigteQualifikation = "Standard"
             };
 
             MitarbeiterListe.Add(max);
-            MitarbeiterListe.Add(erika);
-            SchichtListe.Add(fruehschicht);
-            SchichtListe.Add(spaetschicht);
+            SchichtListe.Add(frueh);
+            _service.Zuweisen(max, frueh);
 
-            _service.Zuweisen(max, fruehschicht);
-            _service.Zuweisen(erika, spaetschicht);
+            ForecastListe.Add(new UmsatzForecast
+            {
+                FilialeId = 1,
+                FilialeName = "Zentrale",
+                Datum = DateTime.Today,
+                ErwarteterUmsatz = 12500,
+                ErwarteteKundenfrequenz = 980
+            });
 
-            AnfrageListe.Add(new MitarbeiterAnfrage { Id = 1, MitarbeiterId = 1, Titel = "Urlaub am Freitag", Status = "Offen" });
-            AnfrageListe.Add(new MitarbeiterAnfrage { Id = 2, MitarbeiterId = 2, Titel = "Schichttausch Dienstag", Status = "In Prüfung" });
+            Verfuegbarkeiten.Add(new Availability
+            {
+                Id = 1,
+                MitarbeiterId = 1,
+                MitarbeiterName = "Max Mustermann",
+                Wochentag = "Montag",
+                Von = new TimeSpan(8, 0, 0),
+                Bis = new TimeSpan(16, 0, 0),
+                Status = RequestStatus.Approved,
+                Kommentar = "Regelverfügbarkeit"
+            });
+
+            Abwesenheiten.Add(new LeaveRequest
+            {
+                Id = 1,
+                MitarbeiterId = 2,
+                MitarbeiterName = "Erika Beispiel",
+                Von = DateTime.Today.AddHours(8),
+                Bis = DateTime.Today.AddHours(16),
+                Grund = "Urlaub",
+                Status = RequestStatus.Submitted,
+                Kommentar = "Familientermin"
+            });
+
+            StatusNachricht = "Bereit";
         }
 
-        private void SetStatus(string message)
+        private void SetStatus(string nachricht)
         {
-            StatusNachricht = message;
+            StatusNachricht = nachricht;
             OnPropertyChanged(nameof(StatusNachricht));
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        private bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string propertyName = null)
+        private void SetInputProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
         {
-            if (Equals(storage, value))
+            if (SetProperty(ref field, value, propertyName))
+            {
+                if (propertyName == nameof(NeueSchichtStartzeit))
+                    OnPropertyChanged(nameof(NeueSchichtEndzeit));
+
+                OnPropertyChanged(nameof(MitarbeiterFehlerNachricht));
+                OnPropertyChanged(nameof(SchichtFehlerNachricht));
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
+        {
+            if (Equals(field, value))
                 return false;
 
-            storage = value;
+            field = value;
             OnPropertyChanged(propertyName);
             return true;
         }
