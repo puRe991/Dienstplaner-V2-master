@@ -6,6 +6,9 @@ namespace Dienstplaner.Models
     public class Schicht
     {
         public int Id { get; set; }
+        public int MandantId { get; set; }
+        public int FilialeId { get; set; }
+        public string FilialeName { get; set; }
         public string Name { get; set; }
         public string Abteilung { get; set; }
         public string Filiale { get; set; }
@@ -19,12 +22,21 @@ namespace Dienstplaner.Models
 
         public int BenoetigteMitarbeiter { get; set; }
         public string BenoetigteQualifikation { get; set; }
+        public decimal Pausenstunden { get; set; }
+        public decimal Zuschlagsstunden { get; set; }
+        public decimal Zuschlagsfaktor { get; set; }
+        public string Regelhinweis { get; set; }
 
         public List<string> MitarbeiterNamen { get; set; }
 
         public Schicht()
         {
             MitarbeiterNamen = new List<string>();
+            FilialeName = "Zentrale";
+            Start = DateTime.Today.AddHours(8);
+            Ende = DateTime.Today.AddHours(16);
+            Pausenstunden = 0.5m;
+            Zuschlagsfaktor = 0.25m;
         }
 
         public bool IstVoll
@@ -37,59 +49,9 @@ namespace Dienstplaner.Models
             get { return (int)(Ende - Start).TotalHours; }
         }
 
-        public string Zeitfenster
+        public string ToAuditString()
         {
-            get { return Start.ToString("HH:mm") + " - " + Ende.ToString("HH:mm"); }
-        }
-
-        public string RolleAnzeige
-        {
-            get { return string.IsNullOrWhiteSpace(Rolle) ? Abteilung : Rolle; }
-        }
-
-        public int BesetzungsDifferenz
-        {
-            get { return MitarbeiterNamen.Count - BenoetigteMitarbeiter; }
-        }
-
-        public string Warnstatus
-        {
-            get
-            {
-                if (MitarbeiterNamen.Count == 0)
-                    return "Unbesetzt";
-
-                if (MitarbeiterNamen.Count < BenoetigteMitarbeiter)
-                    return "Unterbesetzt";
-
-                if (MitarbeiterNamen.Count > BenoetigteMitarbeiter)
-                    return "Überbesetzt";
-
-                return "OK";
-            }
-        }
-
-        public string BesetzungText
-        {
-            get { return MitarbeiterNamen.Count + " / " + BenoetigteMitarbeiter; }
-        }
-
-        public Schicht CloneWithoutAssignments(int id)
-        {
-            return new Schicht
-            {
-                Id = id,
-                Name = Name + " Kopie",
-                Abteilung = Abteilung,
-                Filiale = Filiale,
-                Rolle = Rolle,
-                Kalenderwoche = Kalenderwoche,
-                Wochentag = Wochentag,
-                Start = Start,
-                Ende = Ende,
-                BenoetigteMitarbeiter = BenoetigteMitarbeiter,
-                BenoetigteQualifikation = BenoetigteQualifikation
-            };
+            return $"Id={Id};Name={Name};Abteilung={Abteilung};Wochentag={Wochentag};Start={Start:O};Ende={Ende:O};BenoetigteMitarbeiter={BenoetigteMitarbeiter};BenoetigteQualifikation={BenoetigteQualifikation};Mitarbeiter={string.Join(",", MitarbeiterNamen)}";
         }
     }
 }
