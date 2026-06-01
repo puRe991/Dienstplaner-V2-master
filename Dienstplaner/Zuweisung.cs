@@ -4,10 +4,10 @@ namespace Dienstplaner.Models
 {
     public class Zuweisung
     {
-        public int Id { get; set; }
+        public Guid Id { get; set; }
 
-        public int MitarbeiterId { get; set; }
-        public int SchichtId { get; set; }
+        public Guid MitarbeiterId { get; set; }
+        public Guid SchichtId { get; set; }
 
         public DateTime ErstelltAm { get; set; } = DateTime.Now;
     }

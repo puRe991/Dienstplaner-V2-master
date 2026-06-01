@@ -1,14 +1,28 @@
-﻿using System.Linq;
+using System.Linq;
 using Dienstplaner.Models;
 
 namespace Dienstplaner.Services
 {
     public class ZuweisungsService
     {
-        public string Zuweisen(Mitarbeiter m, Schicht s)
+        private readonly AuditService _auditService;
+        private readonly RollenService _rollenService;
+
+        public ZuweisungsService(AuditService auditService, RollenService rollenService)
         {
+            _auditService = auditService;
+            _rollenService = rollenService;
+        }
+
+        public string Zuweisen(Mitarbeiter m, Schicht s, BenutzerKontext benutzer)
+        {
+            _rollenService.StellePersonenDatenZugriffSicher(benutzer, "Dienstplan ändern");
+
             if (m == null || s == null)
                 return "Ungültige Auswahl";
+
+            if (!m.IstAktiv)
+                return "Mitarbeiter ist nicht verfügbar";
 
             if (s.IstVoll)
                 return "Schicht ist bereits voll";
@@ -17,23 +31,30 @@ namespace Dienstplaner.Services
                 s.StartUtc < x.EndUtc && s.EndUtc > x.StartUtc))
                 return "Zeitkonflikt";
 
-            if (s.DepartmentId > 0 && m.DepartmentId > 0 && m.DepartmentId != s.DepartmentId)
-                return "Bereich passt nicht";
+            if (m.Abwesenheiten.Any(a => a.Ueberschneidet(s.Start, s.Ende)))
+                return "Mitarbeiter ist abwesend";
 
-            if (s.RoleId > 0 && m.RoleId > 0 && m.RoleId != s.RoleId)
-                return "Rolle passt nicht";
-
-            if (s.RequiredSkillIds.Any() && !s.RequiredSkillIds.All(id => m.SkillIds.Contains(id)))
-                return "Skills passen nicht";
+            if (m.Iststunden + s.NettoDauerInStunden > m.WochenstundenLimit)
+                return "Wochenstundenlimit würde überschritten";
 
             if (!string.IsNullOrEmpty(s.BenoetigteQualifikation) &&
                 m.Qualifikation != s.BenoetigteQualifikation)
                 return "Qualifikation passt nicht";
 
+            var alteMitarbeiterWerte = m.ToAuditString();
+            var alteSchichtWerte = s.ToAuditString();
+
             m.Schichten.Add(s);
             s.MitarbeiterNamen.Add(m.Name);
+            if (!s.MitarbeiterIds.Contains(m.Id))
+                s.MitarbeiterIds.Add(m.Id);
 
-            return "Zuweisung erfolgreich";
+            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", m.Id, benutzer, alteMitarbeiterWerte, m.ToAuditString(), "Schicht zugewiesen");
+            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", s.Id, benutzer, alteSchichtWerte, s.ToAuditString(), "Mitarbeiter zugewiesen");
+
+        public string Zuweisen(Mitarbeiter m, Schicht s)
+        {
+            return _dataService.Zuweisen(m, s);
         }
     }
 }

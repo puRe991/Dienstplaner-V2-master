@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 
@@ -7,7 +7,14 @@ namespace Dienstplaner.Models
     public class Schicht
     {
         public int Id { get; set; }
+        public int MandantId { get; set; }
+        public int FilialeId { get; set; }
+        public string FilialeName { get; set; }
         public string Name { get; set; }
+        public string Abteilung { get; set; }
+        public string Filiale { get; set; }
+        public string Rolle { get; set; }
+        public string Kalenderwoche { get; set; }
 
         public int StoreId { get; set; }
         public int DepartmentId { get; set; }
@@ -17,12 +24,16 @@ namespace Dienstplaner.Models
         public DateTime EndUtc { get; set; }
         public TimeSpan BreakDuration { get; set; }
 
-        public List<int> RequiredSkillIds { get; set; }
-        public int RequiredHeadcount { get; set; }
-        public string CostCenter { get; set; }
+        public int BenoetigteMitarbeiter { get; set; }
+        public string BenoetigteQualifikation { get; set; }
+        public decimal Pausenstunden { get; set; }
+        public decimal Zuschlagsstunden { get; set; }
+        public decimal Zuschlagsfaktor { get; set; }
+        public string Regelhinweis { get; set; }
 
         public List<Besetzungsfenster> Besetzungsfenster { get; set; }
         public List<string> MitarbeiterNamen { get; set; }
+        public List<int> MitarbeiterIds { get; set; }
 
         public SchichtVorlage Vorlage { get; set; }
 
@@ -31,6 +42,11 @@ namespace Dienstplaner.Models
             RequiredSkillIds = new List<int>();
             Besetzungsfenster = new List<Besetzungsfenster>();
             MitarbeiterNamen = new List<string>();
+            FilialeName = "Zentrale";
+            Start = DateTime.Today.AddHours(8);
+            Ende = DateTime.Today.AddHours(16);
+            Pausenstunden = 0.5m;
+            Zuschlagsfaktor = 0.25m;
         }
 
         public string Abteilung
@@ -162,190 +178,10 @@ namespace Dienstplaner.Models
 
             return kopie;
         }
-    }
 
-    public class Wiederholungsregel
-    {
-        public Wiederholungsart Art { get; set; }
-        public int IntervallInWochen { get; set; }
-        public DateTime GueltigAb { get; set; }
-        public DateTime? GueltigBis { get; set; }
-
-        public Wiederholungsregel()
+        public string ToAuditString()
         {
-            Art = Wiederholungsart.Woechentlich;
-            IntervallInWochen = 1;
-            GueltigAb = DateTime.Today;
+            return $"Id={Id};Name={Name};Abteilung={Abteilung};Wochentag={Wochentag};Start={Start:O};Ende={Ende:O};BenoetigteMitarbeiter={BenoetigteMitarbeiter};BenoetigteQualifikation={BenoetigteQualifikation};Mitarbeiter={string.Join(",", MitarbeiterNamen)}";
         }
     }
-
-    public enum Wiederholungsart
-    {
-        Keine,
-        Woechentlich,
-        Zweiwoechentlich
-    }
-
-    public class Besetzungsfenster
-    {
-        public TimeSpan Von { get; set; }
-        public TimeSpan Bis { get; set; }
-        public int Mindestbesetzung { get; set; }
-        public int Sollbesetzung { get; set; }
-        public int Maximalbesetzung { get; set; }
-
-        public string Anzeige
-        {
-            get
-            {
-                return string.Format(CultureInfo.CurrentCulture, "{0:hh\\:mm}-{1:hh\\:mm}: Min {2}, Soll {3}, Max {4}", Von, Bis, Mindestbesetzung, Sollbesetzung, Maximalbesetzung);
-            }
-        }
-    }
-
-
-    public class Wochenplan
-    {
-        public int Id { get; set; }
-        public int StoreId { get; set; }
-        public DateTime Wochenbeginn { get; set; }
-        public List<SchichtVorlage> Vorlagen { get; set; }
-        public List<Schicht> Schichten { get; set; }
-
-        public Wochenplan()
-        {
-            Vorlagen = new List<SchichtVorlage>();
-            Schichten = new List<Schicht>();
-        }
-
-        public void GeneriereSchichtenAusVorlagen()
-        {
-            Schichten.Clear();
-            int nextId = 1;
-
-            foreach (var vorlage in Vorlagen)
-            {
-                if (StoreId > 0 && vorlage.StoreId != StoreId)
-                    continue;
-
-                DateTime datum = Wochenbeginn.Date.AddDays(((int)vorlage.Wochentag - (int)Wochenbeginn.DayOfWeek + 7) % 7);
-
-                if (!IstVorlageInWocheGueltig(vorlage, datum))
-                    continue;
-
-                Schichten.Add(vorlage.ErzeugeSchicht(datum, nextId++));
-            }
-        }
-
-        private static bool IstVorlageInWocheGueltig(SchichtVorlage vorlage, DateTime datum)
-        {
-            if (vorlage.Wiederholung.Art == Wiederholungsart.Keine)
-                return datum.Date == vorlage.Wiederholung.GueltigAb.Date;
-
-            if (datum.Date < vorlage.Wiederholung.GueltigAb.Date)
-                return false;
-
-            if (vorlage.Wiederholung.GueltigBis.HasValue && datum.Date > vorlage.Wiederholung.GueltigBis.Value.Date)
-                return false;
-
-            int intervall = vorlage.Wiederholung.Art == Wiederholungsart.Zweiwoechentlich
-                ? 2
-                : Math.Max(1, vorlage.Wiederholung.IntervallInWochen);
-            int wochenSeitStart = (int)((datum.Date - vorlage.Wiederholung.GueltigAb.Date).TotalDays / 7);
-
-            return wochenSeitStart % intervall == 0;
-        }
-    }
-
-    public class Oeffnungszeiten
-    {
-        public int StoreId { get; set; }
-        public DayOfWeek Wochentag { get; set; }
-        public TimeSpan OeffnetUm { get; set; }
-        public TimeSpan SchliesstUm { get; set; }
-        public bool IstGeschlossen { get; set; }
-    }
-
-    public class Sonderoeffnung
-    {
-        public int StoreId { get; set; }
-        public DateTime Datum { get; set; }
-        public TimeSpan OeffnetUm { get; set; }
-        public TimeSpan SchliesstUm { get; set; }
-        public string Grund { get; set; }
-    }
-
-    public class Feiertag
-    {
-        public DateTime Datum { get; set; }
-        public string Name { get; set; }
-        public string Bundesland { get; set; }
-        public bool Arbeitsfrei { get; set; }
-    }
-
-    public class VerkaufsoffenerSonntag
-    {
-        public int StoreId { get; set; }
-        public DateTime Datum { get; set; }
-        public TimeSpan OeffnetUm { get; set; }
-        public TimeSpan SchliesstUm { get; set; }
-        public string Anlass { get; set; }
-    }
-
-    public class Filialkalender
-    {
-        public int StoreId { get; set; }
-        public List<Oeffnungszeiten> RegelOeffnungszeiten { get; set; }
-        public List<Sonderoeffnung> Sonderoeffnungen { get; set; }
-        public List<Feiertag> Feiertage { get; set; }
-        public List<VerkaufsoffenerSonntag> VerkaufsoffeneSonntage { get; set; }
-
-        public Filialkalender()
-        {
-            RegelOeffnungszeiten = new List<Oeffnungszeiten>();
-            Sonderoeffnungen = new List<Sonderoeffnung>();
-            Feiertage = new List<Feiertag>();
-            VerkaufsoffeneSonntage = new List<VerkaufsoffenerSonntag>();
-        }
-
-        public bool IstGeoeffnet(DateTime datum, out TimeSpan oeffnetUm, out TimeSpan schliesstUm)
-        {
-            var sonderoeffnung = Sonderoeffnungen.Find(x => x.StoreId == StoreId && x.Datum.Date == datum.Date);
-            if (sonderoeffnung != null)
-            {
-                oeffnetUm = sonderoeffnung.OeffnetUm;
-                schliesstUm = sonderoeffnung.SchliesstUm;
-                return true;
-            }
-
-            var verkaufsoffenerSonntag = VerkaufsoffeneSonntage.Find(x => x.StoreId == StoreId && x.Datum.Date == datum.Date);
-            if (verkaufsoffenerSonntag != null)
-            {
-                oeffnetUm = verkaufsoffenerSonntag.OeffnetUm;
-                schliesstUm = verkaufsoffenerSonntag.SchliesstUm;
-                return true;
-            }
-
-            var feiertag = Feiertage.Find(x => x.Datum.Date == datum.Date && x.Arbeitsfrei);
-            if (feiertag != null)
-            {
-                oeffnetUm = TimeSpan.Zero;
-                schliesstUm = TimeSpan.Zero;
-                return false;
-            }
-
-            var regel = RegelOeffnungszeiten.Find(x => x.StoreId == StoreId && x.Wochentag == datum.DayOfWeek);
-            if (regel == null || regel.IstGeschlossen)
-            {
-                oeffnetUm = TimeSpan.Zero;
-                schliesstUm = TimeSpan.Zero;
-                return false;
-            }
-
-            oeffnetUm = regel.OeffnetUm;
-            schliesstUm = regel.SchliesstUm;
-            return true;
-        }
-    }
-
 }
