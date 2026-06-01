@@ -44,6 +44,9 @@ namespace Dienstplaner.ViewModels
         public string ForecastImportPfad { get; set; }
 
         public string StatusNachricht { get; set; }
+        public string DsgvoExportText { get; set; }
+        public ComplianceRichtlinie ComplianceRichtlinie { get; }
+        public BenutzerKontext AktuellerBenutzer { get; }
 
         public ICommand MitarbeiterHinzufuegenCommand { get; }
         public ICommand SchichtHinzufuegenCommand { get; }
@@ -105,7 +108,7 @@ namespace Dienstplaner.ViewModels
 
         private void AddMitarbeiter(object obj)
         {
-            MitarbeiterListe.Add(new Mitarbeiter
+            FuehreMitRollenpruefungAus("Mitarbeiter erstellen", () =>
             {
                 Id = MitarbeiterListe.Count + 1,
                 MandantId = AktuellerKontext.MandantId,
@@ -125,7 +128,7 @@ namespace Dienstplaner.ViewModels
 
         private void AddSchicht(object obj)
         {
-            SchichtListe.Add(new Schicht
+            FuehreMitRollenpruefungAus("Schicht erstellen", () =>
             {
                 Id = SchichtListe.Count + 1,
                 MandantId = AktuellerKontext.MandantId,
@@ -147,45 +150,79 @@ namespace Dienstplaner.ViewModels
 
         private void Zuweisen(object obj)
         {
-            StatusNachricht = _service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht);
-            AktualisiereReports(null);
-            AktualisiereIntegrationen(null);
-            OnPropertyChanged("StatusNachricht");
+            FuehreMitRollenpruefungAus("Dienstplan ändern", () => SetStatus(_service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht, AktuellerBenutzer)));
         }
 
-        private void Exportiere(ExportFormat format)
+        private void SchichtLoeschen(object obj)
         {
-            string ordner = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "DienstplanerExports");
-            StatusNachricht = _exportService.ExportiereDienstplan(SchichtListe, AktuellerKontext, format, ordner);
-            OnPropertyChanged("StatusNachricht");
+            FuehreMitRollenpruefungAus("Schicht löschen", () =>
+            {
+                if (AusgewaehlteSchicht == null)
+                {
+                    SetStatus("Keine Schicht zum Löschen ausgewählt");
+                    return;
+                }
+
+                var schicht = AusgewaehlteSchicht;
+                var alteWerte = schicht.ToAuditString();
+                foreach (var mitarbeiter in MitarbeiterListe)
+                    mitarbeiter.Schichten.Remove(schicht);
+
+                SchichtListe.Remove(schicht);
+                _auditService.Protokolliere(AuditAction.DienstplanGeloescht, "Schicht", schicht.Id, AktuellerBenutzer, alteWerte, string.Empty, "Dienstplan-Schicht gelöscht");
+                SetStatus("Schicht gelöscht");
+            });
         }
 
-        private void AktualisiereReports(object obj)
+        private void DienstplanVeroeffentlichen(object obj)
         {
-            ReportListe.Clear();
-            foreach (ReportKennzahl report in _reportingService.ErstelleReports(MitarbeiterListe, SchichtListe))
-                ReportListe.Add(report);
+            FuehreMitRollenpruefungAus("Dienstplan veröffentlichen", () =>
+            {
+                var neueWerte = $"Schichten={SchichtListe.Count};Mitarbeiter={MitarbeiterListe.Count}";
+                _auditService.Protokolliere(AuditAction.DienstplanVeroeffentlicht, "Dienstplan", 0, AktuellerBenutzer, string.Empty, neueWerte, "Dienstplan veröffentlicht");
+                SetStatus("Dienstplan veröffentlicht");
+            });
         }
 
-        private void AktualisiereIntegrationen(object obj)
+        private void DsgvoAuskunftErstellen(object obj)
         {
-            LohnabrechnungListe.Clear();
-            foreach (PayrollRecord record in _integrationsService.ErstelleLohnabrechnung(MitarbeiterListe))
-                LohnabrechnungListe.Add(record);
-
-            ZeiterfassungListe.Clear();
-            foreach (TimeTrackingRecord record in _integrationsService.ErstelleZeiterfassung(MitarbeiterListe))
-                ZeiterfassungListe.Add(record);
+            try
+            {
+                DsgvoExportText = _dsgvoService.ExportierePersonenDaten(AusgewaehlterMitarbeiter, SchichtListe, AktuellerBenutzer);
+                OnPropertyChanged(nameof(DsgvoExportText));
+                SetStatus("DSGVO-Auskunft erstellt");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
         }
 
-        private void ImportiereForecast(object obj)
+        private void DsgvoLoeschanfrageBearbeiten(object obj)
         {
-            ForecastListe.Clear();
-            foreach (UmsatzForecast forecast in _forecastImportService.ImportiereCsv(ForecastImportPfad))
-                ForecastListe.Add(forecast);
+            try
+            {
+                SetStatus(_dsgvoService.BearbeiteLoeschanfrage(AusgewaehlterMitarbeiter, SchichtListe, AktuellerBenutzer));
+                MitarbeiterView.Refresh();
+                SchichtView.Refresh();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
+        }
 
-            StatusNachricht = ForecastListe.Count + " Forecast-Zeilen importiert";
-            OnPropertyChanged("StatusNachricht");
+        private void FuehreMitRollenpruefungAus(string aktion, Action aktionAusfuehren)
+        {
+            try
+            {
+                _rollenService.StellePersonenDatenZugriffSicher(AktuellerBenutzer, aktion);
+                aktionAusfuehren();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
         }
 
         private void Seed()
@@ -198,9 +235,8 @@ namespace Dienstplaner.ViewModels
                 Name = "Max Mustermann",
                 Abteilung = "Kasse",
                 Qualifikation = "Standard",
-                SollstundenProWoche = 38.5m,
-                Stundenlohn = 16.5m
-            };
+                IstAktiv = true
+            });
 
             Schicht frueh = new Schicht
             {
@@ -231,6 +267,12 @@ namespace Dienstplaner.ViewModels
                 ErwarteterUmsatz = 12500,
                 ErwarteteKundenfrequenz = 980
             });
+        }
+
+        private void SetStatus(string nachricht)
+        {
+            StatusNachricht = nachricht;
+            OnPropertyChanged(nameof(StatusNachricht));
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

@@ -46,29 +46,9 @@ namespace Dienstplaner.Models
             get { return (int)(Ende - Start).TotalHours; }
         }
 
-        public decimal BruttoDauerInStunden
+        public string ToAuditString()
         {
-            get { return (decimal)(Ende - Start).TotalHours; }
-        }
-
-        public decimal NettoDauerInStunden
-        {
-            get
-            {
-                decimal netto = BruttoDauerInStunden - Pausenstunden;
-                return netto > 0 ? netto : 0;
-            }
-        }
-
-        public decimal Besetzungsgrad
-        {
-            get
-            {
-                if (BenoetigteMitarbeiter <= 0)
-                    return 0;
-
-                return (decimal)MitarbeiterNamen.Count / BenoetigteMitarbeiter;
-            }
+            return $"Id={Id};Name={Name};Abteilung={Abteilung};Wochentag={Wochentag};Start={Start:O};Ende={Ende:O};BenoetigteMitarbeiter={BenoetigteMitarbeiter};BenoetigteQualifikation={BenoetigteQualifikation};Mitarbeiter={string.Join(",", MitarbeiterNamen)}";
         }
     }
 }

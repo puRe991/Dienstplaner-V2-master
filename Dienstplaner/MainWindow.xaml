@@ -83,17 +83,55 @@
             <StackPanel Grid.Column="1" Margin="10,0">
                 <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Text="Zuweisung" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="180"/>
-                            </Grid.ColumnDefinitions>
-                            <ComboBox Grid.Column="0" Height="32" ItemsSource="{Binding MitarbeiterListe}" DisplayMemberPath="Name" SelectedItem="{Binding AusgewaehlterMitarbeiter}" Margin="0,0,8,0"/>
-                            <ComboBox Grid.Column="1" Height="32" ItemsSource="{Binding SchichtListe}" DisplayMemberPath="Name" SelectedItem="{Binding AusgewaehlteSchicht}" Margin="0,0,8,0"/>
-                            <Button Grid.Column="2" Content="Mitarbeiter zuweisen" Height="32" Background="#EA580C" Foreground="White" BorderThickness="0" Command="{Binding ZuweisenCommand}"/>
-                        </Grid>
+
+                        <TextBlock Text="Zuweisung"
+                                   FontWeight="Bold"
+                                   FontSize="15"
+                                   Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Mitarbeiter"
+                                   FontSize="11"
+                                   Margin="0,0,0,3"/>
+
+                        <ComboBox Height="32"
+                                  ItemsSource="{Binding MitarbeiterListe}"
+                                  DisplayMemberPath="Name"
+                                  SelectedItem="{Binding AusgewaehlterMitarbeiter}"
+                                  Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Schicht"
+                                   FontSize="11"
+                                   Margin="0,0,0,3"/>
+
+                        <ComboBox Height="32"
+                                  ItemsSource="{Binding SchichtListe}"
+                                  DisplayMemberPath="Name"
+                                  SelectedItem="{Binding AusgewaehlteSchicht}"
+                                  Margin="0,0,0,12"/>
+
+                        <Button Content="Mitarbeiter zuweisen"
+                                Height="36"
+                                Background="#EA580C"
+                                Foreground="White"
+                                BorderThickness="0"
+                                Command="{Binding ZuweisenCommand}"
+                                Margin="0,0,0,8"/>
+
+                        <Button Content="Ausgewählte Schicht löschen"
+                                Height="32"
+                                Background="#DC2626"
+                                Foreground="White"
+                                BorderThickness="0"
+                                Command="{Binding SchichtLoeschenCommand}"
+                                Margin="0,0,0,8"/>
+
+                        <Button Content="Dienstplan veröffentlichen"
+                                Height="32"
+                                Background="#4F46E5"
+                                Foreground="White"
+                                BorderThickness="0"
+                                Command="{Binding DienstplanVeroeffentlichenCommand}"/>
+
                     </StackPanel>
                 </Border>
 
@@ -146,8 +184,21 @@
                 </Border>
             </StackPanel>
 
-            <StackPanel Grid.Column="2">
-                <Border Background="White" CornerRadius="6" Padding="14" Margin="0,0,0,10">
+            <!-- ===================================================== -->
+            <!-- RIGHT PANEL -->
+            <!-- ===================================================== -->
+
+            <ScrollViewer Grid.Column="2"
+                          VerticalScrollBarVisibility="Auto">
+
+                <StackPanel>
+
+                <!-- MITARBEITER -->
+                <Border Background="White"
+                        CornerRadius="6"
+                        Padding="14"
+                        Margin="0,0,0,10">
+
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <TextBlock Text="Reports" FontWeight="Bold" FontSize="15" Width="250"/>
@@ -209,13 +260,132 @@
                     </StackPanel>
                 </Border>
 
-                <Border Background="White" CornerRadius="6" Padding="14">
+                <!-- DSGVO ADMIN -->
+                <Border Background="White"
+                        CornerRadius="6"
+                        Padding="14"
+                        Margin="0,0,0,10">
+
+                    <StackPanel>
+
+                        <TextBlock Text="DSGVO Admin"
+                                   FontWeight="Bold"
+                                   FontSize="15"
+                                   Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Ausgewählten Mitarbeiter für Auskunft oder Löschanfrage verwenden."
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"/>
+
+                        <Button Content="Auskunft exportieren"
+                                Height="30"
+                                Background="#0F766E"
+                                Foreground="White"
+                                BorderThickness="0"
+                                Command="{Binding DsgvoAuskunftCommand}"
+                                Margin="0,0,0,6"/>
+
+                        <Button Content="Löschanfrage umsetzen"
+                                Height="30"
+                                Background="#B91C1C"
+                                Foreground="White"
+                                BorderThickness="0"
+                                Command="{Binding DsgvoLoeschenCommand}"
+                                Margin="0,0,0,8"/>
+
+                        <TextBox Text="{Binding DsgvoExportText}"
+                                 Height="90"
+                                 IsReadOnly="True"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"/>
+
+                    </StackPanel>
+
+                </Border>
+
+                <!-- COMPLIANCE -->
+                <Border Background="White"
+                        CornerRadius="6"
+                        Padding="14"
+                        Margin="0,0,0,10">
+
+                    <StackPanel>
+
+                        <TextBlock Text="Compliance-Grundlagen"
+                                   FontWeight="Bold"
+                                   FontSize="15"
+                                   Margin="0,0,0,8"/>
+
+                        <TextBlock Text="{Binding ComplianceRichtlinie.Loeschkonzept}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"/>
+
+                        <TextBlock Text="{Binding ComplianceRichtlinie.Exportkonzept}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0"/>
+
+                        <TextBlock Text="{Binding ComplianceRichtlinie.TransportVerschluesselung}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0"/>
+
+                        <TextBlock Text="{Binding ComplianceRichtlinie.SpeicherVerschluesselung}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0"/>
+
+                    </StackPanel>
+
+                </Border>
+
+                <!-- AUDIT -->
+                <Border Background="White"
+                        CornerRadius="6"
+                        Padding="14"
+                        Margin="0,0,0,10">
+
+                    <StackPanel>
+
+                        <TextBlock Text="Audit-Log"
+                                   FontWeight="Bold"
+                                   FontSize="15"
+                                   Margin="0,0,0,8"/>
+
+                        <ScrollViewer Height="120">
+                            <ItemsControl ItemsSource="{Binding AuditLog}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,6">
+                                            <TextBlock Text="{Binding Aktion}" FontWeight="SemiBold" FontSize="11"/>
+                                            <TextBlock Text="{Binding Benutzer}" FontSize="10"/>
+                                            <TextBlock Text="{Binding ZeitpunktUtc}" FontSize="10"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                    </StackPanel>
+
+                </Border>
+
+                <!-- STATUS -->
+                <Border Background="White"
+                        CornerRadius="6"
+                        Padding="14">
+
                     <StackPanel>
                         <TextBlock Text="Systemstatus" FontWeight="Bold" FontSize="15" Margin="0,0,0,8"/>
                         <TextBlock Text="{Binding StatusNachricht}" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
-            </StackPanel>
+
+                </StackPanel>
+
+            </ScrollViewer>
+
         </Grid>
 
         <Border Grid.Row="2" Background="#1B3A5C">
