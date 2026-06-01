@@ -1,57 +1,60 @@
-﻿using System.Collections.Generic;
+using System.Linq;
 using Dienstplaner.Models;
 
 namespace Dienstplaner.Services
 {
     public class ZuweisungsService
     {
-        private readonly IList<IPlanningRule> _rules;
+        private readonly AuditService _auditService;
+        private readonly RollenService _rollenService;
 
-        public ZuweisungsService()
-            : this(new IPlanningRule[]
-            {
-                new AuswahlRule(),
-                new AktiverMitarbeiterRule(),
-                new SchichtKapazitaetRule(),
-                new WochenstundenLimitRule(),
-                new TageshoechstarbeitszeitRule(),
-                new RuhezeitRule(),
-                new PausenpflichtRule(),
-                new QualifikationRule(),
-                new AbteilungFilialeRule(),
-                new ZeitkonfliktRule(),
-                new VerfuegbarkeitAbwesenheitRule()
-            })
+        public ZuweisungsService(AuditService auditService, RollenService rollenService)
         {
+            _auditService = auditService;
+            _rollenService = rollenService;
         }
 
-        public ZuweisungsService(IEnumerable<IPlanningRule> rules)
+        public string Zuweisen(Mitarbeiter m, Schicht s, BenutzerKontext benutzer)
         {
-            _rules = new List<IPlanningRule>(rules);
-        }
+            _rollenService.StellePersonenDatenZugriffSicher(benutzer, "Dienstplan ändern");
 
-        public PlanningRuleResult Zuweisen(Mitarbeiter mitarbeiter, Schicht schicht)
+            if (m == null || s == null)
+                return "Ungültige Auswahl";
+
+            if (!m.IstAktiv)
+                return "Mitarbeiter ist nicht verfügbar";
+
+            if (s.IstVoll)
+                return "Schicht ist bereits voll";
+
+            if (m.Schichten.Any(x =>
+                s.StartUtc < x.EndUtc && s.EndUtc > x.StartUtc))
+                return "Zeitkonflikt";
+
+            if (m.Abwesenheiten.Any(a => a.Ueberschneidet(s.Start, s.Ende)))
+                return "Mitarbeiter ist abwesend";
+
+            if (m.Iststunden + s.NettoDauerInStunden > m.WochenstundenLimit)
+                return "Wochenstundenlimit würde überschritten";
+
+            if (!string.IsNullOrEmpty(s.BenoetigteQualifikation) &&
+                m.Qualifikation != s.BenoetigteQualifikation)
+                return "Qualifikation passt nicht";
+
+            var alteMitarbeiterWerte = m.ToAuditString();
+            var alteSchichtWerte = s.ToAuditString();
+
+            m.Schichten.Add(s);
+            s.MitarbeiterNamen.Add(m.Name);
+            if (!s.MitarbeiterIds.Contains(m.Id))
+                s.MitarbeiterIds.Add(m.Id);
+
+            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", m.Id, benutzer, alteMitarbeiterWerte, m.ToAuditString(), "Schicht zugewiesen");
+            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", s.Id, benutzer, alteSchichtWerte, s.ToAuditString(), "Mitarbeiter zugewiesen");
+
+        public string Zuweisen(Mitarbeiter m, Schicht s)
         {
-            var result = Validate(mitarbeiter, schicht);
-
-            if (result.HasErrors)
-                return result;
-
-            mitarbeiter.Schichten.Add(schicht);
-            mitarbeiter.AktuelleWochenstunden += schicht.DauerInStunden;
-            schicht.MitarbeiterNamen.Add(mitarbeiter.Name);
-
-            return result;
-        }
-
-        public PlanningRuleResult Validate(Mitarbeiter mitarbeiter, Schicht schicht)
-        {
-            var result = new PlanningRuleResult();
-
-            foreach (var rule in _rules)
-                result.Merge(rule.Validate(mitarbeiter, schicht));
-
-            return result;
+            return _dataService.Zuweisen(m, s);
         }
     }
 }
