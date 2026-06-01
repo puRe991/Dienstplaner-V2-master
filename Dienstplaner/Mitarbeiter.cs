@@ -1,10 +1,11 @@
+using System;
 using System.Collections.Generic;
 
 namespace Dienstplaner.Models
 {
     public class Mitarbeiter
     {
-        public int Id { get; set; }
+        public Guid Id { get; set; }
         public string Name { get; set; }
         public string Abteilung { get; set; }
         public string Qualifikation { get; set; }

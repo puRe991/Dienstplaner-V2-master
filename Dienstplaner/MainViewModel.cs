@@ -1,11 +1,12 @@
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
 using System.Windows.Input;
 using Dienstplaner.Helpers;
+using Dienstplaner.Infrastructure.Services;
 using Dienstplaner.Models;
-using Dienstplaner.Services;
 
 namespace Dienstplaner.ViewModels
 {
@@ -20,7 +21,6 @@ namespace Dienstplaner.ViewModels
         public Mitarbeiter AusgewaehlterMitarbeiter { get; set; }
         public Schicht AusgewaehlteSchicht { get; set; }
 
-        // Inputs
         public string NeuerMitarbeiterName { get; set; }
         public string NeueMitarbeiterAbteilung { get; set; }
         public string NeuerMitarbeiterQualifikation { get; set; }
@@ -30,82 +30,91 @@ namespace Dienstplaner.ViewModels
         public string NeueSchichtWochentag { get; set; }
         public int NeueSchichtKapazitaet { get; set; } = 2;
 
-        public string StatusNachricht { get; set; }
+        private string _statusNachricht;
+        public string StatusNachricht
+        {
+            get { return _statusNachricht; }
+            set
+            {
+                _statusNachricht = value;
+                OnPropertyChanged();
+            }
+        }
 
         public ICommand MitarbeiterHinzufuegenCommand { get; }
         public ICommand SchichtHinzufuegenCommand { get; }
         public ICommand ZuweisenCommand { get; }
 
-        private readonly ZuweisungsService _service;
+        private readonly DienstplanDataService _dataService;
 
         public MainViewModel()
+            : this(new DienstplanDataService())
         {
+        }
+
+        public MainViewModel(DienstplanDataService dataService)
+        {
+            _dataService = dataService;
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
 
             MitarbeiterView = CollectionViewSource.GetDefaultView(MitarbeiterListe);
             SchichtView = CollectionViewSource.GetDefaultView(SchichtListe);
 
-            _service = new ZuweisungsService();
-
             MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter);
             SchichtHinzufuegenCommand = new RelayCommand(AddSchicht);
             ZuweisenCommand = new RelayCommand(Zuweisen);
 
-            Seed();
+            _dataService.SeedDemoDataIfEmpty();
+            LadeDaten();
         }
 
         private void AddMitarbeiter(object obj)
         {
-            MitarbeiterListe.Add(new Mitarbeiter
+            try
             {
-                Id = MitarbeiterListe.Count + 1,
-                Name = NeuerMitarbeiterName,
-                Abteilung = NeueMitarbeiterAbteilung,
-                Qualifikation = NeuerMitarbeiterQualifikation,
-                IstAktiv = true
-            });
-
-            StatusNachricht = "Mitarbeiter hinzugefügt";
+                _dataService.MitarbeiterHinzufuegen(NeuerMitarbeiterName, NeueMitarbeiterAbteilung, NeuerMitarbeiterQualifikation);
+                LadeDaten();
+                StatusNachricht = "Mitarbeiter hinzugefügt";
+            }
+            catch (Exception ex)
+            {
+                StatusNachricht = "Mitarbeiter konnte nicht gespeichert werden: " + ex.Message;
+            }
         }
 
         private void AddSchicht(object obj)
         {
-            SchichtListe.Add(new Schicht
+            try
             {
-                Id = SchichtListe.Count + 1,
-                Name = NeueSchichtName,
-                Abteilung = NeueSchichtAbteilung,
-                Wochentag = NeueSchichtWochentag,
-                BenoetigteMitarbeiter = NeueSchichtKapazitaet
-            });
-
-            StatusNachricht = "Schicht hinzugefügt";
+                _dataService.SchichtHinzufuegen(NeueSchichtName, NeueSchichtAbteilung, NeueSchichtWochentag, NeueSchichtKapazitaet);
+                LadeDaten();
+                StatusNachricht = "Schicht hinzugefügt";
+            }
+            catch (Exception ex)
+            {
+                StatusNachricht = "Schicht konnte nicht gespeichert werden: " + ex.Message;
+            }
         }
 
         private void Zuweisen(object obj)
         {
-            StatusNachricht = _service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht);
+            StatusNachricht = _dataService.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht);
+            LadeDaten();
         }
 
-        private void Seed()
+        private void LadeDaten()
         {
-            MitarbeiterListe.Add(new Mitarbeiter
-            {
-                Id = 1,
-                Name = "Max Mustermann",
-                Abteilung = "Kasse",
-                Qualifikation = "Standard"
-            });
+            MitarbeiterListe.Clear();
+            foreach (Mitarbeiter mitarbeiter in _dataService.LadeMitarbeiter())
+                MitarbeiterListe.Add(mitarbeiter);
 
-            SchichtListe.Add(new Schicht
-            {
-                Id = 1,
-                Name = "Frühschicht",
-                Abteilung = "Kasse",
-                Wochentag = "Montag",
-                BenoetigteMitarbeiter = 2
-            });
+            SchichtListe.Clear();
+            foreach (Schicht schicht in _dataService.LadeSchichten())
+                SchichtListe.Add(schicht);
+
+            MitarbeiterView.Refresh();
+            SchichtView.Refresh();
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

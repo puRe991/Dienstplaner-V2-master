@@ -1,30 +1,25 @@
-﻿using System.Linq;
+﻿using Dienstplaner.Infrastructure.Services;
 using Dienstplaner.Models;
 
 namespace Dienstplaner.Services
 {
     public class ZuweisungsService
     {
+        private readonly DienstplanDataService _dataService;
+
+        public ZuweisungsService()
+            : this(new DienstplanDataService())
+        {
+        }
+
+        public ZuweisungsService(DienstplanDataService dataService)
+        {
+            _dataService = dataService;
+        }
+
         public string Zuweisen(Mitarbeiter m, Schicht s)
         {
-            if (m == null || s == null)
-                return "Ungültige Auswahl";
-
-            if (s.IstVoll)
-                return "Schicht ist bereits voll";
-
-            if (m.Schichten.Any(x =>
-                s.Start < x.Ende && s.Ende > x.Start))
-                return "Zeitkonflikt";
-
-            if (!string.IsNullOrEmpty(s.BenoetigteQualifikation) &&
-                m.Qualifikation != s.BenoetigteQualifikation)
-                return "Qualifikation passt nicht";
-
-            m.Schichten.Add(s);
-            s.MitarbeiterNamen.Add(m.Name);
-
-            return "Zuweisung erfolgreich";
+            return _dataService.Zuweisen(m, s);
         }
     }
 }

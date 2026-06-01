@@ -36,6 +36,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
@@ -55,6 +56,22 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Infrastructure\Entities\AbteilungEntity.cs" />
+    <Compile Include="Infrastructure\Entities\AbwesenheitEntity.cs" />
+    <Compile Include="Infrastructure\Entities\MandantEntity.cs" />
+    <Compile Include="Infrastructure\Entities\MitarbeiterEntity.cs" />
+    <Compile Include="Infrastructure\Entities\MitarbeiterQualifikationEntity.cs" />
+    <Compile Include="Infrastructure\Entities\QualifikationEntity.cs" />
+    <Compile Include="Infrastructure\Entities\SchichtEntity.cs" />
+    <Compile Include="Infrastructure\Entities\VerfuegbarkeitEntity.cs" />
+    <Compile Include="Infrastructure\Entities\ZuweisungEntity.cs" />
+    <Compile Include="Infrastructure\IDatabaseConnectionFactory.cs" />
+    <Compile Include="Infrastructure\Migrations\SqlMigration.cs" />
+    <Compile Include="Infrastructure\Migrations\SqlServerMigrationRunner.cs" />
+    <Compile Include="Infrastructure\Repositories\IDienstplanRepository.cs" />
+    <Compile Include="Infrastructure\Repositories\SqlDienstplanRepository.cs" />
+    <Compile Include="Infrastructure\Services\DienstplanDataService.cs" />
+    <Compile Include="Infrastructure\SqlServerConnectionFactory.cs" />
     <Compile Include="MainViewModel.cs" />
     <Compile Include="RelayCommand.cs" />
     <Compile Include="Schicht.cs" />
