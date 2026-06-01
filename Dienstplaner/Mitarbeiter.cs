@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Dienstplaner.Models
 {
@@ -8,6 +8,7 @@ namespace Dienstplaner.Models
         public string Name { get; set; }
         public string Abteilung { get; set; }
         public string Qualifikation { get; set; }
+        public string Filiale { get; set; }
 
         public int WochenstundenLimit { get; set; }
         public bool IstAktiv { get; set; }
