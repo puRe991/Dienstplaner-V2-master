@@ -527,6 +527,39 @@ namespace Dienstplaner.ViewModels
             OnPropertyChanged(nameof(StatusNachricht));
         }
 
+        private DateTime GetStartForWochentag(string wochentag)
+        {
+            var dayOfWeek = ParseWochentag(wochentag);
+            var today = DateTime.Today;
+            var daysUntilTarget = ((int)dayOfWeek - (int)today.DayOfWeek + 7) % 7;
+
+            return today.AddDays(daysUntilTarget).AddHours(8);
+        }
+
+        private DayOfWeek ParseWochentag(string wochentag)
+        {
+            switch ((wochentag ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "montag":
+                    return DayOfWeek.Monday;
+                case "dienstag":
+                    return DayOfWeek.Tuesday;
+                case "mittwoch":
+                    return DayOfWeek.Wednesday;
+                case "donnerstag":
+                    return DayOfWeek.Thursday;
+                case "freitag":
+                    return DayOfWeek.Friday;
+                case "samstag":
+                case "sonnabend":
+                    return DayOfWeek.Saturday;
+                case "sonntag":
+                    return DayOfWeek.Sunday;
+                default:
+                    return DateTime.Today.DayOfWeek;
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         private void SetInputProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)

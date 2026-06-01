@@ -27,6 +27,8 @@ namespace Dienstplaner.Models
         public int AktuelleWochenstunden { get; set; }
         public List<Abwesenheit> Abwesenheiten { get; set; }
         public List<Schicht> Schichten { get; set; }
+        public List<Verfuegbarkeit> Verfuegbarkeiten { get; set; }
+        public List<Abwesenheit> Abwesenheiten { get; set; }
 
         public Mitarbeiter()
         {

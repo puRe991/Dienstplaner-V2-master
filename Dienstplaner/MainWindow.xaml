@@ -436,6 +436,18 @@
                             </ItemsControl>
                         </ScrollViewer>
 
+                        <TextBlock Text="Harte Fehler"
+                                   Foreground="#B91C1C"
+                                   FontWeight="SemiBold"
+                                   Margin="0,10,0,4"/>
+                        <ItemsControl ItemsSource="{Binding ZuweisungsFehler}"/>
+
+                        <TextBlock Text="Weiche Warnungen"
+                                   Foreground="#92400E"
+                                   FontWeight="SemiBold"
+                                   Margin="0,10,0,4"/>
+                        <ItemsControl ItemsSource="{Binding ZuweisungsWarnungen}"/>
+
                     </StackPanel>
 
                 </Border>

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -70,6 +70,7 @@
     <Compile Include="RelayCommand.cs" />
     <Compile Include="Schicht.cs" />
     <Compile Include="Zuweisung.cs" />
+    <Compile Include="Verfuegbarkeit.cs" />
     <Compile Include="ZuweisungsService.cs" />
     <Compile Include="Abwesenheit.cs" />
     <Compile Include="BenutzerRolle.cs" />
