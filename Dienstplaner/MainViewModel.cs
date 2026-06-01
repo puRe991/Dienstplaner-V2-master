@@ -57,35 +57,93 @@ namespace Dienstplaner.ViewModels
 
         private void AddMitarbeiter(object obj)
         {
+            if (!ValidateMitarbeiter())
+                return;
+
             MitarbeiterListe.Add(new Mitarbeiter
             {
                 Id = MitarbeiterListe.Count + 1,
-                Name = NeuerMitarbeiterName,
-                Abteilung = NeueMitarbeiterAbteilung,
-                Qualifikation = NeuerMitarbeiterQualifikation,
+                Name = NeuerMitarbeiterName.Trim(),
+                Abteilung = NeueMitarbeiterAbteilung.Trim(),
+                Qualifikation = NeuerMitarbeiterQualifikation.Trim(),
                 IstAktiv = true
             });
 
-            StatusNachricht = "Mitarbeiter hinzugefügt";
+            SetStatus("Mitarbeiter hinzugefügt");
         }
 
         private void AddSchicht(object obj)
         {
+            if (!ValidateSchicht())
+                return;
+
             SchichtListe.Add(new Schicht
             {
                 Id = SchichtListe.Count + 1,
-                Name = NeueSchichtName,
-                Abteilung = NeueSchichtAbteilung,
-                Wochentag = NeueSchichtWochentag,
+                Name = NeueSchichtName.Trim(),
+                Abteilung = NeueSchichtAbteilung.Trim(),
+                Wochentag = NeueSchichtWochentag.Trim(),
                 BenoetigteMitarbeiter = NeueSchichtKapazitaet
             });
 
-            StatusNachricht = "Schicht hinzugefügt";
+            SetStatus("Schicht hinzugefügt");
+        }
+
+        private bool ValidateMitarbeiter()
+        {
+            if (string.IsNullOrWhiteSpace(NeuerMitarbeiterName))
+            {
+                SetStatus("Mitarbeitername ist erforderlich");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(NeueMitarbeiterAbteilung))
+            {
+                SetStatus("Mitarbeiterabteilung ist erforderlich");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(NeuerMitarbeiterQualifikation))
+            {
+                SetStatus("Mitarbeiterqualifikation ist erforderlich");
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool ValidateSchicht()
+        {
+            if (string.IsNullOrWhiteSpace(NeueSchichtName))
+            {
+                SetStatus("Schichtname ist erforderlich");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(NeueSchichtAbteilung))
+            {
+                SetStatus("Schichtabteilung ist erforderlich");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(NeueSchichtWochentag))
+            {
+                SetStatus("Schichtwochentag ist erforderlich");
+                return false;
+            }
+
+            if (NeueSchichtKapazitaet <= 0)
+            {
+                SetStatus("Schichtkapazität muss größer als 0 sein");
+                return false;
+            }
+
+            return true;
         }
 
         private void Zuweisen(object obj)
         {
-            StatusNachricht = _service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht);
+            SetStatus(_service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht));
         }
 
         private void Seed()
@@ -95,7 +153,8 @@ namespace Dienstplaner.ViewModels
                 Id = 1,
                 Name = "Max Mustermann",
                 Abteilung = "Kasse",
-                Qualifikation = "Standard"
+                Qualifikation = "Standard",
+                IstAktiv = true
             });
 
             SchichtListe.Add(new Schicht
@@ -106,6 +165,12 @@ namespace Dienstplaner.ViewModels
                 Wochentag = "Montag",
                 BenoetigteMitarbeiter = 2
             });
+        }
+
+        private void SetStatus(string message)
+        {
+            StatusNachricht = message;
+            OnPropertyChanged(nameof(StatusNachricht));
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

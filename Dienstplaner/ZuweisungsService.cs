@@ -10,6 +10,9 @@ namespace Dienstplaner.Services
             if (m == null || s == null)
                 return "Ungültige Auswahl";
 
+            if (!m.IstAktiv)
+                return "Mitarbeiter ist nicht verfügbar";
+
             if (s.IstVoll)
                 return "Schicht ist bereits voll";
 
@@ -21,8 +24,13 @@ namespace Dienstplaner.Services
                 m.Qualifikation != s.BenoetigteQualifikation)
                 return "Qualifikation passt nicht";
 
+            if (m.WochenstundenLimit > 0 &&
+                m.AktuelleWochenstunden + s.DauerInStunden > m.WochenstundenLimit)
+                return "Wochenstundenlimit überschritten";
+
             m.Schichten.Add(s);
             s.MitarbeiterNamen.Add(m.Name);
+            m.AktuelleWochenstunden += s.DauerInStunden;
 
             return "Zuweisung erfolgreich";
         }
