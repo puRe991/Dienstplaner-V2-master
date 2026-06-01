@@ -6,8 +6,8 @@ using System.Runtime.CompilerServices;
 using System.Windows.Data;
 using System.Windows.Input;
 using Dienstplaner.Helpers;
+using Dienstplaner.Infrastructure.Services;
 using Dienstplaner.Models;
-using Dienstplaner.Services;
 
 namespace Dienstplaner.ViewModels
 {
@@ -35,7 +35,6 @@ namespace Dienstplaner.ViewModels
 
         public MandantKontext AktuellerKontext { get; set; }
 
-        // Inputs
         public string NeuerMitarbeiterName { get; set; }
         public string NeueMitarbeiterAbteilung { get; set; }
         public string NeuerMitarbeiterQualifikation { get; set; }
@@ -98,7 +97,13 @@ namespace Dienstplaner.ViewModels
         private readonly ForecastImportService _forecastImportService;
 
         public MainViewModel()
+            : this(new DienstplanDataService())
         {
+        }
+
+        public MainViewModel(DienstplanDataService dataService)
+        {
+            _dataService = dataService;
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
             ReportListe = new ObservableCollection<ReportKennzahl>();
@@ -406,7 +411,7 @@ namespace Dienstplaner.ViewModels
             return string.Empty;
         }
 
-        private void Seed()
+        private void LadeDaten()
         {
             Mitarbeiter max = new Mitarbeiter
             {

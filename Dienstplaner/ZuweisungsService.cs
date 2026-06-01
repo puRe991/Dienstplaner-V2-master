@@ -51,7 +51,9 @@ namespace Dienstplaner.Services
             _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", m.Id, benutzer, alteMitarbeiterWerte, m.ToAuditString(), "Schicht zugewiesen");
             _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", s.Id, benutzer, alteSchichtWerte, s.ToAuditString(), "Mitarbeiter zugewiesen");
 
-            return "Zuweisung erfolgreich";
+        public string Zuweisen(Mitarbeiter m, Schicht s)
+        {
+            return _dataService.Zuweisen(m, s);
         }
     }
 }
