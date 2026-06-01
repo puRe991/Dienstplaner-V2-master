@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -18,10 +19,10 @@ namespace Dienstplaner.ViewModels
 
         public ObservableCollection<Mitarbeiter> MitarbeiterListe { get; set; }
         public ObservableCollection<Schicht> SchichtListe { get; set; }
-        public ObservableCollection<Availability> Verfuegbarkeiten { get; set; }
-        public ObservableCollection<Absence> Abwesenheiten { get; set; }
-        public ObservableCollection<ShiftSwapRequest> TauschAntraege { get; set; }
-        public ObservableCollection<DecisionLogEntry> EntscheidungsLog { get; set; }
+        public ObservableCollection<ReportKennzahl> ReportListe { get; set; }
+        public ObservableCollection<UmsatzForecast> ForecastListe { get; set; }
+        public ObservableCollection<PayrollRecord> LohnabrechnungListe { get; set; }
+        public ObservableCollection<TimeTrackingRecord> ZeiterfassungListe { get; set; }
 
         public ICollectionView MitarbeiterView { get; }
         public ICollectionView SchichtView { get; }
@@ -32,265 +33,246 @@ namespace Dienstplaner.ViewModels
         public Absence AusgewaehlteAbwesenheit { get; set; }
         public ShiftSwapRequest AusgewaehlterTauschAntrag { get; set; }
 
+        public MandantKontext AktuellerKontext { get; set; }
+
+        // Inputs
         public string NeuerMitarbeiterName { get; set; }
         public string NeueMitarbeiterAbteilung { get; set; }
         public string NeuerMitarbeiterQualifikation { get; set; }
+        public decimal NeueMitarbeiterSollstunden { get; set; } = 40;
+        public decimal NeuerMitarbeiterStundenlohn { get; set; } = 15;
 
         public string NeueSchichtName { get; set; }
         public string NeueSchichtAbteilung { get; set; }
         public string NeueSchichtWochentag { get; set; }
         public int NeueSchichtKapazitaet { get; set; } = 2;
+        public decimal NeueSchichtPausenstunden { get; set; } = 0.5m;
+        public decimal NeueSchichtZuschlagsstunden { get; set; }
+        public string ForecastImportPfad { get; set; }
 
-        public string VerfuegbarkeitWochentag { get; set; }
-        public string VerfuegbarkeitVon { get; set; } = "08:00";
-        public string VerfuegbarkeitBis { get; set; } = "16:00";
-        public string AntragKommentar { get; set; }
-        public string AbwesenheitVon { get; set; }
-        public string AbwesenheitBis { get; set; }
-        public string AbwesenheitGrund { get; set; }
-        public string EntscheidungsBenutzer { get; set; } = "Filialleitung";
-        public string EntscheidungsKommentar { get; set; }
-        public ApprovalRole EntscheidungsRolle { get; set; } = ApprovalRole.Filialleiter;
-
-        public Array StatusWerte
-        {
-            get { return Enum.GetValues(typeof(RequestStatus)); }
-        }
-
-        public Array Rollen
-        {
-            get { return Enum.GetValues(typeof(ApprovalRole)); }
-        }
-
-        public string StatusNachricht
-        {
-            get { return _statusNachricht; }
-            set
-            {
-                _statusNachricht = value;
-                OnPropertyChanged();
-            }
-        }
+        public string StatusNachricht { get; set; }
+        public string DsgvoExportText { get; set; }
+        public ComplianceRichtlinie ComplianceRichtlinie { get; }
+        public BenutzerKontext AktuellerBenutzer { get; }
 
         public ICommand MitarbeiterHinzufuegenCommand { get; }
         public ICommand SchichtHinzufuegenCommand { get; }
         public ICommand ZuweisenCommand { get; }
-        public ICommand VerfuegbarkeitEinreichenCommand { get; }
-        public ICommand UrlaubsantragEinreichenCommand { get; }
-        public ICommand KrankmeldungEinreichenCommand { get; }
-        public ICommand TauschAntragEinreichenCommand { get; }
-        public ICommand VerfuegbarkeitGenehmigenCommand { get; }
-        public ICommand VerfuegbarkeitAblehnenCommand { get; }
-        public ICommand AbwesenheitGenehmigenCommand { get; }
-        public ICommand AbwesenheitAblehnenCommand { get; }
-        public ICommand TauschGenehmigenCommand { get; }
-        public ICommand TauschAblehnenCommand { get; }
+        public ICommand CsvExportCommand { get; }
+        public ICommand ExcelExportCommand { get; }
+        public ICommand PdfExportCommand { get; }
+        public ICommand ReportsAktualisierenCommand { get; }
+        public ICommand IntegrationenAktualisierenCommand { get; }
+        public ICommand ForecastImportCommand { get; }
+
+        private readonly ZuweisungsService _service;
+        private readonly DienstplanExportService _exportService;
+        private readonly ReportingService _reportingService;
+        private readonly IntegrationsService _integrationsService;
+        private readonly ForecastImportService _forecastImportService;
 
         public MainViewModel()
         {
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
-            Verfuegbarkeiten = new ObservableCollection<Availability>();
-            Abwesenheiten = new ObservableCollection<Absence>();
-            TauschAntraege = new ObservableCollection<ShiftSwapRequest>();
-            EntscheidungsLog = new ObservableCollection<DecisionLogEntry>();
+            ReportListe = new ObservableCollection<ReportKennzahl>();
+            ForecastListe = new ObservableCollection<UmsatzForecast>();
+            LohnabrechnungListe = new ObservableCollection<PayrollRecord>();
+            ZeiterfassungListe = new ObservableCollection<TimeTrackingRecord>();
 
             MitarbeiterView = CollectionViewSource.GetDefaultView(MitarbeiterListe);
             SchichtView = CollectionViewSource.GetDefaultView(SchichtListe);
 
+            AktuellerKontext = new MandantKontext
+            {
+                MandantId = 1,
+                MandantName = "DemoMandant",
+                FilialeId = 1,
+                FilialeName = "Zentrale",
+                Rolle = BenutzerRolle.Personalwesen
+            };
+
             _service = new ZuweisungsService();
-            _approvalService = new ApprovalService();
+            _exportService = new DienstplanExportService();
+            _reportingService = new ReportingService();
+            _integrationsService = new IntegrationsService();
+            _forecastImportService = new ForecastImportService();
 
             MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter);
             SchichtHinzufuegenCommand = new RelayCommand(AddSchicht);
             ZuweisenCommand = new RelayCommand(Zuweisen);
-            VerfuegbarkeitEinreichenCommand = new RelayCommand(VerfuegbarkeitEinreichen);
-            UrlaubsantragEinreichenCommand = new RelayCommand(UrlaubsantragEinreichen);
-            KrankmeldungEinreichenCommand = new RelayCommand(KrankmeldungEinreichen);
-            TauschAntragEinreichenCommand = new RelayCommand(TauschAntragEinreichen);
-            VerfuegbarkeitGenehmigenCommand = new RelayCommand(obj => Entscheide(AusgewaehlteVerfuegbarkeit, RequestStatus.Approved));
-            VerfuegbarkeitAblehnenCommand = new RelayCommand(obj => Entscheide(AusgewaehlteVerfuegbarkeit, RequestStatus.Rejected));
-            AbwesenheitGenehmigenCommand = new RelayCommand(obj => Entscheide(AusgewaehlteAbwesenheit, RequestStatus.Approved));
-            AbwesenheitAblehnenCommand = new RelayCommand(obj => Entscheide(AusgewaehlteAbwesenheit, RequestStatus.Rejected));
-            TauschGenehmigenCommand = new RelayCommand(obj => Entscheide(AusgewaehlterTauschAntrag, RequestStatus.Approved));
-            TauschAblehnenCommand = new RelayCommand(obj => Entscheide(AusgewaehlterTauschAntrag, RequestStatus.Rejected));
+            CsvExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Csv));
+            ExcelExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Excel));
+            PdfExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Pdf));
+            ReportsAktualisierenCommand = new RelayCommand(AktualisiereReports);
+            IntegrationenAktualisierenCommand = new RelayCommand(AktualisiereIntegrationen);
+            ForecastImportCommand = new RelayCommand(ImportiereForecast);
 
             Seed();
+            AktualisiereReports(null);
+            AktualisiereIntegrationen(null);
         }
 
         private void AddMitarbeiter(object obj)
         {
-            MitarbeiterListe.Add(new Mitarbeiter
+            FuehreMitRollenpruefungAus("Mitarbeiter erstellen", () =>
             {
                 Id = MitarbeiterListe.Count + 1,
+                MandantId = AktuellerKontext.MandantId,
+                FilialeId = AktuellerKontext.FilialeId,
                 Name = NeuerMitarbeiterName,
                 Abteilung = NeueMitarbeiterAbteilung,
                 Qualifikation = NeuerMitarbeiterQualifikation,
+                SollstundenProWoche = NeueMitarbeiterSollstunden,
+                WochenstundenLimit = 48,
+                Stundenlohn = NeuerMitarbeiterStundenlohn,
                 IstAktiv = true
             });
 
             StatusNachricht = "Mitarbeiter hinzugefügt";
+            OnPropertyChanged("StatusNachricht");
         }
 
         private void AddSchicht(object obj)
         {
-            var start = DateTime.Today.AddHours(8).AddDays(SchichtListe.Count);
-            SchichtListe.Add(new Schicht
+            FuehreMitRollenpruefungAus("Schicht erstellen", () =>
             {
                 Id = SchichtListe.Count + 1,
+                MandantId = AktuellerKontext.MandantId,
+                FilialeId = AktuellerKontext.FilialeId,
+                FilialeName = AktuellerKontext.FilialeName,
                 Name = NeueSchichtName,
                 Abteilung = NeueSchichtAbteilung,
                 Wochentag = NeueSchichtWochentag,
-                Start = start,
-                Ende = start.AddHours(8),
-                BenoetigteMitarbeiter = NeueSchichtKapazitaet
+                BenoetigteMitarbeiter = NeueSchichtKapazitaet,
+                Pausenstunden = NeueSchichtPausenstunden,
+                Zuschlagsstunden = NeueSchichtZuschlagsstunden,
+                Start = DateTime.Today.AddHours(8),
+                Ende = DateTime.Today.AddHours(16)
             });
 
             StatusNachricht = "Schicht hinzugefügt";
+            OnPropertyChanged("StatusNachricht");
         }
 
         private void Zuweisen(object obj)
         {
-            StatusNachricht = _service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht, Verfuegbarkeiten, Abwesenheiten);
+            FuehreMitRollenpruefungAus("Dienstplan ändern", () => SetStatus(_service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht, AktuellerBenutzer)));
         }
 
-        private void VerfuegbarkeitEinreichen(object obj)
+        private void SchichtLoeschen(object obj)
         {
-            if (AusgewaehlterMitarbeiter == null)
+            FuehreMitRollenpruefungAus("Schicht löschen", () =>
             {
-                StatusNachricht = "Bitte Mitarbeiter auswählen";
-                return;
-            }
+                if (AusgewaehlteSchicht == null)
+                {
+                    SetStatus("Keine Schicht zum Löschen ausgewählt");
+                    return;
+                }
 
-            TimeSpan von;
-            TimeSpan bis;
-            if (!TimeSpan.TryParse(VerfuegbarkeitVon, out von) || !TimeSpan.TryParse(VerfuegbarkeitBis, out bis))
-            {
-                StatusNachricht = "Verfügbarkeitszeiten sind ungültig";
-                return;
-            }
+                var schicht = AusgewaehlteSchicht;
+                var alteWerte = schicht.ToAuditString();
+                foreach (var mitarbeiter in MitarbeiterListe)
+                    mitarbeiter.Schichten.Remove(schicht);
 
-            Verfuegbarkeiten.Add(new Availability
-            {
-                Id = Verfuegbarkeiten.Count + 1,
-                MitarbeiterId = AusgewaehlterMitarbeiter.Id,
-                MitarbeiterName = AusgewaehlterMitarbeiter.Name,
-                Wochentag = VerfuegbarkeitWochentag,
-                Von = von,
-                Bis = bis,
-                Kommentar = AntragKommentar,
-                Status = RequestStatus.Submitted
+                SchichtListe.Remove(schicht);
+                _auditService.Protokolliere(AuditAction.DienstplanGeloescht, "Schicht", schicht.Id, AktuellerBenutzer, alteWerte, string.Empty, "Dienstplan-Schicht gelöscht");
+                SetStatus("Schicht gelöscht");
             });
-
-            StatusNachricht = "Verfügbarkeit eingereicht";
         }
 
-        private void UrlaubsantragEinreichen(object obj)
+        private void DienstplanVeroeffentlichen(object obj)
         {
-            AbsenceEinreichen(new LeaveRequest { IstBezahlt = true }, "Urlaubsantrag eingereicht");
-        }
-
-        private void KrankmeldungEinreichen(object obj)
-        {
-            AbsenceEinreichen(new SickLeave { ArbeitsunfaehigkeitsBescheinigungVorhanden = true }, "Krankmeldung eingereicht");
-        }
-
-        private void AbsenceEinreichen(Absence absence, string erfolgsmeldung)
-        {
-            if (AusgewaehlterMitarbeiter == null)
+            FuehreMitRollenpruefungAus("Dienstplan veröffentlichen", () =>
             {
-                StatusNachricht = "Bitte Mitarbeiter auswählen";
-                return;
-            }
-
-            DateTime von;
-            DateTime bis;
-            if (!DateTime.TryParse(AbwesenheitVon, out von) || !DateTime.TryParse(AbwesenheitBis, out bis))
-            {
-                StatusNachricht = "Abwesenheitszeitraum ist ungültig";
-                return;
-            }
-
-            absence.Id = Abwesenheiten.Count + 1;
-            absence.MitarbeiterId = AusgewaehlterMitarbeiter.Id;
-            absence.MitarbeiterName = AusgewaehlterMitarbeiter.Name;
-            absence.Von = von;
-            absence.Bis = bis;
-            absence.Grund = AbwesenheitGrund;
-            absence.Kommentar = AntragKommentar;
-            absence.Status = RequestStatus.Submitted;
-            Abwesenheiten.Add(absence);
-
-            StatusNachricht = erfolgsmeldung;
-        }
-
-        private void TauschAntragEinreichen(object obj)
-        {
-            if (AusgewaehlterMitarbeiter == null || AusgewaehlteSchicht == null)
-            {
-                StatusNachricht = "Bitte Mitarbeiter und Schicht auswählen";
-                return;
-            }
-
-            TauschAntraege.Add(new ShiftSwapRequest
-            {
-                Id = TauschAntraege.Count + 1,
-                MitarbeiterId = AusgewaehlterMitarbeiter.Id,
-                MitarbeiterName = AusgewaehlterMitarbeiter.Name,
-                VonMitarbeiterId = AusgewaehlterMitarbeiter.Id,
-                VonMitarbeiterName = AusgewaehlterMitarbeiter.Name,
-                SchichtId = AusgewaehlteSchicht.Id,
-                SchichtName = AusgewaehlteSchicht.Name,
-                Kommentar = AntragKommentar,
-                Status = RequestStatus.Submitted
+                var neueWerte = $"Schichten={SchichtListe.Count};Mitarbeiter={MitarbeiterListe.Count}";
+                _auditService.Protokolliere(AuditAction.DienstplanVeroeffentlicht, "Dienstplan", 0, AktuellerBenutzer, string.Empty, neueWerte, "Dienstplan veröffentlicht");
+                SetStatus("Dienstplan veröffentlicht");
             });
-
-            StatusNachricht = "Schichttausch eingereicht";
         }
 
-        private void Entscheide(EmployeeRequest request, RequestStatus status)
+        private void DsgvoAuskunftErstellen(object obj)
         {
-            var log = _approvalService.Entscheiden(request, status, EntscheidungsBenutzer, EntscheidungsRolle, EntscheidungsKommentar);
-            if (log == null)
+            try
             {
-                StatusNachricht = "Entscheidung nicht erlaubt";
-                return;
+                DsgvoExportText = _dsgvoService.ExportierePersonenDaten(AusgewaehlterMitarbeiter, SchichtListe, AktuellerBenutzer);
+                OnPropertyChanged(nameof(DsgvoExportText));
+                SetStatus("DSGVO-Auskunft erstellt");
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
+        }
 
-            EntscheidungsLog.Add(log);
-            StatusNachricht = string.Format("{0} wurde {1}", log.AntragTyp, status);
+        private void DsgvoLoeschanfrageBearbeiten(object obj)
+        {
+            try
+            {
+                SetStatus(_dsgvoService.BearbeiteLoeschanfrage(AusgewaehlterMitarbeiter, SchichtListe, AktuellerBenutzer));
+                MitarbeiterView.Refresh();
+                SchichtView.Refresh();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
+        }
+
+        private void FuehreMitRollenpruefungAus(string aktion, Action aktionAusfuehren)
+        {
+            try
+            {
+                _rollenService.StellePersonenDatenZugriffSicher(AktuellerBenutzer, aktion);
+                aktionAusfuehren();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                SetStatus(ex.Message);
+            }
         }
 
         private void Seed()
         {
-            MitarbeiterListe.Add(new Mitarbeiter
+            Mitarbeiter max = new Mitarbeiter
             {
                 Id = 1,
+                MandantId = 1,
+                FilialeId = 1,
                 Name = "Max Mustermann",
                 Abteilung = "Kasse",
                 Qualifikation = "Standard",
                 IstAktiv = true
             });
 
-            MitarbeiterListe.Add(new Mitarbeiter
-            {
-                Id = 2,
-                Name = "Erika Beispiel",
-                Abteilung = "Kasse",
-                Qualifikation = "Standard",
-                IstAktiv = true
-            });
-
-            SchichtListe.Add(new Schicht
+            Schicht frueh = new Schicht
             {
                 Id = 1,
+                MandantId = 1,
+                FilialeId = 1,
+                FilialeName = "Zentrale",
                 Name = "Frühschicht",
                 Abteilung = "Kasse",
                 Wochentag = "Montag",
-                Start = DateTime.Today.AddHours(8),
-                Ende = DateTime.Today.AddHours(16),
+                Start = DateTime.Today.AddHours(6),
+                Ende = DateTime.Today.AddHours(14),
                 BenoetigteMitarbeiter = 2,
+                Pausenstunden = 0.5m,
+                Zuschlagsstunden = 1.0m,
                 BenoetigteQualifikation = "Standard"
+            };
+
+            MitarbeiterListe.Add(max);
+            SchichtListe.Add(frueh);
+            _service.Zuweisen(max, frueh);
+
+            ForecastListe.Add(new UmsatzForecast
+            {
+                FilialeId = 1,
+                FilialeName = "Zentrale",
+                Datum = DateTime.Today,
+                ErwarteterUmsatz = 12500,
+                ErwarteteKundenfrequenz = 980
             });
 
             Verfuegbarkeiten.Add(new Availability
@@ -318,6 +300,12 @@ namespace Dienstplaner.ViewModels
             });
 
             StatusNachricht = "Bereit";
+        }
+
+        private void SetStatus(string nachricht)
+        {
+            StatusNachricht = nachricht;
+            OnPropertyChanged(nameof(StatusNachricht));
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

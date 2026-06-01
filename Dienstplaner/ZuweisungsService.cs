@@ -1,4 +1,3 @@
-﻿using System.Collections.Generic;
 using System.Linq;
 using Dienstplaner.Models;
 
@@ -6,15 +5,24 @@ namespace Dienstplaner.Services
 {
     public class ZuweisungsService
     {
-        public string Zuweisen(Mitarbeiter m, Schicht s)
+        private readonly AuditService _auditService;
+        private readonly RollenService _rollenService;
+
+        public ZuweisungsService(AuditService auditService, RollenService rollenService)
         {
-            return Zuweisen(m, s, Enumerable.Empty<Availability>(), Enumerable.Empty<Absence>());
+            _auditService = auditService;
+            _rollenService = rollenService;
         }
 
-        public string Zuweisen(Mitarbeiter m, Schicht s, IEnumerable<Availability> verfuegbarkeiten, IEnumerable<Absence> abwesenheiten)
+        public string Zuweisen(Mitarbeiter m, Schicht s, BenutzerKontext benutzer)
         {
+            _rollenService.StellePersonenDatenZugriffSicher(benutzer, "Dienstplan ändern");
+
             if (m == null || s == null)
                 return "Ungültige Auswahl";
+
+            if (!m.IstAktiv)
+                return "Mitarbeiter ist nicht verfügbar";
 
             if (s.IstVoll)
                 return "Schicht ist bereits voll";
@@ -23,25 +31,25 @@ namespace Dienstplaner.Services
                 s.Start < x.Ende && s.Ende > x.Start))
                 return "Zeitkonflikt";
 
+            if (m.Abwesenheiten.Any(a => a.Ueberschneidet(s.Start, s.Ende)))
+                return "Mitarbeiter ist abwesend";
+
+            if (m.Iststunden + s.NettoDauerInStunden > m.WochenstundenLimit)
+                return "Wochenstundenlimit würde überschritten";
+
             if (!string.IsNullOrEmpty(s.BenoetigteQualifikation) &&
                 m.Qualifikation != s.BenoetigteQualifikation)
                 return "Qualifikation passt nicht";
 
-            if (abwesenheiten != null && abwesenheiten.Any(a => a.MitarbeiterId == m.Id && a.Ueberschneidet(s)))
-                return "Mitarbeiter ist für diese Schicht abwesend";
-
-            if (verfuegbarkeiten != null)
-            {
-                var genehmigteVerfuegbarkeiten = verfuegbarkeiten
-                    .Where(v => v.MitarbeiterId == m.Id && v.Status == RequestStatus.Approved)
-                    .ToList();
-
-                if (genehmigteVerfuegbarkeiten.Any() && !genehmigteVerfuegbarkeiten.Any(v => v.DecktSchichtAb(s)))
-                    return "Mitarbeiter ist für diese Schicht nicht verfügbar";
-            }
+            var alteMitarbeiterWerte = m.ToAuditString();
+            var alteSchichtWerte = s.ToAuditString();
 
             m.Schichten.Add(s);
             s.MitarbeiterNamen.Add(m.Name);
+            m.AktuelleWochenstunden += s.DauerInStunden;
+
+            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", m.Id, benutzer, alteMitarbeiterWerte, m.ToAuditString(), "Schicht zugewiesen");
+            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", s.Id, benutzer, alteSchichtWerte, s.ToAuditString(), "Mitarbeiter zugewiesen");
 
             return "Zuweisung erfolgreich";
         }
