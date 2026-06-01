@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -55,10 +55,15 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Abwesenheit.cs" />
+    <Compile Include="IPlanningRule.cs" />
     <Compile Include="MainViewModel.cs" />
+    <Compile Include="PlanningRuleResult.cs" />
+    <Compile Include="PlanningRules.cs" />
     <Compile Include="RelayCommand.cs" />
     <Compile Include="Schicht.cs" />
     <Compile Include="Zuweisung.cs" />
+    <Compile Include="Verfuegbarkeit.cs" />
     <Compile Include="ZuweisungsService.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>

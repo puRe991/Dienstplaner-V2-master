@@ -8,6 +8,7 @@ namespace Dienstplaner.Models
         public int Id { get; set; }
         public string Name { get; set; }
         public string Abteilung { get; set; }
+        public string Filiale { get; set; }
 
         public string Wochentag { get; set; }
 
@@ -16,6 +17,7 @@ namespace Dienstplaner.Models
 
         public int BenoetigteMitarbeiter { get; set; }
         public string BenoetigteQualifikation { get; set; }
+        public int PauseInMinuten { get; set; }
 
         public List<string> MitarbeiterNamen { get; set; }
 

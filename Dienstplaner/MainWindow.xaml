@@ -89,6 +89,22 @@
                                      Text="{Binding NeuerMitarbeiterQualifikation}"
                                      Margin="0,0,0,8"/>
 
+                            <TextBlock Text="Filiale"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueMitarbeiterFiliale}"
+                                     Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Wochenstundenlimit"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeuesMitarbeiterWochenstundenLimit}"
+                                     Margin="0,0,0,8"/>
+
                             <Button Content="Mitarbeiter hinzufügen"
                                     Height="36"
                                     Background="#2563EB"
@@ -128,12 +144,36 @@
                                      Text="{Binding NeueSchichtAbteilung}"
                                      Margin="0,0,0,8"/>
 
+                            <TextBlock Text="Filiale"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueSchichtFiliale}"
+                                     Margin="0,0,0,8"/>
+
                             <TextBlock Text="Wochentag"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
                             <TextBox Height="32"
                                      Text="{Binding NeueSchichtWochentag}"
+                                     Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Benötigte Qualifikation"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueSchichtQualifikation}"
+                                     Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Pause (Minuten)"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox Height="32"
+                                     Text="{Binding NeueSchichtPauseInMinuten}"
                                      Margin="0,0,0,8"/>
 
                             <TextBlock Text="Benötigte Mitarbeiter"
@@ -206,6 +246,57 @@
                                 BorderThickness="0"
                                 Command="{Binding ZuweisenCommand}"/>
 
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0"
+                                        Margin="0,0,5,0">
+                                <TextBlock Text="Harte Fehler"
+                                           FontWeight="SemiBold"
+                                           Foreground="#B91C1C"
+                                           Margin="0,0,0,4"/>
+                                <ItemsControl ItemsSource="{Binding ZuweisungsFehler}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#FEE2E2"
+                                                    CornerRadius="4"
+                                                    Padding="6"
+                                                    Margin="0,2,0,2">
+                                                <TextBlock Text="{Binding}"
+                                                           TextWrapping="Wrap"
+                                                           FontSize="11"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Margin="5,0,0,0">
+                                <TextBlock Text="Weiche Warnungen"
+                                           FontWeight="SemiBold"
+                                           Foreground="#92400E"
+                                           Margin="0,0,0,4"/>
+                                <ItemsControl ItemsSource="{Binding ZuweisungsWarnungen}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#FEF3C7"
+                                                    CornerRadius="4"
+                                                    Padding="6"
+                                                    Margin="0,2,0,2">
+                                                <TextBlock Text="{Binding}"
+                                                           TextWrapping="Wrap"
+                                                           FontSize="11"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
+
                     </StackPanel>
 
                 </Border>
@@ -248,6 +339,14 @@
 
                                                 <TextBlock Text="{Binding Wochentag,
                                                     StringFormat=Tag: {0}}"
+                                                           FontSize="11"/>
+
+                                                <TextBlock Text="{Binding BenoetigteQualifikation,
+                                                    StringFormat=Qualifikation: {0}}"
+                                                           FontSize="11"/>
+
+                                                <TextBlock Text="{Binding PauseInMinuten,
+                                                    StringFormat=Pause: {0} Minuten}"
                                                            FontSize="11"/>
 
                                                 <TextBlock Text="{Binding BenoetigteMitarbeiter,
@@ -349,6 +448,18 @@
                                                     StringFormat=Qualifikation: {0}}"
                                                            FontSize="11"/>
 
+                                                <TextBlock Text="{Binding WochenstundenLimit,
+                                                    StringFormat=Wochenlimit: {0}h}"
+                                                           FontSize="11"/>
+
+                                                <TextBlock Text="{Binding AktuelleWochenstunden,
+                                                    StringFormat=Aktuell geplant: {0}h}"
+                                                           FontSize="11"/>
+
+                                                <TextBlock Text="{Binding IstAktiv,
+                                                    StringFormat=Aktiv: {0}}"
+                                                           FontSize="11"/>
+
                                                 <TextBlock Text="{Binding Schichten.Count,
                                                     StringFormat=Schichten: {0}}"
                                                            FontSize="11"/>
@@ -383,6 +494,18 @@
 
                         <TextBlock Text="{Binding StatusNachricht}"
                                    TextWrapping="Wrap"/>
+
+                        <TextBlock Text="Harte Fehler"
+                                   Foreground="#B91C1C"
+                                   FontWeight="SemiBold"
+                                   Margin="0,10,0,4"/>
+                        <ItemsControl ItemsSource="{Binding ZuweisungsFehler}"/>
+
+                        <TextBlock Text="Weiche Warnungen"
+                                   Foreground="#92400E"
+                                   FontWeight="SemiBold"
+                                   Margin="0,10,0,4"/>
+                        <ItemsControl ItemsSource="{Binding ZuweisungsWarnungen}"/>
 
                     </StackPanel>
 
