@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Data;
 using System.Windows.Input;
+using Dienstplaner.Auth;
 using Dienstplaner.Helpers;
 using Dienstplaner.Infrastructure.Services;
 using Dienstplaner.Models;
@@ -422,7 +423,15 @@ namespace Dienstplaner.ViewModels
                 Abteilung = "Kasse",
                 Qualifikation = "Standard",
                 IstAktiv = true
-            });
+            };
+            var erika = new Mitarbeiter
+            {
+                Id = 2,
+                Name = "Erika Beispiel",
+                Abteilung = "Lager",
+                Qualifikation = "Stapler",
+                IstAktiv = true
+            };
 
             Schicht frueh = new Schicht
             {
@@ -514,6 +523,10 @@ namespace Dienstplaner.ViewModels
         }
 
         private void OnPropertyChanged([CallerMemberName] string n = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+        {
+            var handler = PropertyChanged;
+            if (handler != null)
+                handler(this, new PropertyChangedEventArgs(n));
+        }
     }
 }

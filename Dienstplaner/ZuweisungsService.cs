@@ -46,7 +46,8 @@ namespace Dienstplaner.Services
 
             m.Schichten.Add(s);
             s.MitarbeiterNamen.Add(m.Name);
-            m.AktuelleWochenstunden += s.DauerInStunden;
+            if (!s.MitarbeiterIds.Contains(m.Id))
+                s.MitarbeiterIds.Add(m.Id);
 
             _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", m.Id, benutzer, alteMitarbeiterWerte, m.ToAuditString(), "Schicht zugewiesen");
             _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", s.Id, benutzer, alteSchichtWerte, s.ToAuditString(), "Mitarbeiter zugewiesen");

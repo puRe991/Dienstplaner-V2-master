@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace Dienstplaner.Models
@@ -28,6 +28,7 @@ namespace Dienstplaner.Models
         public string Regelhinweis { get; set; }
 
         public List<string> MitarbeiterNamen { get; set; }
+        public List<int> MitarbeiterIds { get; set; }
 
         public Schicht()
         {
