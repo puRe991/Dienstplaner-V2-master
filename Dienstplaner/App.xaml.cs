@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Net;
 using System.Windows;
 
 namespace Dienstplaner
@@ -13,5 +14,10 @@ namespace Dienstplaner
     /// </summary>
     public partial class App : Application
     {
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            base.OnStartup(e);
+        }
     }
 }

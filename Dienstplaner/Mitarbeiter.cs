@@ -20,5 +20,10 @@ namespace Dienstplaner.Models
         {
             Schichten = new List<Schicht>();
         }
+
+        public string ToAuditString()
+        {
+            return $"Id={Id};Name={Name};Abteilung={Abteilung};Qualifikation={Qualifikation};IstAktiv={IstAktiv};WochenstundenLimit={WochenstundenLimit};Schichten={Schichten.Count}";
+        }
     }
 }

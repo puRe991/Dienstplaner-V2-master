@@ -33,5 +33,10 @@ namespace Dienstplaner.Models
         {
             get { return (int)(Ende - Start).TotalHours; }
         }
+
+        public string ToAuditString()
+        {
+            return $"Id={Id};Name={Name};Abteilung={Abteilung};Wochentag={Wochentag};Start={Start:O};Ende={Ende:O};BenoetigteMitarbeiter={BenoetigteMitarbeiter};BenoetigteQualifikation={BenoetigteQualifikation};Mitarbeiter={string.Join(",", MitarbeiterNamen)}";
+        }
     }
 }
