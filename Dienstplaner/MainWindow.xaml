@@ -6,6 +6,46 @@
         Width="1440"
         Background="#F3F4F6">
 
+    <Window.Resources>
+        <Style x:Key="ValidierteTextBox" TargetType="TextBox">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Validation.ErrorTemplate">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <DockPanel LastChildFill="True">
+                            <Border BorderBrush="#DC2626"
+                                    BorderThickness="1"
+                                    CornerRadius="2">
+                                <AdornedElementPlaceholder/>
+                            </Border>
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Validation.HasError" Value="True">
+                    <Setter Property="ToolTip"
+                            Value="{Binding RelativeSource={RelativeSource Self}, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ValidierungsFehlerText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#DC2626"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Visibility" Value="Visible"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value="{x:Null}">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
     <Grid>
 
         <!-- ROWS -->
@@ -69,25 +109,43 @@
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
-                            <TextBox Height="32"
-                                     Text="{Binding NeuerMitarbeiterName}"
-                                     Margin="0,0,0,8"/>
+                            <TextBox x:Name="NeuerMitarbeiterNameTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeuerMitarbeiterName, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeuerMitarbeiterNameTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
 
                             <TextBlock Text="Abteilung"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
-                            <TextBox Height="32"
-                                     Text="{Binding NeueMitarbeiterAbteilung}"
-                                     Margin="0,0,0,8"/>
+                            <TextBox x:Name="NeueMitarbeiterAbteilungTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeueMitarbeiterAbteilung, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeueMitarbeiterAbteilungTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
 
                             <TextBlock Text="Qualifikation"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
-                            <TextBox Height="32"
-                                     Text="{Binding NeuerMitarbeiterQualifikation}"
-                                     Margin="0,0,0,8"/>
+                            <TextBox x:Name="NeuerMitarbeiterQualifikationTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeuerMitarbeiterQualifikation, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeuerMitarbeiterQualifikationTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
+
+                            <TextBlock Text="{Binding MitarbeiterFehlerNachricht}"
+                                       Foreground="#B45309"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8"/>
 
                             <Button Content="Mitarbeiter hinzufügen"
                                     Height="36"
@@ -116,33 +174,79 @@
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtName}"
-                                     Margin="0,0,0,8"/>
+                            <TextBox x:Name="NeueSchichtNameTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeueSchichtName, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeueSchichtNameTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
 
                             <TextBlock Text="Abteilung"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtAbteilung}"
-                                     Margin="0,0,0,8"/>
+                            <TextBox x:Name="NeueSchichtAbteilungTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeueSchichtAbteilung, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeueSchichtAbteilungTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
 
                             <TextBlock Text="Wochentag"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtWochentag}"
-                                     Margin="0,0,0,8"/>
+                            <TextBox x:Name="NeueSchichtWochentagTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeueSchichtWochentag, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeueSchichtWochentagTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
 
                             <TextBlock Text="Benötigte Mitarbeiter"
                                        FontSize="11"
                                        Margin="0,0,0,3"/>
 
-                            <TextBox Height="32"
-                                     Text="{Binding NeueSchichtKapazitaet}"
-                                     Margin="0,0,0,12"/>
+                            <TextBox x:Name="NeueSchichtKapazitaetTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeueSchichtKapazitaet, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeueSchichtKapazitaetTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
+
+                            <TextBlock Text="Startzeit (HH:mm)"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox x:Name="NeueSchichtStartzeitTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeueSchichtStartzeit, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeueSchichtStartzeitTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
+
+                            <TextBlock Text="Endzeit (HH:mm)"
+                                       FontSize="11"
+                                       Margin="0,0,0,3"/>
+
+                            <TextBox x:Name="NeueSchichtEndzeitTextBox"
+                                     Height="32"
+                                     Style="{StaticResource ValidierteTextBox}"
+                                     Text="{Binding NeueSchichtEndzeit, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}"/>
+
+                            <TextBlock Text="{Binding ElementName=NeueSchichtEndzeitTextBox, Path=(Validation.Errors)[0].ErrorContent, FallbackValue=, TargetNullValue=}"
+                                       Style="{StaticResource ValidierungsFehlerText}"/>
+
+                            <TextBlock Text="{Binding SchichtFehlerNachricht}"
+                                       Foreground="#B45309"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8"/>
 
                             <Button Content="Schicht erstellen"
                                     Height="36"
@@ -248,6 +352,14 @@
 
                                                 <TextBlock Text="{Binding Wochentag,
                                                     StringFormat=Tag: {0}}"
+                                                           FontSize="11"/>
+
+                                                <TextBlock Text="{Binding Start,
+                                                    StringFormat=Start: {0:HH:mm}}"
+                                                           FontSize="11"/>
+
+                                                <TextBlock Text="{Binding Ende,
+                                                    StringFormat=Ende: {0:HH:mm}}"
                                                            FontSize="11"/>
 
                                                 <TextBlock Text="{Binding BenoetigteMitarbeiter,
