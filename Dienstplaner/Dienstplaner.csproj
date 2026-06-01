@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -36,6 +36,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
@@ -43,6 +44,7 @@
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Security" />
     <Reference Include="System.Xaml">
       <RequiredTargetFramework>4.0</RequiredTargetFramework>
     </Reference>
@@ -55,11 +57,34 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="AuditAction.cs" />
+    <Compile Include="AuditLogEintrag.cs" />
+    <Compile Include="AuditService.cs" />
+    <Compile Include="BenutzerKontext.cs" />
+    <Compile Include="BenutzerRolle.cs" />
+    <Compile Include="ComplianceRichtlinie.cs" />
+    <Compile Include="DataProtectionService.cs" />
+    <Compile Include="DsgvoService.cs" />
     <Compile Include="MainViewModel.cs" />
+    <Compile Include="RollenService.cs" />
     <Compile Include="RelayCommand.cs" />
     <Compile Include="Schicht.cs" />
     <Compile Include="Zuweisung.cs" />
+    <Compile Include="Verfuegbarkeit.cs" />
     <Compile Include="ZuweisungsService.cs" />
+    <Compile Include="Abwesenheit.cs" />
+    <Compile Include="BenutzerRolle.cs" />
+    <Compile Include="ExportFormat.cs" />
+    <Compile Include="MandantKontext.cs" />
+    <Compile Include="PayrollRecord.cs" />
+    <Compile Include="ReportKennzahl.cs" />
+    <Compile Include="TimeTrackingRecord.cs" />
+    <Compile Include="UmsatzForecast.cs" />
+    <Compile Include="Services\DienstplanExportService.cs" />
+    <Compile Include="Services\ExportSecurityService.cs" />
+    <Compile Include="Services\ForecastImportService.cs" />
+    <Compile Include="Services\IntegrationsService.cs" />
+    <Compile Include="Services\ReportingService.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
