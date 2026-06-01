@@ -14,6 +14,11 @@ namespace Dienstplaner.Models
         public string Qualifikation { get; set; }
         public string Filiale { get; set; }
 
+        public int StoreId { get; set; }
+        public int DepartmentId { get; set; }
+        public int RoleId { get; set; }
+        public List<int> SkillIds { get; set; }
+
         public int WochenstundenLimit { get; set; }
         public decimal SollstundenProWoche { get; set; }
         public decimal Stundenlohn { get; set; }
@@ -25,6 +30,7 @@ namespace Dienstplaner.Models
 
         public Mitarbeiter()
         {
+            SkillIds = new List<int>();
             Schichten = new List<Schicht>();
             Abwesenheiten = new List<Abwesenheit>();
             IstAktiv = true;

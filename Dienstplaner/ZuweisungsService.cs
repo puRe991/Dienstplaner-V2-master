@@ -28,7 +28,7 @@ namespace Dienstplaner.Services
                 return "Schicht ist bereits voll";
 
             if (m.Schichten.Any(x =>
-                s.Start < x.Ende && s.Ende > x.Start))
+                s.StartUtc < x.EndUtc && s.EndUtc > x.StartUtc))
                 return "Zeitkonflikt";
 
             if (m.Abwesenheiten.Any(a => a.Ueberschneidet(s.Start, s.Ende)))

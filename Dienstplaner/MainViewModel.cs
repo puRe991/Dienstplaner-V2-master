@@ -43,8 +43,13 @@ namespace Dienstplaner.ViewModels
         public decimal NeuerMitarbeiterStundenlohn { get; set; } = 15;
 
         public string NeueSchichtName { get; set; }
-        public string NeueSchichtAbteilung { get; set; }
-        public string NeueSchichtWochentag { get; set; }
+        public int NeueSchichtStoreId { get; set; } = 1;
+        public int NeueSchichtDepartmentId { get; set; } = 1;
+        public int NeueSchichtRoleId { get; set; } = 1;
+        public DateTime NeueSchichtDatum { get; set; } = DateTime.Today;
+        public string NeueSchichtStartzeit { get; set; } = "08:00";
+        public string NeueSchichtEndzeit { get; set; } = "16:00";
+        public int NeueSchichtPauseMinuten { get; set; } = 30;
         public int NeueSchichtKapazitaet { get; set; } = 2;
         public decimal NeueSchichtPausenstunden { get; set; } = 0.5m;
         public decimal NeueSchichtZuschlagsstunden { get; set; }
@@ -167,6 +172,7 @@ namespace Dienstplaner.ViewModels
                 FilialeId = AktuellerKontext.FilialeId,
                 Name = NeuerMitarbeiterName,
                 Abteilung = NeueMitarbeiterAbteilung,
+                DepartmentId = ParseIntOrZero(NeueMitarbeiterAbteilung),
                 Qualifikation = NeuerMitarbeiterQualifikation,
                 SollstundenProWoche = NeueMitarbeiterSollstunden,
                 WochenstundenLimit = 48,
@@ -494,6 +500,30 @@ namespace Dienstplaner.ViewModels
         private void SetStatus(string nachricht)
         {
             StatusNachricht = nachricht;
+            OnPropertyChanged(nameof(StatusNachricht));
+        }
+
+        private static List<int> ParseSkillIds(string skillIds)
+        {
+            if (string.IsNullOrWhiteSpace(skillIds))
+                return new List<int>();
+
+            return skillIds
+                .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(ParseIntOrZero)
+                .Where(id => id > 0)
+                .ToList();
+        }
+
+        private static int ParseIntOrZero(string value)
+        {
+            int parsed;
+            return int.TryParse(value, out parsed) ? parsed : 0;
+        }
+
+        private void SetStatus(string status)
+        {
+            StatusNachricht = status;
             OnPropertyChanged(nameof(StatusNachricht));
         }
 
