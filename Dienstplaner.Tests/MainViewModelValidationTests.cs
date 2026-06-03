@@ -9,6 +9,38 @@ namespace Dienstplaner.Tests
     public class MainViewModelValidationTests
     {
         [Test]
+        public void MainViewModel_ExposesAllPropertiesBoundByMainWindow()
+        {
+            var viewModel = new MainViewModel();
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(viewModel.SchichtLoeschenCommand, Is.Not.Null);
+                Assert.That(viewModel.DienstplanVeroeffentlichenCommand, Is.Not.Null);
+                Assert.That(viewModel.DsgvoAuskunftCommand, Is.Not.Null);
+                Assert.That(viewModel.DsgvoLoeschenCommand, Is.Not.Null);
+                Assert.That(viewModel.AuditLog, Is.Not.Null);
+                Assert.That(viewModel.ZuweisungsFehler, Is.Not.Null);
+                Assert.That(viewModel.ZuweisungsWarnungen, Is.Not.Null);
+            });
+        }
+
+        [Test]
+        public void ZuweisenCommand_ShowsAssignmentFailureInBoundErrorCollection()
+        {
+            var viewModel = new MainViewModel
+            {
+                AusgewaehlterMitarbeiter = null,
+                AusgewaehlteSchicht = null
+            };
+
+            viewModel.ZuweisenCommand.Execute(null);
+
+            Assert.That(viewModel.ZuweisungsFehler, Is.EqualTo(new[] { "Ungültige Auswahl" }));
+            Assert.That(viewModel.ZuweisungsWarnungen, Is.Empty);
+        }
+
+        [Test]
         public void MitarbeiterHinzufuegenCommand_DoesNotAddEmployee_WhenNameIsMissing()
         {
             var viewModel = new MainViewModel

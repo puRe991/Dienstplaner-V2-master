@@ -31,6 +31,9 @@ namespace Dienstplaner.ViewModels
         public ObservableCollection<TimeTrackingRecord> ZeiterfassungListe { get; set; }
         public ObservableCollection<Availability> Verfuegbarkeiten { get; set; }
         public ObservableCollection<Absence> Abwesenheiten { get; set; }
+        public ObservableCollection<AuditLogEintrag> AuditLog { get; private set; }
+        public ObservableCollection<string> ZuweisungsFehler { get; private set; }
+        public ObservableCollection<string> ZuweisungsWarnungen { get; private set; }
 
         public ObservableCollection<Mitarbeiter> MitarbeiterView { get { return MitarbeiterListe; } }
         public ObservableCollection<Schicht> SchichtView { get { return SchichtListe; } }
@@ -110,6 +113,10 @@ namespace Dienstplaner.ViewModels
         public ICommand MitarbeiterHinzufuegenCommand { get; }
         public ICommand SchichtHinzufuegenCommand { get; }
         public ICommand ZuweisenCommand { get; }
+        public ICommand SchichtLoeschenCommand { get; }
+        public ICommand DienstplanVeroeffentlichenCommand { get; }
+        public ICommand DsgvoAuskunftCommand { get; }
+        public ICommand DsgvoLoeschenCommand { get; }
         public ICommand CsvExportCommand { get; }
         public ICommand ExcelExportCommand { get; }
         public ICommand PdfExportCommand { get; }
@@ -134,6 +141,8 @@ namespace Dienstplaner.ViewModels
             ZeiterfassungListe = new ObservableCollection<TimeTrackingRecord>();
             Verfuegbarkeiten = new ObservableCollection<Availability>();
             Abwesenheiten = new ObservableCollection<Absence>();
+            ZuweisungsFehler = new ObservableCollection<string>();
+            ZuweisungsWarnungen = new ObservableCollection<string>();
 
             AktuellerKontext = new MandantKontext
             {
@@ -155,10 +164,15 @@ namespace Dienstplaner.ViewModels
             _integrationsService = new IntegrationsService();
             _forecastImportService = new ForecastImportService();
             _dsgvoService = new DsgvoService(_rollenService, _auditService);
+            AuditLog = _auditService.Eintraege;
 
             MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter, CanAddMitarbeiter);
             SchichtHinzufuegenCommand = new RelayCommand(AddSchicht, CanAddSchicht);
             ZuweisenCommand = new RelayCommand(Zuweisen);
+            SchichtLoeschenCommand = new RelayCommand(SchichtLoeschen);
+            DienstplanVeroeffentlichenCommand = new RelayCommand(DienstplanVeroeffentlichen);
+            DsgvoAuskunftCommand = new RelayCommand(DsgvoAuskunftErstellen);
+            DsgvoLoeschenCommand = new RelayCommand(DsgvoLoeschanfrageBearbeiten);
             CsvExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Csv));
             ExcelExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Excel));
             PdfExportCommand = new RelayCommand(o => Exportiere(ExportFormat.Pdf));
@@ -273,8 +287,17 @@ namespace Dienstplaner.ViewModels
 
         private void Zuweisen(object obj)
         {
-            FuehreMitRollenpruefungAus("Dienstplan ändern", () => 
-                SetStatus(_service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht, AktuellerBenutzer)));
+            ZuweisungsFehler.Clear();
+            ZuweisungsWarnungen.Clear();
+
+            FuehreMitRollenpruefungAus("Dienstplan ändern", () =>
+            {
+                var ergebnis = _service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht, AktuellerBenutzer);
+                if (!string.Equals(ergebnis, "Zuweisung erfolgreich", StringComparison.Ordinal))
+                    ZuweisungsFehler.Add(ergebnis);
+
+                SetStatus(ergebnis);
+            });
         }
 
         private void SchichtLoeschen(object obj)
