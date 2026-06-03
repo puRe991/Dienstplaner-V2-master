@@ -228,7 +228,7 @@ namespace Dienstplaner.Services
                 result.AddError(string.Format("Der Mitarbeiter ist im Schichtzeitraum abwesend ({0}).", grund));
             }
 
-            if (mitarbeiter.Verfuegbarkeiten.Any() && !mitarbeiter.Verfuegbarkeiten.Any(x => x.DecktAb(schicht)))
+            if (mitarbeiter.Verfuegbarkeiten.Any() && !mitarbeiter.Verfuegbarkeiten.Any(x => x.DecktSchichtAb(schicht)))
                 result.AddWarning("Für den Mitarbeiter ist keine passende Verfügbarkeit für diese Schicht hinterlegt.");
 
             return result;
