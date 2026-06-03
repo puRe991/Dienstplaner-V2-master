@@ -166,8 +166,8 @@ namespace Dienstplaner.ViewModels
             _dsgvoService = new DsgvoService(_rollenService, _auditService);
             AuditLog = _auditService.Eintraege;
 
-            MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter, CanAddMitarbeiter);
-            SchichtHinzufuegenCommand = new RelayCommand(AddSchicht, CanAddSchicht);
+            MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter);
+            SchichtHinzufuegenCommand = new RelayCommand(AddSchicht);
             ZuweisenCommand = new RelayCommand(Zuweisen);
             SchichtLoeschenCommand = new RelayCommand(SchichtLoeschen);
             DienstplanVeroeffentlichenCommand = new RelayCommand(DienstplanVeroeffentlichen);
@@ -199,21 +199,6 @@ namespace Dienstplaner.ViewModels
             return true;
         }
 
-        private bool CanAddMitarbeiter(object obj)
-        {
-            return !string.IsNullOrWhiteSpace(NeuerMitarbeiterName)
-                && !string.IsNullOrWhiteSpace(NeueMitarbeiterAbteilung)
-                && !string.IsNullOrWhiteSpace(NeuerMitarbeiterQualifikation);
-        }
-
-        private bool CanAddSchicht(object obj)
-        {
-            return !string.IsNullOrWhiteSpace(NeueSchichtName)
-                && !string.IsNullOrWhiteSpace(NeueSchichtAbteilung)
-                && !string.IsNullOrWhiteSpace(NeueSchichtWochentag)
-                && NeueSchichtKapazitaet > 0;
-        }
-
         private void AddMitarbeiter(object obj)
         {
             string fehler;
@@ -227,7 +212,7 @@ namespace Dienstplaner.ViewModels
             {
                 var neuerMitarbeiter = new Mitarbeiter
                 {
-                    Id = MitarbeiterListe.Count + 1,
+                    Id = NaechsteId(MitarbeiterListe.Select(m => m.Id)),
                     MandantId = AktuellerKontext.MandantId,
                     FilialeId = AktuellerKontext.FilialeId,
                     Name = NeuerMitarbeiterName.Trim(),
@@ -244,6 +229,9 @@ namespace Dienstplaner.ViewModels
                 NeuerMitarbeiterName = string.Empty;
                 NeueMitarbeiterAbteilung = string.Empty;
                 NeuerMitarbeiterQualifikation = string.Empty;
+                OnPropertyChanged(nameof(NeuerMitarbeiterName));
+                OnPropertyChanged(nameof(NeueMitarbeiterAbteilung));
+                OnPropertyChanged(nameof(NeuerMitarbeiterQualifikation));
                 SetStatus("Mitarbeiter hinzugefügt");
             });
         }
@@ -251,7 +239,10 @@ namespace Dienstplaner.ViewModels
         private void AddSchicht(object obj)
         {
             string fehler;
-            if (!IstSchichtGueltig(out fehler))
+            int kapazitaet;
+            TimeSpan startzeit;
+            TimeSpan endzeit;
+            if (!IstSchichtGueltig(out fehler, out kapazitaet, out startzeit, out endzeit))
             {
                 SetStatus(NormalisiereValidierungsfehler(fehler));
                 return;
@@ -259,21 +250,25 @@ namespace Dienstplaner.ViewModels
 
             FuehreMitRollenpruefungAus("Schicht erstellen", () =>
             {
+                var datum = NeueSchichtDatum.Date;
                 var neueSchicht = new Schicht
                 {
-                    Id = SchichtListe.Count + 1,
+                    Id = NaechsteId(SchichtListe.Select(s => s.Id)),
                     MandantId = AktuellerKontext.MandantId,
                     FilialeId = AktuellerKontext.FilialeId,
                     FilialeName = AktuellerKontext.FilialeName,
+                    StoreId = NeueSchichtStoreId,
+                    DepartmentId = NeueSchichtDepartmentId,
+                    RoleId = NeueSchichtRoleId,
                     Name = NeueSchichtName.Trim(),
                     Abteilung = NeueSchichtAbteilung.Trim(),
                     Rolle = NeueSchichtAbteilung.Trim(),
                     Wochentag = NeueSchichtWochentag.Trim(),
-                    BenoetigteMitarbeiter = NeueSchichtKapazitaet,
+                    BenoetigteMitarbeiter = kapazitaet,
                     Pausenstunden = NeueSchichtPausenstunden,
                     Zuschlagsstunden = NeueSchichtZuschlagsstunden,
-                    Start = GetStartForWochentag(NeueSchichtWochentag),
-                    Ende = GetStartForWochentag(NeueSchichtWochentag).AddHours(8)
+                    Start = datum.Add(startzeit),
+                    Ende = datum.Add(endzeit)
                 };
                 SchichtListe.Add(neueSchicht);
 
@@ -281,6 +276,10 @@ namespace Dienstplaner.ViewModels
                 NeueSchichtAbteilung = string.Empty;
                 NeueSchichtWochentag = string.Empty;
                 NeueSchichtKapazitaet = 2;
+                OnPropertyChanged(nameof(NeueSchichtName));
+                OnPropertyChanged(nameof(NeueSchichtAbteilung));
+                OnPropertyChanged(nameof(NeueSchichtWochentag));
+                OnPropertyChanged(nameof(NeueSchichtKapazitaet));
                 SetStatus("Schicht hinzugefügt");
             });
         }
@@ -668,6 +667,11 @@ namespace Dienstplaner.ViewModels
             OnPropertyChanged(nameof(StatusNachricht));
         }
 
+        private static int NaechsteId(IEnumerable<int> ids)
+        {
+            return ids.Any() ? ids.Max() + 1 : 1;
+        }
+
         private static List<int> ParseSkillIds(string skillIds)
         {
             if (string.IsNullOrWhiteSpace(skillIds))
@@ -686,62 +690,7 @@ namespace Dienstplaner.ViewModels
             return int.TryParse(value, out parsed) ? parsed : 0;
         }
 
-        private DateTime GetStartForWochentag(string wochentag)
-        {
-            var dayOfWeek = ParseWochentag(wochentag);
-            var today = DateTime.Today;
-            var daysUntilTarget = ((int)dayOfWeek - (int)today.DayOfWeek + 7) % 7;
-
-            return today.AddDays(daysUntilTarget).AddHours(8);
-        }
-
-        private DayOfWeek ParseWochentag(string wochentag)
-        {
-            switch ((wochentag ?? string.Empty).Trim().ToLowerInvariant())
-            {
-                case "montag":
-                    return DayOfWeek.Monday;
-                case "dienstag":
-                    return DayOfWeek.Tuesday;
-                case "mittwoch":
-                    return DayOfWeek.Wednesday;
-                case "donnerstag":
-                    return DayOfWeek.Thursday;
-                case "freitag":
-                    return DayOfWeek.Friday;
-                case "samstag":
-                case "sonnabend":
-                    return DayOfWeek.Saturday;
-                case "sonntag":
-                    return DayOfWeek.Sunday;
-                default:
-                    return DateTime.Today.DayOfWeek;
-            }
-        }
-
         public event PropertyChangedEventHandler PropertyChanged;
-
-        private void SetInputProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
-        {
-            if (SetProperty(ref field, value, propertyName))
-            {
-                if (propertyName == nameof(NeueSchichtStartzeit))
-                    OnPropertyChanged(nameof(NeueSchichtEndzeit));
-
-                OnPropertyChanged(nameof(MitarbeiterFehlerNachricht));
-                OnPropertyChanged(nameof(SchichtFehlerNachricht));
-            }
-        }
-
-        private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
-        {
-            if (Equals(field, value))
-                return false;
-
-            field = value;
-            OnPropertyChanged(propertyName);
-            return true;
-        }
 
         private void OnPropertyChanged([CallerMemberName] string n = null)
         {
