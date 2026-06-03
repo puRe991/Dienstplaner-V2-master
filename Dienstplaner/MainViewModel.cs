@@ -22,6 +22,13 @@ namespace Dienstplaner.ViewModels
         private readonly RollenService _rollenService;
         private readonly AuditService _auditService;
         private string _statusNachricht;
+        private string _neuerMitarbeiterName;
+        private string _neueMitarbeiterAbteilung;
+        private string _neuerMitarbeiterQualifikation;
+        private string _neueSchichtName;
+        private string _neueSchichtAbteilung;
+        private string _neueSchichtWochentag;
+        private int _neueSchichtKapazitaet = 2;
 
         public ObservableCollection<Mitarbeiter> MitarbeiterListe { get; set; }
         public ObservableCollection<Schicht> SchichtListe { get; set; }
@@ -45,15 +52,39 @@ namespace Dienstplaner.ViewModels
         public BenutzerKontext AktuellerBenutzer { get; set; }
         public ComplianceRichtlinie ComplianceRichtlinie { get; }
 
-        public string NeuerMitarbeiterName { get; set; }
-        public string NeueMitarbeiterAbteilung { get; set; }
-        public string NeuerMitarbeiterQualifikation { get; set; }
+        public string NeuerMitarbeiterName
+        {
+            get { return _neuerMitarbeiterName; }
+            set { SetFormProperty(ref _neuerMitarbeiterName, value, nameof(NeuerMitarbeiterName), MitarbeiterHinzufuegenCommand); }
+        }
+        public string NeueMitarbeiterAbteilung
+        {
+            get { return _neueMitarbeiterAbteilung; }
+            set { SetFormProperty(ref _neueMitarbeiterAbteilung, value, nameof(NeueMitarbeiterAbteilung), MitarbeiterHinzufuegenCommand); }
+        }
+        public string NeuerMitarbeiterQualifikation
+        {
+            get { return _neuerMitarbeiterQualifikation; }
+            set { SetFormProperty(ref _neuerMitarbeiterQualifikation, value, nameof(NeuerMitarbeiterQualifikation), MitarbeiterHinzufuegenCommand); }
+        }
         public decimal NeueMitarbeiterSollstunden { get; set; } = 40;
         public decimal NeuerMitarbeiterStundenlohn { get; set; } = 15;
 
-        public string NeueSchichtName { get; set; }
-        public string NeueSchichtAbteilung { get; set; }
-        public string NeueSchichtWochentag { get; set; }
+        public string NeueSchichtName
+        {
+            get { return _neueSchichtName; }
+            set { SetFormProperty(ref _neueSchichtName, value, nameof(NeueSchichtName), SchichtHinzufuegenCommand); }
+        }
+        public string NeueSchichtAbteilung
+        {
+            get { return _neueSchichtAbteilung; }
+            set { SetFormProperty(ref _neueSchichtAbteilung, value, nameof(NeueSchichtAbteilung), SchichtHinzufuegenCommand); }
+        }
+        public string NeueSchichtWochentag
+        {
+            get { return _neueSchichtWochentag; }
+            set { SetFormProperty(ref _neueSchichtWochentag, value, nameof(NeueSchichtWochentag), SchichtHinzufuegenCommand); }
+        }
         public int NeueSchichtStoreId { get; set; } = 1;
         public int NeueSchichtDepartmentId { get; set; } = 1;
         public int NeueSchichtRoleId { get; set; } = 1;
@@ -61,7 +92,11 @@ namespace Dienstplaner.ViewModels
         public string NeueSchichtStartzeit { get; set; } = "08:00";
         public string NeueSchichtEndzeit { get; set; } = "16:00";
         public int NeueSchichtPauseMinuten { get; set; } = 30;
-        public int NeueSchichtKapazitaet { get; set; } = 2;
+        public int NeueSchichtKapazitaet
+        {
+            get { return _neueSchichtKapazitaet; }
+            set { SetFormProperty(ref _neueSchichtKapazitaet, value, nameof(NeueSchichtKapazitaet), SchichtHinzufuegenCommand); }
+        }
         public decimal NeueSchichtPausenstunden { get; set; } = 0.5m;
         public decimal NeueSchichtZuschlagsstunden { get; set; }
         public string ForecastImportPfad { get; set; }
@@ -125,7 +160,14 @@ namespace Dienstplaner.ViewModels
         }
 
         public MainViewModel()
+            : this(null)
         {
+        }
+
+        public MainViewModel(BenutzerKontext aktuellerBenutzer)
+        {
+            AktuellerBenutzer = aktuellerBenutzer;
+
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
             ReportListe = new ObservableCollection<ReportKennzahl>();
@@ -144,7 +186,6 @@ namespace Dienstplaner.ViewModels
                 Rolle = BenutzerRolle.Personalwesen
             };
 
-            AktuellerBenutzer = BenutzerKontext.StandardAdmin();
             ComplianceRichtlinie = new ComplianceRichtlinie();
 
             _rollenService = new RollenService();
@@ -601,7 +642,10 @@ namespace Dienstplaner.ViewModels
             MitarbeiterListe.Add(max);
             MitarbeiterListe.Add(erika);
             SchichtListe.Add(frueh);
-            _service.Zuweisen(max, frueh, AktuellerBenutzer);
+            max.Schichten.Add(frueh);
+            max.AktuelleWochenstunden = (int)max.Iststunden;
+            frueh.MitarbeiterNamen.Add(max.Name);
+            frueh.MitarbeiterIds.Add(max.Id);
 
             ForecastListe.Add(new UmsatzForecast
             {
@@ -637,6 +681,19 @@ namespace Dienstplaner.ViewModels
             });
 
             SetStatus("Bereit");
+        }
+
+        private void SetFormProperty<T>(ref T field, T value, string propertyName, ICommand command)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+                return;
+
+            field = value;
+            OnPropertyChanged(propertyName);
+
+            var relayCommand = command as RelayCommand;
+            if (relayCommand != null)
+                relayCommand.RaiseCanExecuteChanged();
         }
 
         private void SetStatus(string nachricht)

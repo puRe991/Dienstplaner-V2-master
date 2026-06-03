@@ -1,4 +1,5 @@
 using System.Threading;
+using Dienstplaner.Services;
 using Dienstplaner.ViewModels;
 using NUnit.Framework;
 
@@ -13,6 +14,7 @@ namespace Dienstplaner.Tests
         {
             var viewModel = new MainViewModel
             {
+                AktuellerBenutzer = BenutzerKontext.StandardAdmin(),
                 NeuerMitarbeiterName = "  ",
                 NeueMitarbeiterAbteilung = "Kasse",
                 NeuerMitarbeiterQualifikation = "Kasse"
@@ -30,6 +32,7 @@ namespace Dienstplaner.Tests
         {
             var viewModel = new MainViewModel
             {
+                AktuellerBenutzer = BenutzerKontext.StandardAdmin(),
                 NeuerMitarbeiterName = "Eva Retail",
                 NeueMitarbeiterAbteilung = " ",
                 NeuerMitarbeiterQualifikation = "Kasse"
@@ -47,6 +50,7 @@ namespace Dienstplaner.Tests
         {
             var viewModel = new MainViewModel
             {
+                AktuellerBenutzer = BenutzerKontext.StandardAdmin(),
                 NeuerMitarbeiterName = "  Eva Retail  ",
                 NeueMitarbeiterAbteilung = "  Kasse ",
                 NeuerMitarbeiterQualifikation = " Kasse "
@@ -67,6 +71,7 @@ namespace Dienstplaner.Tests
         {
             var viewModel = new MainViewModel
             {
+                AktuellerBenutzer = BenutzerKontext.StandardAdmin(),
                 NeueSchichtName = "Kasse Abend",
                 NeueSchichtAbteilung = "Kasse",
                 NeueSchichtWochentag = "Freitag",
@@ -85,6 +90,7 @@ namespace Dienstplaner.Tests
         {
             var viewModel = new MainViewModel
             {
+                AktuellerBenutzer = BenutzerKontext.StandardAdmin(),
                 NeueSchichtName = "Kasse Abend",
                 NeueSchichtAbteilung = "Kasse",
                 NeueSchichtWochentag = " ",
@@ -103,6 +109,7 @@ namespace Dienstplaner.Tests
         {
             var viewModel = new MainViewModel
             {
+                AktuellerBenutzer = BenutzerKontext.StandardAdmin(),
                 NeueSchichtName = "  Lager Spät ",
                 NeueSchichtAbteilung = " Lager ",
                 NeueSchichtWochentag = " Samstag ",
@@ -119,5 +126,82 @@ namespace Dienstplaner.Tests
             Assert.That(viewModel.SchichtListe[initialCount].BenoetigteMitarbeiter, Is.EqualTo(3));
             Assert.That(viewModel.StatusNachricht, Is.EqualTo("Schicht hinzugefügt"));
         }
+
+        [Test]
+        public void FormCommands_RequeryAvailability_WhenRequiredFieldsChange()
+        {
+            var viewModel = new MainViewModel();
+            var employeeRequeries = 0;
+            var shiftRequeries = 0;
+            viewModel.MitarbeiterHinzufuegenCommand.CanExecuteChanged += (sender, args) => employeeRequeries++;
+            viewModel.SchichtHinzufuegenCommand.CanExecuteChanged += (sender, args) => shiftRequeries++;
+
+            viewModel.NeuerMitarbeiterName = "Eva Retail";
+            viewModel.NeueMitarbeiterAbteilung = "Kasse";
+            viewModel.NeuerMitarbeiterQualifikation = "Kasse";
+            viewModel.NeueSchichtName = "Kasse Abend";
+            viewModel.NeueSchichtAbteilung = "Kasse";
+            viewModel.NeueSchichtWochentag = "Freitag";
+
+            Assert.That(employeeRequeries, Is.EqualTo(3));
+            Assert.That(shiftRequeries, Is.EqualTo(3));
+            Assert.That(viewModel.MitarbeiterHinzufuegenCommand.CanExecute(null), Is.True);
+            Assert.That(viewModel.SchichtHinzufuegenCommand.CanExecute(null), Is.True);
+        }
+
+        [Test]
+        public void Constructor_UsesProvidedAuthenticatedUserContext()
+        {
+            var benutzer = new BenutzerKontext
+            {
+                Benutzername = "planer@example.test",
+                Rolle = Dienstplaner.Models.BenutzerRolle.Planer
+            };
+
+            var viewModel = new MainViewModel(benutzer);
+
+            Assert.That(viewModel.AktuellerBenutzer, Is.SameAs(benutzer));
+        }
+
+        [Test]
+        public void MitarbeiterHinzufuegenCommand_AllowsCreation_WithInjectedPlannerContext()
+        {
+            var benutzer = new BenutzerKontext
+            {
+                Benutzername = "planer@example.test",
+                Rolle = Dienstplaner.Models.BenutzerRolle.Planer
+            };
+            var viewModel = new MainViewModel(benutzer)
+            {
+                NeuerMitarbeiterName = "Eva Retail",
+                NeueMitarbeiterAbteilung = "Kasse",
+                NeuerMitarbeiterQualifikation = "Kasse"
+            };
+            var initialCount = viewModel.MitarbeiterListe.Count;
+
+            viewModel.MitarbeiterHinzufuegenCommand.Execute(null);
+
+            Assert.That(viewModel.MitarbeiterListe, Has.Count.EqualTo(initialCount + 1));
+            Assert.That(viewModel.StatusNachricht, Is.EqualTo("Mitarbeiter hinzugefügt"));
+        }
+
+        [Test]
+        public void MitarbeiterHinzufuegenCommand_DeniesCreation_WithoutAuthorizedUserContext()
+        {
+            var viewModel = new MainViewModel
+            {
+                NeuerMitarbeiterName = "Eva Retail",
+                NeueMitarbeiterAbteilung = "Kasse",
+                NeuerMitarbeiterQualifikation = "Kasse"
+            };
+            var initialCount = viewModel.MitarbeiterListe.Count;
+
+            viewModel.MitarbeiterHinzufuegenCommand.Execute(null);
+
+            Assert.That(viewModel.AktuellerBenutzer, Is.Null);
+            Assert.That(viewModel.MitarbeiterListe, Has.Count.EqualTo(initialCount));
+            Assert.That(viewModel.StatusNachricht, Is.EqualTo("Kein Benutzerkontext vorhanden."));
+        }
+
     }
 }

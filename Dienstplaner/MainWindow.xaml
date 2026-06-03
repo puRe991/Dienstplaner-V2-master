@@ -106,11 +106,11 @@
                         <StackPanel>
                             <TextBlock Text="Mitarbeiter hinzufügen" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
                             <TextBlock Text="Name" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox Height="32" Text="{Binding NeuerMitarbeiterName}" Margin="0,0,0,8"/>
+                            <TextBox Height="32" Text="{Binding NeuerMitarbeiterName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                             <TextBlock Text="Abteilung" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox Height="32" Text="{Binding NeueMitarbeiterAbteilung}" Margin="0,0,0,8"/>
+                            <TextBox Height="32" Text="{Binding NeueMitarbeiterAbteilung, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                             <TextBlock Text="Qualifikation" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox Height="32" Text="{Binding NeuerMitarbeiterQualifikation}" Margin="0,0,0,8"/>
+                            <TextBox Height="32" Text="{Binding NeuerMitarbeiterQualifikation, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                             <TextBlock Text="Sollstunden/Woche" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox Height="32" Text="{Binding NeueMitarbeiterSollstunden}" Margin="0,0,0,8"/>
                             <TextBlock Text="Stundenlohn" FontSize="11" Margin="0,0,0,3"/>
@@ -123,13 +123,13 @@
                         <StackPanel>
                             <TextBlock Text="Schicht hinzufügen" FontWeight="Bold" FontSize="15" Margin="0,0,0,12"/>
                             <TextBlock Text="Schichtname" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox Height="32" Text="{Binding NeueSchichtName}" Margin="0,0,0,8"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                             <TextBlock Text="Abteilung" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox Height="32" Text="{Binding NeueSchichtAbteilung}" Margin="0,0,0,8"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtAbteilung, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                             <TextBlock Text="Wochentag" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox Height="32" Text="{Binding NeueSchichtWochentag}" Margin="0,0,0,8"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtWochentag, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                             <TextBlock Text="Benötigte Mitarbeiter" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox Height="32" Text="{Binding NeueSchichtKapazitaet}" Margin="0,0,0,8"/>
+                            <TextBox Height="32" Text="{Binding NeueSchichtKapazitaet, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
                             <TextBlock Text="Pausenstunden" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox Height="32" Text="{Binding NeueSchichtPausenstunden}" Margin="0,0,0,8"/>
                             <TextBlock Text="Zuschlagsstunden" FontSize="11" Margin="0,0,0,3"/>
