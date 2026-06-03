@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Dienstplaner.ViewModels;
 using NUnit.Framework;
@@ -150,6 +151,59 @@ namespace Dienstplaner.Tests
             Assert.That(viewModel.SchichtListe[initialCount].Wochentag, Is.EqualTo("Samstag"));
             Assert.That(viewModel.SchichtListe[initialCount].BenoetigteMitarbeiter, Is.EqualTo(3));
             Assert.That(viewModel.StatusNachricht, Is.EqualTo("Schicht hinzugefügt"));
+        }
+
+        [Test]
+        public void HinzufuegenCommands_AreClickable_BeforeRequiredFieldsAreFilled()
+        {
+            var viewModel = new MainViewModel();
+
+            Assert.That(viewModel.MitarbeiterHinzufuegenCommand.CanExecute(null), Is.True);
+            Assert.That(viewModel.SchichtHinzufuegenCommand.CanExecute(null), Is.True);
+        }
+
+        [Test]
+        public void SchichtHinzufuegenCommand_UsesEnteredDateAndTimes()
+        {
+            var viewModel = new MainViewModel
+            {
+                NeueSchichtName = "Inventur",
+                NeueSchichtAbteilung = "Lager",
+                NeueSchichtWochentag = "Mittwoch",
+                NeueSchichtDatum = new DateTime(2026, 6, 10),
+                NeueSchichtStartzeit = "09:15",
+                NeueSchichtEndzeit = "17:45",
+                NeueSchichtKapazitaet = 4,
+                NeueSchichtPausenstunden = 0.75m
+            };
+            var initialCount = viewModel.SchichtListe.Count;
+
+            viewModel.SchichtHinzufuegenCommand.Execute(null);
+
+            var schicht = viewModel.SchichtListe[initialCount];
+            Assert.That(schicht.Start, Is.EqualTo(new DateTime(2026, 6, 10, 9, 15, 0)));
+            Assert.That(schicht.Ende, Is.EqualTo(new DateTime(2026, 6, 10, 17, 45, 0)));
+            Assert.That(schicht.Pausenstunden, Is.EqualTo(0.75m));
+        }
+
+        [Test]
+        public void SchichtHinzufuegenCommand_DoesNotAddShift_WhenEndTimeIsBeforeStartTime()
+        {
+            var viewModel = new MainViewModel
+            {
+                NeueSchichtName = "Inventur",
+                NeueSchichtAbteilung = "Lager",
+                NeueSchichtWochentag = "Mittwoch",
+                NeueSchichtStartzeit = "17:00",
+                NeueSchichtEndzeit = "09:00",
+                NeueSchichtKapazitaet = 2
+            };
+            var initialCount = viewModel.SchichtListe.Count;
+
+            viewModel.SchichtHinzufuegenCommand.Execute(null);
+
+            Assert.That(viewModel.SchichtListe, Has.Count.EqualTo(initialCount));
+            Assert.That(viewModel.StatusNachricht, Does.Contain("Endzeit muss nach der Startzeit liegen"));
         }
     }
 }
