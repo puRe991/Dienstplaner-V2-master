@@ -57,6 +57,31 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Auth\AuthService.cs" />
+    <Compile Include="Auth\AuthenticatedUser.cs" />
+    <Compile Include="Auth\AuthorizationService.cs" />
+    <Compile Include="Auth\EndpointAuthorizationService.cs" />
+    <Compile Include="Auth\JwtAuthenticationService.cs" />
+    <Compile Include="Auth\JwtValidationOptions.cs" />
+    <Compile Include="Auth\Permission.cs" />
+    <Compile Include="Auth\UserAccount.cs" />
+    <Compile Include="Auth\UserRole.cs" />
+    <Compile Include="Infrastructure\Entities\AbteilungEntity.cs" />
+    <Compile Include="Infrastructure\Entities\AbwesenheitEntity.cs" />
+    <Compile Include="Infrastructure\Entities\MandantEntity.cs" />
+    <Compile Include="Infrastructure\Entities\MitarbeiterEntity.cs" />
+    <Compile Include="Infrastructure\Entities\MitarbeiterQualifikationEntity.cs" />
+    <Compile Include="Infrastructure\Entities\QualifikationEntity.cs" />
+    <Compile Include="Infrastructure\Entities\SchichtEntity.cs" />
+    <Compile Include="Infrastructure\Entities\VerfuegbarkeitEntity.cs" />
+    <Compile Include="Infrastructure\Entities\ZuweisungEntity.cs" />
+    <Compile Include="Infrastructure\IDatabaseConnectionFactory.cs" />
+    <Compile Include="Infrastructure\Migrations\SqlMigration.cs" />
+    <Compile Include="Infrastructure\Migrations\SqlServerMigrationRunner.cs" />
+    <Compile Include="Infrastructure\Repositories\IDienstplanRepository.cs" />
+    <Compile Include="Infrastructure\Repositories\SqlDienstplanRepository.cs" />
+    <Compile Include="Infrastructure\Services\DienstplanDataService.cs" />
+    <Compile Include="Infrastructure\SqlServerConnectionFactory.cs" />
     <Compile Include="AuditAction.cs" />
     <Compile Include="AuditLogEintrag.cs" />
     <Compile Include="AuditService.cs" />
@@ -100,6 +125,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Mitarbeiter.cs" />
+    <Compile Include="MitarbeiterAnfrage.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>

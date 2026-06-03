@@ -12,6 +12,7 @@ namespace Dienstplaner.Infrastructure.Repositories
         Mitarbeiter AddMitarbeiter(Guid mandantId, string name, string abteilung, string qualifikation, int wochenstundenLimit);
         Schicht AddSchicht(Guid mandantId, string name, string abteilung, string wochentag, DateTime start, DateTime ende, int benoetigteMitarbeiter, string benoetigteQualifikation);
         string Assign(Guid mandantId, Guid mitarbeiterId, Guid schichtId);
+        void DeleteSchicht(Guid mandantId, Guid schichtId);
         bool HasAnyData(Guid mandantId);
     }
 }

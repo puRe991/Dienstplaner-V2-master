@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using Dienstplaner.Helpers;
+using Dienstplaner.Infrastructure.Services;
 using Dienstplaner.Models;
 using Dienstplaner.Services;
 
@@ -14,6 +15,7 @@ namespace Dienstplaner.ViewModels
     public class MainViewModel : INotifyPropertyChanged, IDataErrorInfo
     {
         private readonly ZuweisungsService _service;
+        private readonly DienstplanDataService _dataService;
         private readonly DienstplanExportService _exportService;
         private readonly ReportingService _reportingService;
         private readonly IntegrationsService _integrationsService;
@@ -132,9 +134,15 @@ namespace Dienstplaner.ViewModels
         }
 
         public MainViewModel()
+            : this(null)
         {
-            MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
-            SchichtListe = new ObservableCollection<Schicht>();
+        }
+
+        public MainViewModel(DienstplanDataService dataService)
+        {
+            _dataService = dataService;
+            MitarbeiterListe = new ObservableCollection<Mitarbeiter>(dataService != null ? dataService.LadeMitarbeiter() : Enumerable.Empty<Mitarbeiter>());
+            SchichtListe = new ObservableCollection<Schicht>(dataService != null ? dataService.LadeSchichten() : Enumerable.Empty<Schicht>());
             ReportListe = new ObservableCollection<ReportKennzahl>();
             ForecastListe = new ObservableCollection<UmsatzForecast>();
             LohnabrechnungListe = new ObservableCollection<PayrollRecord>();
@@ -180,7 +188,6 @@ namespace Dienstplaner.ViewModels
             IntegrationenAktualisierenCommand = new RelayCommand(AktualisiereIntegrationen);
             ForecastImportCommand = new RelayCommand(ImportiereForecast);
 
-            Seed();
             AktualisiereReports(null);
             AktualisiereIntegrationen(null);
         }
@@ -210,20 +217,22 @@ namespace Dienstplaner.ViewModels
 
             FuehreMitRollenpruefungAus("Mitarbeiter erstellen", () =>
             {
-                var neuerMitarbeiter = new Mitarbeiter
-                {
-                    Id = NaechsteId(MitarbeiterListe.Select(m => m.Id)),
-                    MandantId = AktuellerKontext.MandantId,
-                    FilialeId = AktuellerKontext.FilialeId,
-                    Name = NeuerMitarbeiterName.Trim(),
-                    Abteilung = NeueMitarbeiterAbteilung.Trim(),
-                    DepartmentId = ParseIntOrZero(NeueMitarbeiterAbteilung),
-                    Qualifikation = NeuerMitarbeiterQualifikation.Trim(),
-                    SollstundenProWoche = NeueMitarbeiterSollstunden,
-                    WochenstundenLimit = 48,
-                    Stundenlohn = NeuerMitarbeiterStundenlohn,
-                    IstAktiv = true
-                };
+                var neuerMitarbeiter = _dataService != null
+                    ? _dataService.MitarbeiterHinzufuegen(NeuerMitarbeiterName.Trim(), NeueMitarbeiterAbteilung.Trim(), NeuerMitarbeiterQualifikation.Trim(), 48)
+                    : new Mitarbeiter
+                    {
+                        Id = NaechsteId(MitarbeiterListe.Select(m => m.Id)),
+                        MandantId = AktuellerKontext.MandantId,
+                        FilialeId = AktuellerKontext.FilialeId,
+                        Name = NeuerMitarbeiterName.Trim(),
+                        Abteilung = NeueMitarbeiterAbteilung.Trim(),
+                        DepartmentId = ParseIntOrZero(NeueMitarbeiterAbteilung),
+                        Qualifikation = NeuerMitarbeiterQualifikation.Trim(),
+                        SollstundenProWoche = NeueMitarbeiterSollstunden,
+                        WochenstundenLimit = 48,
+                        Stundenlohn = NeuerMitarbeiterStundenlohn,
+                        IstAktiv = true
+                    };
                 MitarbeiterListe.Add(neuerMitarbeiter);
 
                 NeuerMitarbeiterName = string.Empty;
@@ -251,25 +260,27 @@ namespace Dienstplaner.ViewModels
             FuehreMitRollenpruefungAus("Schicht erstellen", () =>
             {
                 var datum = NeueSchichtDatum.Date;
-                var neueSchicht = new Schicht
-                {
-                    Id = NaechsteId(SchichtListe.Select(s => s.Id)),
-                    MandantId = AktuellerKontext.MandantId,
-                    FilialeId = AktuellerKontext.FilialeId,
-                    FilialeName = AktuellerKontext.FilialeName,
-                    StoreId = NeueSchichtStoreId,
-                    DepartmentId = NeueSchichtDepartmentId,
-                    RoleId = NeueSchichtRoleId,
-                    Name = NeueSchichtName.Trim(),
-                    Abteilung = NeueSchichtAbteilung.Trim(),
-                    Rolle = NeueSchichtAbteilung.Trim(),
-                    Wochentag = NeueSchichtWochentag.Trim(),
-                    BenoetigteMitarbeiter = kapazitaet,
-                    Pausenstunden = NeueSchichtPausenstunden,
-                    Zuschlagsstunden = NeueSchichtZuschlagsstunden,
-                    Start = datum.Add(startzeit),
-                    Ende = datum.Add(endzeit)
-                };
+                var neueSchicht = _dataService != null
+                    ? _dataService.SchichtHinzufuegen(NeueSchichtName.Trim(), NeueSchichtAbteilung.Trim(), NeueSchichtWochentag.Trim(), datum.Add(startzeit), datum.Add(endzeit), kapazitaet, null)
+                    : new Schicht
+                    {
+                        Id = NaechsteId(SchichtListe.Select(s => s.Id)),
+                        MandantId = AktuellerKontext.MandantId,
+                        FilialeId = AktuellerKontext.FilialeId,
+                        FilialeName = AktuellerKontext.FilialeName,
+                        StoreId = NeueSchichtStoreId,
+                        DepartmentId = NeueSchichtDepartmentId,
+                        RoleId = NeueSchichtRoleId,
+                        Name = NeueSchichtName.Trim(),
+                        Abteilung = NeueSchichtAbteilung.Trim(),
+                        Rolle = NeueSchichtAbteilung.Trim(),
+                        Wochentag = NeueSchichtWochentag.Trim(),
+                        BenoetigteMitarbeiter = kapazitaet,
+                        Pausenstunden = NeueSchichtPausenstunden,
+                        Zuschlagsstunden = NeueSchichtZuschlagsstunden,
+                        Start = datum.Add(startzeit),
+                        Ende = datum.Add(endzeit)
+                    };
                 SchichtListe.Add(neueSchicht);
 
                 NeueSchichtName = string.Empty;
@@ -292,11 +303,26 @@ namespace Dienstplaner.ViewModels
             FuehreMitRollenpruefungAus("Dienstplan ändern", () =>
             {
                 var ergebnis = _service.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht, AktuellerBenutzer);
+                if (string.Equals(ergebnis, "Zuweisung erfolgreich", StringComparison.Ordinal) && _dataService != null)
+                {
+                    ergebnis = _dataService.Zuweisen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht);
+                    if (!string.Equals(ergebnis, "Zuweisung erfolgreich", StringComparison.Ordinal))
+                        RueckgaengigMachen(AusgewaehlterMitarbeiter, AusgewaehlteSchicht);
+                }
+
                 if (!string.Equals(ergebnis, "Zuweisung erfolgreich", StringComparison.Ordinal))
                     ZuweisungsFehler.Add(ergebnis);
 
                 SetStatus(ergebnis);
             });
+        }
+
+        private static void RueckgaengigMachen(Mitarbeiter mitarbeiter, Schicht schicht)
+        {
+            mitarbeiter.Schichten.Remove(schicht);
+            mitarbeiter.AktuelleWochenstunden -= (int)schicht.NettoDauerInStunden;
+            schicht.MitarbeiterNamen.Remove(mitarbeiter.Name);
+            schicht.MitarbeiterIds.Remove(mitarbeiter.Id);
         }
 
         private void SchichtLoeschen(object obj)
@@ -311,6 +337,8 @@ namespace Dienstplaner.ViewModels
 
                 var schicht = AusgewaehlteSchicht;
                 var alteWerte = schicht.ToString();
+                if (_dataService != null)
+                    _dataService.SchichtLoeschen(schicht);
                 foreach (var mitarbeiter in MitarbeiterListe)
                     mitarbeiter.Schichten.Remove(schicht);
 
@@ -575,122 +603,6 @@ namespace Dienstplaner.ViewModels
 
             return string.Empty;
         }
-
-        private void Seed()
-        {
-            LadeDaten();
-        }
-
-        private void LadeDaten()
-        {
-            var max = new Mitarbeiter
-            {
-                Id = 1,
-                MandantId = 1,
-                FilialeId = 1,
-                Name = "Max Mustermann",
-                Abteilung = "Kasse",
-                Qualifikation = "Standard",
-                IstAktiv = true
-            };
-            var erika = new Mitarbeiter
-            {
-                Id = 2,
-                Name = "Erika Beispiel",
-                Abteilung = "Lager",
-                Qualifikation = "Stapler",
-                IstAktiv = true
-            };
-
-            var frueh = new Schicht
-            {
-                Id = 1,
-                MandantId = 1,
-                FilialeId = 1,
-                FilialeName = "Zentrale",
-                Name = "Frühschicht",
-                Abteilung = "Kasse",
-                Rolle = "Kassenleitung",
-                Wochentag = "Montag",
-                Start = DateTime.Today.AddHours(6),
-                Ende = DateTime.Today.AddHours(14),
-                BenoetigteMitarbeiter = 2,
-                Pausenstunden = 0.5m,
-                Zuschlagsstunden = 1.0m,
-                BenoetigteQualifikation = "Standard"
-            };
-
-            MitarbeiterListe.Add(max);
-            MitarbeiterListe.Add(erika);
-            SchichtListe.Add(frueh);
-            _service.Zuweisen(max, frueh, AktuellerBenutzer);
-
-            ForecastListe.Add(new UmsatzForecast
-            {
-                FilialeId = 1,
-                FilialeName = "Zentrale",
-                Datum = DateTime.Today,
-                ErwarteterUmsatz = 12500,
-                ErwarteteKundenfrequenz = 980
-            });
-
-            Verfuegbarkeiten.Add(new Availability
-            {
-                Id = 1,
-                MitarbeiterId = 1,
-                MitarbeiterName = "Max Mustermann",
-                Wochentag = "Montag",
-                Von = new TimeSpan(8, 0, 0),
-                Bis = new TimeSpan(16, 0, 0),
-                Status = RequestStatus.Approved,
-                Kommentar = "Regelverfügbarkeit"
-            });
-
-            Abwesenheiten.Add(new LeaveRequest
-            {
-                Id = 1,
-                MitarbeiterId = 2,
-                MitarbeiterName = "Erika Beispiel",
-                Von = DateTime.Today.AddHours(8),
-                Bis = DateTime.Today.AddHours(16),
-                Grund = "Urlaub",
-                Status = RequestStatus.Submitted,
-                Kommentar = "Familientermin"
-            });
-
-            SetStatus("Bereit");
-        }
-
-        private void SetStatus(string nachricht)
-        {
-            StatusNachricht = nachricht;
-            OnPropertyChanged(nameof(StatusNachricht));
-        }
-
-        private static int NaechsteId(IEnumerable<int> ids)
-        {
-            return ids.Any() ? ids.Max() + 1 : 1;
-        }
-
-        private static List<int> ParseSkillIds(string skillIds)
-        {
-            if (string.IsNullOrWhiteSpace(skillIds))
-                return new List<int>();
-
-            return skillIds
-                .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(ParseIntOrZero)
-                .Where(id => id > 0)
-                .ToList();
-        }
-
-        private static int ParseIntOrZero(string value)
-        {
-            int parsed;
-            return int.TryParse(value, out parsed) ? parsed : 0;
-        }
-
-        public event PropertyChangedEventHandler PropertyChanged;
 
         private void OnPropertyChanged([CallerMemberName] string n = null)
         {

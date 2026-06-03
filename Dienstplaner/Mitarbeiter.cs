@@ -6,6 +6,7 @@ namespace Dienstplaner.Models
     public class Mitarbeiter
     {
         public int Id { get; set; }
+        public System.Guid DatabaseId { get; set; }
         public int MandantId { get; set; }
         public int FilialeId { get; set; }
         public string Name { get; set; }
