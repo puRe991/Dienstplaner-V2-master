@@ -160,7 +160,14 @@ namespace Dienstplaner.ViewModels
         }
 
         public MainViewModel()
+            : this(null)
         {
+        }
+
+        public MainViewModel(BenutzerKontext aktuellerBenutzer)
+        {
+            AktuellerBenutzer = aktuellerBenutzer;
+
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
             ReportListe = new ObservableCollection<ReportKennzahl>();

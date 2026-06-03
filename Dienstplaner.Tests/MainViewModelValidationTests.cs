@@ -150,6 +150,42 @@ namespace Dienstplaner.Tests
         }
 
         [Test]
+        public void Constructor_UsesProvidedAuthenticatedUserContext()
+        {
+            var benutzer = new BenutzerKontext
+            {
+                Benutzername = "planer@example.test",
+                Rolle = Dienstplaner.Models.BenutzerRolle.Planer
+            };
+
+            var viewModel = new MainViewModel(benutzer);
+
+            Assert.That(viewModel.AktuellerBenutzer, Is.SameAs(benutzer));
+        }
+
+        [Test]
+        public void MitarbeiterHinzufuegenCommand_AllowsCreation_WithInjectedPlannerContext()
+        {
+            var benutzer = new BenutzerKontext
+            {
+                Benutzername = "planer@example.test",
+                Rolle = Dienstplaner.Models.BenutzerRolle.Planer
+            };
+            var viewModel = new MainViewModel(benutzer)
+            {
+                NeuerMitarbeiterName = "Eva Retail",
+                NeueMitarbeiterAbteilung = "Kasse",
+                NeuerMitarbeiterQualifikation = "Kasse"
+            };
+            var initialCount = viewModel.MitarbeiterListe.Count;
+
+            viewModel.MitarbeiterHinzufuegenCommand.Execute(null);
+
+            Assert.That(viewModel.MitarbeiterListe, Has.Count.EqualTo(initialCount + 1));
+            Assert.That(viewModel.StatusNachricht, Is.EqualTo("Mitarbeiter hinzugefügt"));
+        }
+
+        [Test]
         public void MitarbeiterHinzufuegenCommand_DeniesCreation_WithoutAuthorizedUserContext()
         {
             var viewModel = new MainViewModel

@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using Dienstplaner.Services;
 using Dienstplaner.ViewModels;
 
 namespace Dienstplaner
@@ -8,7 +9,7 @@ namespace Dienstplaner
         public MainWindow()
         {
             InitializeComponent();
-            DataContext = new MainViewModel();
+            DataContext = new MainViewModel(BenutzerKontext.FuerAktuellenWindowsBenutzer());
         }
     }
 }
