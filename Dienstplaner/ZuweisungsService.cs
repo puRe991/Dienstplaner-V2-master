@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Dienstplaner.Models;
 
@@ -44,7 +45,7 @@ namespace Dienstplaner.Services
             if (mitarbeiter.Abwesenheiten.Any(a => a.Ueberschneidet(schicht.Start, schicht.Ende)))
                 return "Mitarbeiter ist abwesend";
 
-            if (mitarbeiter.AktuelleWochenstunden + schicht.NettoDauerInStunden > mitarbeiter.WochenstundenLimit)
+            if (BerechneWochenstunden(mitarbeiter, schicht.Start) + schicht.NettoDauerInStunden > mitarbeiter.WochenstundenLimit)
                 return "Wochenstundenlimit überschritten";
 
             if (!string.IsNullOrEmpty(schicht.BenoetigteQualifikation) &&
@@ -55,7 +56,7 @@ namespace Dienstplaner.Services
             string alteSchichtWerte = schicht.ToAuditString();
 
             mitarbeiter.Schichten.Add(schicht);
-            mitarbeiter.AktuelleWochenstunden += (int)schicht.NettoDauerInStunden;
+            mitarbeiter.AktuelleWochenstunden = (int)BerechneWochenstunden(mitarbeiter, schicht.Start);
             schicht.MitarbeiterNamen.Add(mitarbeiter.Name);
             if (!schicht.MitarbeiterIds.Contains(mitarbeiter.Id))
                 schicht.MitarbeiterIds.Add(mitarbeiter.Id);
@@ -67,6 +68,16 @@ namespace Dienstplaner.Services
             }
 
             return "Zuweisung erfolgreich";
+        }
+
+        private static decimal BerechneWochenstunden(Mitarbeiter mitarbeiter, DateTime datum)
+        {
+            var wochenstart = datum.Date.AddDays(-(((int)datum.DayOfWeek + 6) % 7));
+            var wochenende = wochenstart.AddDays(7);
+
+            return mitarbeiter.Schichten
+                .Where(schicht => schicht.Start >= wochenstart && schicht.Start < wochenende)
+                .Sum(schicht => schicht.NettoDauerInStunden);
         }
     }
 }

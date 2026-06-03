@@ -92,11 +92,66 @@ namespace Dienstplaner.Tests
         }
 
         [Test]
-        public void Zuweisen_ReturnsWeeklyLimitError_WhenPartTimeEmployeeWouldExceedLimit()
+        public void Zuweisen_ReturnsWeeklyLimitError_WhenAssignedShiftsWouldExceedLimit()
         {
-            var result = _service.Zuweisen(
-                RetailTestDataFactory.TeilzeitKassierer(aktuelleWochenstunden: 16),
-                RetailTestDataFactory.KassenFruehschicht());
+            var mitarbeiter = RetailTestDataFactory.TeilzeitKassierer(aktuelleWochenstunden: 0);
+            mitarbeiter.Schichten.Add(new Schicht
+            {
+                Name = "Bestehende lange Schicht",
+                Start = new DateTime(2026, 6, 2, 0, 0, 0),
+                Ende = new DateTime(2026, 6, 2, 15, 0, 0),
+                BenoetigteMitarbeiter = 1
+            });
+
+            var result = _service.Zuweisen(mitarbeiter, RetailTestDataFactory.KassenFruehschicht());
+
+            Assert.That(result, Is.EqualTo("Wochenstundenlimit überschritten"));
+        }
+
+        [Test]
+        public void Zuweisen_IgnoresStaleWeeklyHoursCounter_WhenNoShiftsAreAssigned()
+        {
+            var mitarbeiter = RetailTestDataFactory.TeilzeitKassierer(aktuelleWochenstunden: 20);
+
+            var result = _service.Zuweisen(mitarbeiter, RetailTestDataFactory.KassenFruehschicht());
+
+            Assert.That(result, Is.EqualTo("Zuweisung erfolgreich"));
+            Assert.That(mitarbeiter.AktuelleWochenstunden, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void Zuweisen_IgnoresAssignedHours_FromAnotherWeek()
+        {
+            var mitarbeiter = RetailTestDataFactory.TeilzeitKassierer(aktuelleWochenstunden: 20);
+            mitarbeiter.Schichten.Add(new Schicht
+            {
+                Name = "Schicht aus Vorwoche",
+                Start = new DateTime(2026, 5, 25, 8, 0, 0),
+                Ende = new DateTime(2026, 5, 25, 22, 0, 0),
+                BenoetigteMitarbeiter = 1
+            });
+
+            var result = _service.Zuweisen(mitarbeiter, RetailTestDataFactory.KassenFruehschicht());
+
+            Assert.That(result, Is.EqualTo("Zuweisung erfolgreich"));
+            Assert.That(mitarbeiter.AktuelleWochenstunden, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void Zuweisen_IncludesFractionalAssignedHours_InWeeklyLimitCheck()
+        {
+            var mitarbeiter = RetailTestDataFactory.TeilzeitKassierer(aktuelleWochenstunden: 4);
+            mitarbeiter.WochenstundenLimit = 10;
+            mitarbeiter.Schichten.Add(new Schicht
+            {
+                Name = "Bestehende kurze Schicht",
+                Start = new DateTime(2026, 6, 2, 8, 0, 0),
+                Ende = new DateTime(2026, 6, 2, 13, 0, 0),
+                Pausenstunden = 0.5m,
+                BenoetigteMitarbeiter = 1
+            });
+
+            var result = _service.Zuweisen(mitarbeiter, RetailTestDataFactory.KassenFruehschicht());
 
             Assert.That(result, Is.EqualTo("Wochenstundenlimit überschritten"));
         }
