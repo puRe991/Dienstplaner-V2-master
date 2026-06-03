@@ -52,7 +52,8 @@ ORDER BY m.Name";
                         {
                             mitarbeiter = new Mitarbeiter
                             {
-                                Id = id,
+                                DatabaseId = id,
+                                Id = StableId(id),
                                 Name = reader.GetString(1),
                                 Abteilung = reader.GetString(2),
                                 WochenstundenLimit = reader.GetInt32(4),
@@ -92,7 +93,8 @@ ORDER BY s.Start, s.Name";
                     {
                         result.Add(reader.GetGuid(0), new Schicht
                         {
-                            Id = reader.GetGuid(0),
+                            DatabaseId = reader.GetGuid(0),
+                            Id = StableId(reader.GetGuid(0)),
                             Name = reader.GetString(1),
                             Abteilung = reader.GetString(2),
                             Wochentag = reader.GetString(3),
@@ -138,7 +140,8 @@ VALUES(@Id, @MandantId, @AbteilungId, @Name, @WochenstundenLimit, 1)",
                 transaction.Commit();
                 return new Mitarbeiter
                 {
-                    Id = mitarbeiterId,
+                    DatabaseId = mitarbeiterId,
+                    Id = StableId(mitarbeiterId),
                     Name = name.Trim(),
                     Abteilung = abteilung.Trim(),
                     Qualifikation = string.IsNullOrWhiteSpace(qualifikation) ? null : qualifikation.Trim(),
@@ -178,7 +181,8 @@ VALUES(@Id, @MandantId, @AbteilungId, @BenoetigteQualifikationId, @Name, @Wochen
                 transaction.Commit();
                 return new Schicht
                 {
-                    Id = schichtId,
+                    DatabaseId = schichtId,
+                    Id = StableId(schichtId),
                     Name = name.Trim(),
                     Abteilung = abteilung.Trim(),
                     Wochentag = string.IsNullOrWhiteSpace(wochentag) ? start.DayOfWeek.ToString() : wochentag.Trim(),
@@ -208,6 +212,16 @@ VALUES(@Id, @MandantId, @AbteilungId, @BenoetigteQualifikationId, @Name, @Wochen
             catch (SqlException ex)
             {
                 return ex.Message;
+            }
+        }
+
+        public void DeleteSchicht(Guid mandantId, Guid schichtId)
+        {
+            using (IDbConnection connection = OpenConnection())
+            {
+                Execute(connection, null,
+                    "DELETE FROM dbo.Schichten WHERE MandantId = @MandantId AND Id = @SchichtId",
+                    Params("@MandantId", mandantId, "@SchichtId", schichtId));
             }
         }
 
@@ -252,7 +266,8 @@ WHERE z.MandantId = @MandantId";
                         {
                             mitarbeiter[mitarbeiterId].Schichten.Add(new Schicht
                             {
-                                Id = schichtId,
+                                DatabaseId = schichtId,
+                                Id = StableId(schichtId),
                                 Name = reader.GetString(3),
                                 Abteilung = reader.GetString(4),
                                 Wochentag = reader.GetString(5),
@@ -313,6 +328,13 @@ WHERE z.MandantId = @MandantId";
                 AddParameters(command, parameters);
                 command.ExecuteNonQuery();
             }
+        }
+
+        private static int StableId(Guid id)
+        {
+            byte[] bytes = id.ToByteArray();
+            int value = BitConverter.ToInt32(bytes, 0) & int.MaxValue;
+            return value == 0 ? 1 : value;
         }
 
         private static void AddParameters(IDbCommand command, IDictionary<string, object> parameters)

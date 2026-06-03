@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using Dienstplaner.Infrastructure.Migrations;
 using Dienstplaner.Infrastructure.Repositories;
 using Dienstplaner.Models;
 
@@ -11,11 +10,6 @@ namespace Dienstplaner.Infrastructure.Services
         private const string DefaultMandantName = "Standardmandant";
         private readonly IDienstplanRepository _repository;
         private readonly Guid _mandantId;
-
-        public DienstplanDataService()
-            : this(CreateRepository())
-        {
-        }
 
         public DienstplanDataService(IDienstplanRepository repository)
         {
@@ -38,24 +32,30 @@ namespace Dienstplaner.Infrastructure.Services
             return _repository.GetSchichten(_mandantId);
         }
 
-        public Mitarbeiter MitarbeiterHinzufuegen(string name, string abteilung, string qualifikation)
+        public Mitarbeiter MitarbeiterHinzufuegen(string name, string abteilung, string qualifikation, int wochenstundenLimit)
         {
-            return _repository.AddMitarbeiter(_mandantId, name, abteilung, qualifikation, 40);
+            return _repository.AddMitarbeiter(_mandantId, name, abteilung, qualifikation, wochenstundenLimit);
         }
 
-        public Schicht SchichtHinzufuegen(string name, string abteilung, string wochentag, int kapazitaet)
+        public Schicht SchichtHinzufuegen(string name, string abteilung, string wochentag, DateTime start, DateTime ende, int kapazitaet, string benoetigteQualifikation)
         {
-            DateTime start = GetNaechsterWochentag(wochentag).Date.AddHours(8);
-            DateTime ende = start.AddHours(8);
-            return _repository.AddSchicht(_mandantId, name, abteilung, wochentag, start, ende, kapazitaet, null);
+            return _repository.AddSchicht(_mandantId, name, abteilung, wochentag, start, ende, kapazitaet, benoetigteQualifikation);
         }
 
         public string Zuweisen(Mitarbeiter mitarbeiter, Schicht schicht)
         {
-            if (mitarbeiter == null || schicht == null)
+            if (mitarbeiter == null || schicht == null || mitarbeiter.DatabaseId == Guid.Empty || schicht.DatabaseId == Guid.Empty)
                 return "Ungültige Auswahl";
 
-            return _repository.Assign(_mandantId, mitarbeiter.Id, schicht.Id);
+            return _repository.Assign(_mandantId, mitarbeiter.DatabaseId, schicht.DatabaseId);
+        }
+
+        public void SchichtLoeschen(Schicht schicht)
+        {
+            if (schicht == null || schicht.DatabaseId == Guid.Empty)
+                throw new InvalidOperationException("Die Schicht besitzt keine persistierbare Datenbank-ID.");
+
+            _repository.DeleteSchicht(_mandantId, schicht.DatabaseId);
         }
 
         public void SeedDemoDataIfEmpty()
@@ -67,15 +67,8 @@ namespace Dienstplaner.Infrastructure.Services
             Mitarbeiter mitarbeiter = _repository.AddMitarbeiter(_mandantId, "Max Mustermann", "Kasse", "Standard", 40);
             DateTime demoStart = GetNaechsterWochentag("Montag").Date.AddHours(8);
             Schicht schicht = _repository.AddSchicht(_mandantId, "Frühschicht", "Kasse", "Montag", demoStart, demoStart.AddHours(8), 2, "Standard");
-            _repository.Assign(_mandantId, mitarbeiter.Id, schicht.Id);
+            _repository.Assign(_mandantId, mitarbeiter.DatabaseId, schicht.DatabaseId);
 #endif
-        }
-
-        private static IDienstplanRepository CreateRepository()
-        {
-            IDatabaseConnectionFactory connectionFactory = new SqlServerConnectionFactory();
-            new SqlServerMigrationRunner(connectionFactory).Migrate();
-            return new SqlDienstplanRepository(connectionFactory);
         }
 
         private static DateTime GetNaechsterWochentag(string wochentag)

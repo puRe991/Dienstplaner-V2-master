@@ -9,6 +9,7 @@ namespace Dienstplaner.Models
         private string _wochentag;
 
         public int Id { get; set; }
+        public System.Guid DatabaseId { get; set; }
         public int MandantId { get; set; }
         public int FilialeId { get; set; }
         public string FilialeName { get; set; }
