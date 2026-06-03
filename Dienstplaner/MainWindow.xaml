@@ -299,7 +299,7 @@
                         <ItemsControl ItemsSource="{Binding LohnabrechnungListe}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock FontSize="11" Text="{Binding MitarbeiterName, StringFormat={}{0}: Soll/Ist, Überstunden und Kosten bereitgestellt}"/>
+                                    <TextBlock FontSize="11" Text="{Binding MitarbeiterName, StringFormat='{}{0}: Soll/Ist, Überstunden und Kosten bereitgestellt'}"/>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
