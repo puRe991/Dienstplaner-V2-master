@@ -5,6 +5,8 @@ namespace Dienstplaner.Models
         Mitarbeiter,
         Filialleitung,
         Personalwesen,
-        Administrator
+        Administrator,
+        Datenschutzbeauftragter,
+        Planer
     }
 }

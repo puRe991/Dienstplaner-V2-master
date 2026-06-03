@@ -8,53 +8,65 @@ namespace Dienstplaner.Services
         private readonly AuditService _auditService;
         private readonly RollenService _rollenService;
 
+        public ZuweisungsService()
+            : this(null, null)
+        {
+        }
+
         public ZuweisungsService(AuditService auditService, RollenService rollenService)
         {
             _auditService = auditService;
             _rollenService = rollenService;
         }
 
-        public string Zuweisen(Mitarbeiter m, Schicht s, BenutzerKontext benutzer)
+        public string Zuweisen(Mitarbeiter mitarbeiter, Schicht schicht)
         {
-            _rollenService.StellePersonenDatenZugriffSicher(benutzer, "Dienstplan ändern");
+            return Zuweisen(mitarbeiter, schicht, null);
+        }
 
-            if (m == null || s == null)
+        public string Zuweisen(Mitarbeiter mitarbeiter, Schicht schicht, BenutzerKontext benutzer)
+        {
+            if (mitarbeiter == null || schicht == null)
                 return "Ungültige Auswahl";
 
-            if (!m.IstAktiv)
+            if (_rollenService != null)
+                _rollenService.StellePersonenDatenZugriffSicher(benutzer, "Dienstplan ändern");
+
+            if (!mitarbeiter.IstAktiv)
                 return "Mitarbeiter ist nicht verfügbar";
 
-            if (s.IstVoll)
+            if (schicht.IstVoll)
                 return "Schicht ist bereits voll";
 
-            if (m.Schichten.Any(x =>
-                s.StartUtc < x.EndUtc && s.EndUtc > x.StartUtc))
+            if (mitarbeiter.Schichten.Any(x => schicht.Start < x.Ende && schicht.Ende > x.Start))
                 return "Zeitkonflikt";
 
-            if (m.Abwesenheiten.Any(a => a.Ueberschneidet(s.Start, s.Ende)))
+            if (mitarbeiter.Abwesenheiten.Any(a => a.Ueberschneidet(schicht.Start, schicht.Ende)))
                 return "Mitarbeiter ist abwesend";
 
-            if (m.Iststunden + s.NettoDauerInStunden > m.WochenstundenLimit)
-                return "Wochenstundenlimit würde überschritten";
+            if (mitarbeiter.AktuelleWochenstunden + schicht.NettoDauerInStunden > mitarbeiter.WochenstundenLimit)
+                return "Wochenstundenlimit überschritten";
 
-            if (!string.IsNullOrEmpty(s.BenoetigteQualifikation) &&
-                m.Qualifikation != s.BenoetigteQualifikation)
+            if (!string.IsNullOrEmpty(schicht.BenoetigteQualifikation) &&
+                mitarbeiter.Qualifikation != schicht.BenoetigteQualifikation)
                 return "Qualifikation passt nicht";
 
-            var alteMitarbeiterWerte = m.ToAuditString();
-            var alteSchichtWerte = s.ToAuditString();
+            string alteMitarbeiterWerte = mitarbeiter.ToAuditString();
+            string alteSchichtWerte = schicht.ToAuditString();
 
-            m.Schichten.Add(s);
-            s.MitarbeiterNamen.Add(m.Name);
-            if (!s.MitarbeiterIds.Contains(m.Id))
-                s.MitarbeiterIds.Add(m.Id);
+            mitarbeiter.Schichten.Add(schicht);
+            mitarbeiter.AktuelleWochenstunden += (int)schicht.NettoDauerInStunden;
+            schicht.MitarbeiterNamen.Add(mitarbeiter.Name);
+            if (!schicht.MitarbeiterIds.Contains(mitarbeiter.Id))
+                schicht.MitarbeiterIds.Add(mitarbeiter.Id);
 
-            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", m.Id, benutzer, alteMitarbeiterWerte, m.ToAuditString(), "Schicht zugewiesen");
-            _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", s.Id, benutzer, alteSchichtWerte, s.ToAuditString(), "Mitarbeiter zugewiesen");
+            if (_auditService != null)
+            {
+                _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Mitarbeiter", mitarbeiter.Id, benutzer, alteMitarbeiterWerte, mitarbeiter.ToAuditString(), "Schicht zugewiesen");
+                _auditService.Protokolliere(AuditAction.DienstplanGeaendert, "Schicht", schicht.Id, benutzer, alteSchichtWerte, schicht.ToAuditString(), "Mitarbeiter zugewiesen");
+            }
 
-        public string Zuweisen(Mitarbeiter m, Schicht s)
-        {
-            return _dataService.Zuweisen(m, s);
+            return "Zuweisung erfolgreich";
         }
     }
 }

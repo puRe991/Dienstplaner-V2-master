@@ -4,16 +4,16 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Windows.Data;
 using System.Windows.Input;
+using Dienstplaner.Helpers;
 using Dienstplaner.Models;
+using Dienstplaner.Services;
 
 namespace Dienstplaner.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged, IDataErrorInfo
     {
         private readonly ZuweisungsService _service;
-        private readonly ApprovalService _approvalService;
         private readonly DienstplanExportService _exportService;
         private readonly ReportingService _reportingService;
         private readonly IntegrationsService _integrationsService;
@@ -21,7 +21,6 @@ namespace Dienstplaner.ViewModels
         private readonly DsgvoService _dsgvoService;
         private readonly RollenService _rollenService;
         private readonly AuditService _auditService;
-        private readonly DienstplanDataService _dataService;
         private string _statusNachricht;
 
         public ObservableCollection<Mitarbeiter> MitarbeiterListe { get; set; }
@@ -33,8 +32,8 @@ namespace Dienstplaner.ViewModels
         public ObservableCollection<Availability> Verfuegbarkeiten { get; set; }
         public ObservableCollection<Absence> Abwesenheiten { get; set; }
 
-        public ICollectionView MitarbeiterView { get; }
-        public ICollectionView SchichtView { get; }
+        public ObservableCollection<Mitarbeiter> MitarbeiterView { get { return MitarbeiterListe; } }
+        public ObservableCollection<Schicht> SchichtView { get { return SchichtListe; } }
 
         public Mitarbeiter AusgewaehlterMitarbeiter { get; set; }
         public Schicht AusgewaehlteSchicht { get; set; }
@@ -126,13 +125,7 @@ namespace Dienstplaner.ViewModels
         }
 
         public MainViewModel()
-            : this(new DienstplanDataService())
         {
-        }
-
-        public MainViewModel(DienstplanDataService dataService)
-        {
-            _dataService = dataService;
             MitarbeiterListe = new ObservableCollection<Mitarbeiter>();
             SchichtListe = new ObservableCollection<Schicht>();
             ReportListe = new ObservableCollection<ReportKennzahl>();
@@ -141,10 +134,6 @@ namespace Dienstplaner.ViewModels
             ZeiterfassungListe = new ObservableCollection<TimeTrackingRecord>();
             Verfuegbarkeiten = new ObservableCollection<Availability>();
             Abwesenheiten = new ObservableCollection<Absence>();
-
-            MitarbeiterView = CollectionViewSource.GetDefaultView(MitarbeiterListe);
-            SchichtView = CollectionViewSource.GetDefaultView(SchichtListe);
-            SchichtView.Filter = FilterSchicht;
 
             AktuellerKontext = new MandantKontext
             {
@@ -155,17 +144,17 @@ namespace Dienstplaner.ViewModels
                 Rolle = BenutzerRolle.Personalwesen
             };
 
-            AktuellerBenutzer = new BenutzerKontext();
+            AktuellerBenutzer = BenutzerKontext.StandardAdmin();
             ComplianceRichtlinie = new ComplianceRichtlinie();
 
-            _service = new ZuweisungsService();
+            _rollenService = new RollenService();
+            _auditService = new AuditService(new DataProtectionService());
+            _service = new ZuweisungsService(_auditService, _rollenService);
             _exportService = new DienstplanExportService();
             _reportingService = new ReportingService();
             _integrationsService = new IntegrationsService();
             _forecastImportService = new ForecastImportService();
-            _dsgvoService = new DsgvoService();
-            _rollenService = new RollenService();
-            _auditService = new AuditService();
+            _dsgvoService = new DsgvoService(_rollenService, _auditService);
 
             MitarbeiterHinzufuegenCommand = new RelayCommand(AddMitarbeiter, CanAddMitarbeiter);
             SchichtHinzufuegenCommand = new RelayCommand(AddSchicht, CanAddSchicht);
@@ -213,6 +202,13 @@ namespace Dienstplaner.ViewModels
 
         private void AddMitarbeiter(object obj)
         {
+            string fehler;
+            if (!IstMitarbeiterGueltig(out fehler))
+            {
+                SetStatus(NormalisiereValidierungsfehler(fehler));
+                return;
+            }
+
             FuehreMitRollenpruefungAus("Mitarbeiter erstellen", () =>
             {
                 var neuerMitarbeiter = new Mitarbeiter
@@ -220,10 +216,10 @@ namespace Dienstplaner.ViewModels
                     Id = MitarbeiterListe.Count + 1,
                     MandantId = AktuellerKontext.MandantId,
                     FilialeId = AktuellerKontext.FilialeId,
-                    Name = NeuerMitarbeiterName,
-                    Abteilung = NeueMitarbeiterAbteilung,
+                    Name = NeuerMitarbeiterName.Trim(),
+                    Abteilung = NeueMitarbeiterAbteilung.Trim(),
                     DepartmentId = ParseIntOrZero(NeueMitarbeiterAbteilung),
-                    Qualifikation = NeuerMitarbeiterQualifikation,
+                    Qualifikation = NeuerMitarbeiterQualifikation.Trim(),
                     SollstundenProWoche = NeueMitarbeiterSollstunden,
                     WochenstundenLimit = 48,
                     Stundenlohn = NeuerMitarbeiterStundenlohn,
@@ -240,6 +236,13 @@ namespace Dienstplaner.ViewModels
 
         private void AddSchicht(object obj)
         {
+            string fehler;
+            if (!IstSchichtGueltig(out fehler))
+            {
+                SetStatus(NormalisiereValidierungsfehler(fehler));
+                return;
+            }
+
             FuehreMitRollenpruefungAus("Schicht erstellen", () =>
             {
                 var neueSchicht = new Schicht
@@ -248,10 +251,10 @@ namespace Dienstplaner.ViewModels
                     MandantId = AktuellerKontext.MandantId,
                     FilialeId = AktuellerKontext.FilialeId,
                     FilialeName = AktuellerKontext.FilialeName,
-                    Name = NeueSchichtName,
-                    Abteilung = NeueSchichtAbteilung,
-                    Rolle = NeueSchichtAbteilung,
-                    Wochentag = NeueSchichtWochentag,
+                    Name = NeueSchichtName.Trim(),
+                    Abteilung = NeueSchichtAbteilung.Trim(),
+                    Rolle = NeueSchichtAbteilung.Trim(),
+                    Wochentag = NeueSchichtWochentag.Trim(),
                     BenoetigteMitarbeiter = NeueSchichtKapazitaet,
                     Pausenstunden = NeueSchichtPausenstunden,
                     Zuschlagsstunden = NeueSchichtZuschlagsstunden,
@@ -324,8 +327,8 @@ namespace Dienstplaner.ViewModels
             try
             {
                 SetStatus(_dsgvoService.BearbeiteLoeschanfrage(AusgewaehlterMitarbeiter, SchichtListe, AktuellerBenutzer));
-                MitarbeiterView.Refresh();
-                SchichtView.Refresh();
+                OnPropertyChanged(nameof(MitarbeiterView));
+                OnPropertyChanged(nameof(SchichtView));
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -337,7 +340,7 @@ namespace Dienstplaner.ViewModels
         {
             try
             {
-                _exportService.Exportiere(SchichtListe, format);
+                _exportService.ExportiereDienstplan(SchichtListe, AktuellerKontext, format, "Exporte");
                 SetStatus($"Export als {format} erfolgreich");
             }
             catch (Exception ex)
@@ -350,7 +353,7 @@ namespace Dienstplaner.ViewModels
         {
             try
             {
-                var reports = _reportingService.GeneriereReports(SchichtListe, MitarbeiterListe);
+                var reports = _reportingService.ErstelleReports(MitarbeiterListe, SchichtListe);
                 ReportListe.Clear();
                 foreach (var report in reports)
                     ReportListe.Add(report);
@@ -366,7 +369,13 @@ namespace Dienstplaner.ViewModels
         {
             try
             {
-                _integrationsService.AktualisiereIntegrationen(SchichtListe, MitarbeiterListe);
+                LohnabrechnungListe.Clear();
+                foreach (var eintrag in _integrationsService.ErstelleLohnabrechnung(MitarbeiterListe))
+                    LohnabrechnungListe.Add(eintrag);
+
+                ZeiterfassungListe.Clear();
+                foreach (var eintrag in _integrationsService.ErstelleZeiterfassung(MitarbeiterListe))
+                    ZeiterfassungListe.Add(eintrag);
                 SetStatus("Integrationen aktualisiert");
             }
             catch (Exception ex)
@@ -385,7 +394,7 @@ namespace Dienstplaner.ViewModels
                     return;
                 }
 
-                var forecasts = _forecastImportService.ImportiereForecast(ForecastImportPfad);
+                var forecasts = _forecastImportService.ImportiereCsv(ForecastImportPfad);
                 ForecastListe.Clear();
                 foreach (var forecast in forecasts)
                     ForecastListe.Add(forecast);
@@ -476,6 +485,15 @@ namespace Dienstplaner.ViewModels
                 fehler = "Schicht kann nicht gespeichert werden: " + fehler;
 
             return string.IsNullOrEmpty(fehler);
+        }
+
+        private static string NormalisiereValidierungsfehler(string fehler)
+        {
+            if (fehler.Contains("Name ist ein Pflichtfeld")) return "Mitarbeitername ist erforderlich";
+            if (fehler.Contains("Abteilung ist ein Pflichtfeld") && fehler.Contains("Mitarbeiter")) return "Mitarbeiterabteilung ist erforderlich";
+            if (fehler.Contains("Wochentag ist ein Pflichtfeld")) return "Schichtwochentag ist erforderlich";
+            if (fehler.Contains("Kapazität muss mindestens 1 sein")) return "Schichtkapazität muss größer als 0 sein";
+            return fehler;
         }
 
         private static string PflichtfeldFehler(string wert, string feldname)

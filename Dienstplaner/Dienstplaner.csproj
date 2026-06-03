@@ -73,7 +73,7 @@
     <Compile Include="Verfuegbarkeit.cs" />
     <Compile Include="ZuweisungsService.cs" />
     <Compile Include="Abwesenheit.cs" />
-    <Compile Include="BenutzerRolle.cs" />
+    <Compile Include="Availability.cs" />
     <Compile Include="ExportFormat.cs" />
     <Compile Include="MandantKontext.cs" />
     <Compile Include="PayrollRecord.cs" />
