@@ -128,6 +128,8 @@ namespace Dienstplaner.ViewModels
 
         public string Error { get { return null; } }
 
+        public event PropertyChangedEventHandler PropertyChanged;
+
         public string this[string columnName]
         {
             get { return ValidiereProperty(columnName); }
