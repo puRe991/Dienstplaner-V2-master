@@ -1,5 +1,4 @@
 using System;
-using System.Configuration;
 using System.Net;
 using System.Windows;
 using Dienstplaner.Infrastructure;
@@ -20,13 +19,18 @@ namespace Dienstplaner
             try
             {
                 MainWindow = CreateMainWindow();
+                MainWindow.Show();
             }
             catch (Exception ex)
             {
-                MainWindow = CreateDemoMainWindow(ex);
+                MessageBox.Show(
+                    "Dienstplaner konnte nicht gestartet werden. Die Datenbankverbindung oder die Datenbankmigration ist fehlgeschlagen. " +
+                    "Bitte prüfen Sie die Verbindungszeichenfolge 'DienstplanerDb' und ob SQL Server erreichbar ist.\n\nTechnische Details: " + ex.Message,
+                    "Startfehler",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                Shutdown(1);
             }
-
-            MainWindow.Show();
         }
 
         private static MainWindow CreateMainWindow()
@@ -37,24 +41,8 @@ namespace Dienstplaner
 
             IDienstplanRepository repository = new SqlDienstplanRepository(connectionFactory);
             var dataService = new DienstplanDataService(repository);
-            if (IsDemoModeEnabled())
-                dataService.SeedDemoDataIfEmpty();
-
             var viewModel = new MainViewModel(dataService);
             return new MainWindow(viewModel);
-        }
-
-        private static MainWindow CreateDemoMainWindow(Exception startupException)
-        {
-            var viewModel = new MainViewModel();
-            viewModel.StatusNachricht = "Demo-Modus aktiv: Datenbank nicht erreichbar (" + startupException.Message + ").";
-            return new MainWindow(viewModel);
-        }
-
-        private static bool IsDemoModeEnabled()
-        {
-            bool enabled;
-            return bool.TryParse(ConfigurationManager.AppSettings["DemoMode"], out enabled) && enabled;
         }
     }
 }

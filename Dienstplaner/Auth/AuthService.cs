@@ -13,7 +13,7 @@ namespace Dienstplaner.Auth
             _authorizationService = authorizationService;
         }
 
-        public ObservableCollection<UserAccount> DemoAccounts { get; private set; }
+        public ObservableCollection<UserAccount> UserAccounts { get; private set; }
             = new ObservableCollection<UserAccount>
             {
                 new UserAccount

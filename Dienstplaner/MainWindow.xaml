@@ -10,7 +10,7 @@
         FontFamily="Segoe UI">
 
     <Window.Resources>
-        <DropShadowEffect x:Key="SoftShadow" BlurRadius="18" ShadowDepth="2" Direction="270" Color="#110B1F3A" Opacity="0.45"/>
+        <DropShadowEffect x:Key="SoftShadow" BlurRadius="16" ShadowDepth="2" Direction="270" Color="#110B1F3A" Opacity="0.42"/>
 
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="White"/>
@@ -34,8 +34,8 @@
         </Style>
 
         <Style x:Key="PrimaryButton" TargetType="Button">
-            <Setter Property="Height" Value="40"/>
-            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="14,0"/>
             <Setter Property="Background" Value="#0B67E8"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderBrush" Value="#0B67E8"/>
@@ -45,16 +45,6 @@
         </Style>
 
         <Style x:Key="SecondaryButton" TargetType="Button">
-            <Setter Property="Height" Value="40"/>
-            <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="Foreground" Value="#0F172A"/>
-            <Setter Property="BorderBrush" Value="#DEE6F2"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-
-        <Style x:Key="TinyActionButton" TargetType="Button">
             <Setter Property="Height" Value="34"/>
             <Setter Property="Padding" Value="12,0"/>
             <Setter Property="Background" Value="White"/>
@@ -65,24 +55,82 @@
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
 
-        <Style x:Key="CellShift" TargetType="Border">
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Padding" Value="6,5"/>
-            <Setter Property="Margin" Value="4"/>
-            <Setter Property="Height" Value="38"/>
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+            <Setter Property="Foreground" Value="#DC2626"/>
+            <Setter Property="BorderBrush" Value="#FCA5A5"/>
         </Style>
 
-        <Style x:Key="HeaderText" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#0F172A"/>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#475569"/>
+            <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,8,0,4"/>
         </Style>
 
         <Style x:Key="MutedText" TargetType="TextBlock">
             <Setter Property="Foreground" Value="#64748B"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
+
+        <Style x:Key="Input" TargetType="TextBox">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="BorderBrush" Value="#DDE6F1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <DataTemplate x:Key="SchichtCardTemplate">
+            <Border Background="#FBFDFF" BorderBrush="#E5EAF2" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#0F172A"/>
+                        <Border Grid.Column="1" Background="#DBEAFE" CornerRadius="10" Padding="8,2">
+                            <TextBlock Text="{Binding MitarbeiterNamen.Count, StringFormat={}{0} zugewiesen}" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold"/>
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="{Binding Abteilung, StringFormat=Abteilung: {0}}" Style="{StaticResource MutedText}" Margin="0,6,0,0"/>
+                    <TextBlock Text="{Binding Rolle, StringFormat=Rolle: {0}}" Style="{StaticResource MutedText}"/>
+                    <TextBlock Text="{Binding Wochentag, StringFormat=Tag: {0}}" Style="{StaticResource MutedText}"/>
+                    <TextBlock Text="{Binding Start, StringFormat=Start: {0:dd.MM.yyyy HH:mm}}" Foreground="#0F172A" FontSize="12" Margin="0,8,0,0"/>
+                    <TextBlock Text="{Binding Ende, StringFormat=Ende: {0:dd.MM.yyyy HH:mm}}" Foreground="#0F172A" FontSize="12"/>
+                    <TextBlock Text="{Binding NettoDauerInStunden, StringFormat=Netto: {0} h}" Style="{StaticResource MutedText}"/>
+                    <ItemsControl ItemsSource="{Binding MitarbeiterNamen}" Margin="0,8,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#EAF3FF" CornerRadius="5" Padding="7,3" Margin="0,2,4,2" HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding}" Foreground="#0B67E8" FontSize="11" FontWeight="SemiBold"/>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="MitarbeiterTemplate">
+            <Border BorderBrush="#EEF2F7" BorderThickness="0,0,0,1" Padding="0,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="34"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Width="26" Height="26" CornerRadius="13" Background="#DBEAFE">
+                        <TextBlock Text="●" Foreground="#0B67E8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#0F172A"/>
+                        <TextBlock Text="{Binding Qualifikation, StringFormat={}{0}}" Style="{StaticResource MutedText}"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="{Binding Iststunden, StringFormat={}{0} h}" Foreground="#0B67E8" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -95,61 +143,37 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Top bar -->
         <Border Grid.Row="0" Grid.ColumnSpan="2" Background="White" BorderBrush="#E5EAF2" BorderThickness="0,0,0,1">
             <Grid Margin="24,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="250"/>
                     <ColumnDefinition Width="480"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="250"/>
                 </Grid.ColumnDefinitions>
-
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Width="30" Height="30" CornerRadius="7" Background="#0B67E8" Margin="0,0,12,0">
                         <TextBlock Text="▣" Foreground="White" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <TextBlock Text="Dienstplanung Pro" FontSize="20" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
                 </StackPanel>
-
                 <Border Grid.Column="1" Height="38" CornerRadius="8" BorderBrush="#DDE6F1" BorderThickness="1" Background="#FBFDFF" VerticalAlignment="Center">
                     <Grid Margin="12,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="28"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="46"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="⌕" FontSize="18" Foreground="#64748B" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="Suche nach Mitarbeitern, Schichten..." Foreground="#8B97AA" VerticalAlignment="Center"/>
-                        <Border Grid.Column="2" Height="24" Background="#F1F5F9" CornerRadius="5" VerticalAlignment="Center">
-                            <TextBlock Text="⌘ K" Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <TextBlock Text="Suche, Filter und Navigation werden über die eingebundenen Listen gesteuert" Foreground="#8B97AA" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
-
-                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,24,0">
-                    <Grid Width="34" Height="34" Margin="0,0,18,0">
-                        <TextBlock Text="♧" FontSize="22" Foreground="#0F172A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <Border Background="#EF4444" CornerRadius="8" Width="16" Height="16" HorizontalAlignment="Right" VerticalAlignment="Top">
-                            <TextBlock Text="3" FontSize="9" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </Grid>
-                </StackPanel>
-
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <Border Width="38" Height="38" CornerRadius="19" Background="#D9EAFE" Margin="0,0,10,0">
-                        <TextBlock Text="👨" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Text="👤" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    <StackPanel Width="150">
-                        <TextBlock Text="Max Mustermann" FontWeight="SemiBold" Foreground="#0F172A"/>
-                        <TextBlock Text="Administrator" Foreground="#64748B" FontSize="12"/>
+                    <StackPanel Width="160">
+                        <TextBlock Text="{Binding AktuellerBenutzer.Benutzername}" FontWeight="SemiBold" Foreground="#0F172A"/>
+                        <TextBlock Text="{Binding AktuellerBenutzer.Rolle}" Foreground="#64748B" FontSize="12"/>
                     </StackPanel>
-                    <TextBlock Text="⌄" FontSize="18" Foreground="#0F172A" VerticalAlignment="Center"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- Sidebar -->
         <Border Grid.Row="1" Grid.Column="0" Background="White" BorderBrush="#E5EAF2" BorderThickness="0,0,1,0">
             <Grid>
                 <Grid.RowDefinitions>
@@ -158,78 +182,29 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="42"/>
                 </Grid.RowDefinitions>
-
                 <StackPanel Margin="0,24,0,0">
-                    <Border Style="{StaticResource NavItem}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="⌂" FontSize="19" Foreground="#64748B" Width="30"/>
-                            <TextBlock Text="Dashboard" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource ActiveNavItem}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="▣" FontSize="18" Foreground="#0B67E8" Width="30"/>
-                            <TextBlock Text="Dienstplan" FontWeight="SemiBold" Foreground="#0B67E8" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource NavItem}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="♙" FontSize="18" Foreground="#64748B" Width="30"/>
-                            <TextBlock Text="Mitarbeiter" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource NavItem}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="♧" FontSize="18" Foreground="#64748B" Width="30"/>
-                            <TextBlock Text="Abwesenheiten" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource NavItem}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="◷" FontSize="18" Foreground="#64748B" Width="30"/>
-                            <TextBlock Text="Schichten" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource NavItem}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="▥" FontSize="18" Foreground="#64748B" Width="30"/>
-                            <TextBlock Text="Berichte" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource NavItem}">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="⚙" FontSize="18" Foreground="#64748B" Width="30"/>
-                            <TextBlock Text="Einstellungen" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
+                    <Border Style="{StaticResource NavItem}"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="⌂" Width="30" Foreground="#64748B" FontSize="18"/><TextBlock Text="Dashboard" FontWeight="SemiBold"/></StackPanel></Border>
+                    <Border Style="{StaticResource ActiveNavItem}"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="▣" Width="30" Foreground="#0B67E8" FontSize="18"/><TextBlock Text="Dienstplan" Foreground="#0B67E8" FontWeight="SemiBold"/></StackPanel></Border>
+                    <Border Style="{StaticResource NavItem}"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="♙" Width="30" Foreground="#64748B" FontSize="18"/><TextBlock Text="Mitarbeiter" FontWeight="SemiBold"/></StackPanel></Border>
+                    <Border Style="{StaticResource NavItem}"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="◷" Width="30" Foreground="#64748B" FontSize="18"/><TextBlock Text="Schichten" FontWeight="SemiBold"/></StackPanel></Border>
+                    <Border Style="{StaticResource NavItem}"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="▥" Width="30" Foreground="#64748B" FontSize="18"/><TextBlock Text="Berichte" FontWeight="SemiBold"/></StackPanel></Border>
+                    <Border Style="{StaticResource NavItem}"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="⚙" Width="30" Foreground="#64748B" FontSize="18"/><TextBlock Text="Einstellungen" FontWeight="SemiBold"/></StackPanel></Border>
                 </StackPanel>
-
-                <Border Grid.Row="2" Margin="20" Padding="16" CornerRadius="10" Background="White" BorderBrush="#E5EAF2" BorderThickness="1" Effect="{StaticResource SoftShadow}">
+                <Border Grid.Row="2" Style="{StaticResource Card}" Margin="20" Padding="16">
                     <StackPanel>
-                        <TextBlock Text="◔" FontSize="18" Foreground="#0B67E8"/>
-                        <TextBlock Text="Nächste Schicht" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,8,0,14"/>
-                        <TextBlock Text="Heute, 20:00 – 06:00" Foreground="#0F172A" FontSize="13"/>
-                        <Border Background="#DBEAFE" CornerRadius="4" Padding="8,4" HorizontalAlignment="Left" Margin="0,10,0,20">
-                            <TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontWeight="SemiBold" FontSize="11"/>
-                        </Border>
-                        <TextBlock Text="Standort" Style="{StaticResource MutedText}" Margin="0,0,0,8"/>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⌖" Foreground="#64748B" Margin="0,0,8,0"/>
-                            <TextBlock Text="Zentrale Wache" Foreground="#0F172A" FontSize="12"/>
-                        </StackPanel>
+                        <TextBlock Text="Systemstatus" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding StatusNachricht}" TextWrapping="Wrap" Foreground="#334155" FontSize="12"/>
                     </StackPanel>
                 </Border>
-
                 <TextBlock Grid.Row="3" Text="© 2024 Dienstplanung Pro" Foreground="#64748B" Margin="24,0" VerticalAlignment="Center" FontSize="11"/>
             </Grid>
         </Border>
 
-        <!-- Main content -->
         <ScrollViewer Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <Grid Margin="28,22,24,24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="320"/>
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Margin="0,0,18,0">
@@ -238,19 +213,16 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Dienstplan" FontSize="28" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,26,0"/>
-                            <Button Content="‹" Style="{StaticResource SecondaryButton}" Width="40"/>
-                            <Button Content="📅   19. – 25. Mai 2024  ⌄" Style="{StaticResource SecondaryButton}" Width="190" Margin="-1,0,0,0"/>
-                            <Button Content="›" Style="{StaticResource SecondaryButton}" Width="40" Margin="-1,0,0,0"/>
+                        <StackPanel>
+                            <TextBlock Text="Dienstplan" FontSize="28" FontWeight="Bold" Foreground="#0F172A"/>
+                            <TextBlock Text="Produktive Planung mit persistierten Mitarbeitern, Schichten, Regeln und Exporten" Foreground="#64748B" Margin="0,3,0,0"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="◎  Ansicht  ⌄" Style="{StaticResource SecondaryButton}" Width="118" Margin="0,0,12,0"/>
-                            <Button Content="⊕  Schicht hinzufügen" Style="{StaticResource PrimaryButton}" Width="160" Command="{Binding SchichtHinzufuegenCommand}"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="Reports aktualisieren" Style="{StaticResource SecondaryButton}" Command="{Binding ReportsAktualisierenCommand}" Margin="0,0,8,0"/>
+                            <Button Content="Dienstplan veröffentlichen" Style="{StaticResource PrimaryButton}" Command="{Binding DienstplanVeroeffentlichenCommand}"/>
                         </StackPanel>
                     </Grid>
 
-                    <!-- KPI cards -->
                     <Grid Margin="0,0,0,16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -258,282 +230,167 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource Card}" Margin="0,0,12,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#0B67E8"><TextBlock Text="♙" Foreground="White" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="Mitarbeiter" Style="{StaticResource MutedText}" FontWeight="SemiBold"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,4"><TextBlock Text="{Binding MitarbeiterListe.Count}" FontSize="24" FontWeight="Bold" Foreground="#0F172A"/><TextBlock Text=" Aktiv" Foreground="#16A34A" FontSize="12" VerticalAlignment="Center" Margin="12,8,0,0"/></StackPanel>
-                                    <TextBlock Text="2 in Abwesenheit" Foreground="#0B67E8" FontSize="12"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                        <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,12,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#FDBA3B"><TextBlock Text="▣" Foreground="#0F172A" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="Offene Schichten" Style="{StaticResource MutedText}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{Binding KonfliktAnzahl}" FontSize="24" FontWeight="Bold" Foreground="#0F172A" Margin="0,6,0,4"/>
-                                    <TextBlock Text="Davon 2 kritisch" Foreground="#DC2626" FontSize="12"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                        <Border Grid.Column="2" Style="{StaticResource Card}" Margin="0,0,12,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#BBF7D0"><TextBlock Text="♧" Foreground="#0F5132" FontSize="21" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="Abwesenheiten" Style="{StaticResource MutedText}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="5" FontSize="24" FontWeight="Bold" Foreground="#0F172A" Margin="0,6,0,4"/>
-                                    <TextBlock Text="Genehmigt" Foreground="#15803D" FontSize="12"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                        <Border Grid.Column="3" Style="{StaticResource Card}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#E9D5FF"><TextBlock Text="◷" Foreground="#6D28D9" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="Stunden diese Woche" Style="{StaticResource MutedText}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="892 h" FontSize="24" FontWeight="Bold" Foreground="#0F172A" Margin="0,6,0,4"/>
-                                    <TextBlock Text="Ø 37,2 h pro Mitarbeiter" Foreground="#64748B" FontSize="12"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Mitarbeiter" Style="{StaticResource MutedText}" FontWeight="SemiBold"/><TextBlock Text="{Binding MitarbeiterListe.Count}" FontSize="26" FontWeight="Bold" Foreground="#0F172A" Margin="0,8,0,0"/><TextBlock Text="Aktive Datensätze" Foreground="#16A34A" FontSize="12"/></StackPanel></Border>
+                        <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Schichten" Style="{StaticResource MutedText}" FontWeight="SemiBold"/><TextBlock Text="{Binding SchichtListe.Count}" FontSize="26" FontWeight="Bold" Foreground="#0F172A" Margin="0,8,0,0"/><TextBlock Text="Persistierte Planung" Foreground="#0B67E8" FontSize="12"/></StackPanel></Border>
+                        <Border Grid.Column="2" Style="{StaticResource Card}" Margin="0,0,12,0"><StackPanel><TextBlock Text="Besetzung" Style="{StaticResource MutedText}" FontWeight="SemiBold"/><TextBlock Text="{Binding BesetzungIst, StringFormat={}{0} Ist}" FontSize="26" FontWeight="Bold" Foreground="#0F172A" Margin="0,8,0,0"/><TextBlock Text="{Binding BesetzungSoll, StringFormat=Soll: {0}}" Foreground="#64748B" FontSize="12"/></StackPanel></Border>
+                        <Border Grid.Column="3" Style="{StaticResource Card}"><StackPanel><TextBlock Text="Konflikte" Style="{StaticResource MutedText}" FontWeight="SemiBold"/><TextBlock Text="{Binding KonfliktAnzahl}" FontSize="26" FontWeight="Bold" Foreground="#0F172A" Margin="0,8,0,0"/><TextBlock Text="Regelprüfung aktiv" Foreground="#DC2626" FontSize="12"/></StackPanel></Border>
                     </Grid>
 
-                    <!-- Schedule board -->
-                    <Border Style="{StaticResource Card}" Padding="0" Margin="0,0,0,14">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="54"/>
-                                <RowDefinition Height="48"/>
-                                <RowDefinition Height="48"/>
-                                <RowDefinition Height="48"/>
-                                <RowDefinition Height="48"/>
-                                <RowDefinition Height="48"/>
-                                <RowDefinition Height="48"/>
-                                <RowDefinition Height="48"/>
-                            </Grid.RowDefinitions>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="170"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Row="0" Grid.ColumnSpan="8" BorderBrush="#EEF2F7" BorderThickness="0,0,0,1"/>
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Mitarbeiter" FontWeight="SemiBold" Foreground="#0F172A" Margin="20,0" VerticalAlignment="Center"/>
-                            <StackPanel Grid.Row="0" Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="Montag" Style="{StaticResource HeaderText}"/><TextBlock Text="19. Mai" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/></StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="2" VerticalAlignment="Center"><TextBlock Text="Dienstag" Style="{StaticResource HeaderText}"/><TextBlock Text="20. Mai" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/></StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="3" VerticalAlignment="Center"><TextBlock Text="Mittwoch" Style="{StaticResource HeaderText}"/><TextBlock Text="21. Mai" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/></StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="4" VerticalAlignment="Center"><TextBlock Text="Donnerstag" Style="{StaticResource HeaderText}"/><TextBlock Text="22. Mai" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/></StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="5" VerticalAlignment="Center"><TextBlock Text="Freitag" Style="{StaticResource HeaderText}"/><TextBlock Text="23. Mai" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/></StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="6" VerticalAlignment="Center"><TextBlock Text="Samstag" Style="{StaticResource HeaderText}"/><TextBlock Text="24. Mai" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/></StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="7" VerticalAlignment="Center"><TextBlock Text="Sonntag" Style="{StaticResource HeaderText}"/><TextBlock Text="25. Mai" Style="{StaticResource MutedText}" HorizontalAlignment="Center"/></StackPanel>
-
-                            <!-- grid separators -->
-                            <Border Grid.Row="1" Grid.RowSpan="7" Grid.Column="0" BorderBrush="#EEF2F7" BorderThickness="0,0,1,0"/>
-                            <Border Grid.Row="1" Grid.ColumnSpan="8" BorderBrush="#EEF2F7" BorderThickness="0,0,0,1"/>
-                            <Border Grid.Row="2" Grid.ColumnSpan="8" BorderBrush="#EEF2F7" BorderThickness="0,0,0,1"/>
-                            <Border Grid.Row="3" Grid.ColumnSpan="8" BorderBrush="#EEF2F7" BorderThickness="0,0,0,1"/>
-                            <Border Grid.Row="4" Grid.ColumnSpan="8" BorderBrush="#EEF2F7" BorderThickness="0,0,0,1"/>
-                            <Border Grid.Row="5" Grid.ColumnSpan="8" BorderBrush="#EEF2F7" BorderThickness="0,0,0,1"/>
-                            <Border Grid.Row="6" Grid.ColumnSpan="8" BorderBrush="#EEF2F7" BorderThickness="0,0,0,1"/>
-
-                            <!-- employees -->
-                            <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center"><TextBlock Text="👩" FontSize="25" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Anna Berger" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Pflegefachkraft" Foreground="#64748B" FontSize="10"/><TextBlock Text="● Verfügbar" Foreground="#16A34A" FontSize="10"/></StackPanel></StackPanel>
-                            <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center"><TextBlock Text="👨" FontSize="25" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Lukas Hofmann" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Pflegefachkraft" Foreground="#64748B" FontSize="10"/><TextBlock Text="● Verfügbar" Foreground="#16A34A" FontSize="10"/></StackPanel></StackPanel>
-                            <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center"><TextBlock Text="👩" FontSize="25" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Julia Schneider" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Altenpflegerin" Foreground="#64748B" FontSize="10"/><TextBlock Text="● Eingeschränkt" Foreground="#F59E0B" FontSize="10"/></StackPanel></StackPanel>
-                            <StackPanel Grid.Row="4" Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center"><TextBlock Text="👨" FontSize="25" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Markus Weber" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Pflegehelfer" Foreground="#64748B" FontSize="10"/><TextBlock Text="● Verfügbar" Foreground="#16A34A" FontSize="10"/></StackPanel></StackPanel>
-                            <StackPanel Grid.Row="5" Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center"><TextBlock Text="👩" FontSize="25" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Sarah Müller" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Pflegefachkraft" Foreground="#64748B" FontSize="10"/><TextBlock Text="● Verfügbar" Foreground="#16A34A" FontSize="10"/></StackPanel></StackPanel>
-                            <StackPanel Grid.Row="6" Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center"><TextBlock Text="👨" FontSize="25" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Thomas Richter" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Pflegehelfer" Foreground="#64748B" FontSize="10"/><TextBlock Text="● Eingeschränkt" Foreground="#F59E0B" FontSize="10"/></StackPanel></StackPanel>
-                            <StackPanel Grid.Row="7" Grid.Column="0" Orientation="Horizontal" Margin="18,0" VerticalAlignment="Center"><TextBlock Text="👩" FontSize="25" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Lisa Wagner" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Pflegefachkraft" Foreground="#64748B" FontSize="10"/><TextBlock Text="● Abwesend" Foreground="#DC2626" FontSize="10"/></StackPanel></StackPanel>
-
-                            <!-- Row 1 -->
-                            <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="1" Grid.Column="3" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="1" Grid.Column="4" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="1" Grid.Column="5" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="1" Grid.Column="6" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="1" Grid.Column="7" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-
-                            <!-- Row 2 -->
-                            <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="2" Grid.Column="3" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="2" Grid.Column="4" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="2" Grid.Column="5" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="2" Grid.Column="6" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="2" Grid.Column="7" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-
-                            <!-- Row 3 -->
-                            <Border Grid.Row="3" Grid.Column="1" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="3" Grid.Column="2" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="3" Grid.Column="3" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="3" Grid.Column="4" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="3" Grid.Column="5" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="3" Grid.Column="6" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="3" Grid.Column="7" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-
-                            <!-- Row 4 -->
-                            <TextBlock Grid.Row="4" Grid.Column="1" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="4" Grid.Column="3" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="4" Grid.Column="4" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="4" Grid.Column="5" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="4" Grid.Column="6" Style="{StaticResource CellShift}" Background="#DCFCE7"><StackPanel><TextBlock Text="06:00 – 14:00" Foreground="#166534" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Frühschicht" Foreground="#166534" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="4" Grid.Column="7" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-
-                            <!-- Row 5 -->
-                            <Border Grid.Row="5" Grid.Column="1" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="5" Grid.Column="2" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="5" Grid.Column="3" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="5" Grid.Column="4" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="5" Grid.Column="5" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="5" Grid.Column="6" Style="{StaticResource CellShift}" Background="#FFEDD5"><StackPanel><TextBlock Text="14:00 – 22:00" Foreground="#C2410C" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Spätschicht" Foreground="#C2410C" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="5" Grid.Column="7" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-
-                            <!-- Row 6 -->
-                            <TextBlock Grid.Row="6" Grid.Column="1" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="6" Grid.Column="3" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="6" Grid.Column="4" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="6" Grid.Column="5" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <TextBlock Grid.Row="6" Grid.Column="6" Text="-" Foreground="#64748B" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold"/>
-                            <Border Grid.Row="6" Grid.Column="7" Style="{StaticResource CellShift}" Background="#DBEAFE"><StackPanel><TextBlock Text="22:00 – 06:00" Foreground="#0B4FD8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Nachtschicht" Foreground="#0B4FD8" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-
-                            <!-- Row 7 absence -->
-                            <Border Grid.Row="7" Grid.Column="1" Style="{StaticResource CellShift}" Background="#FEE2E2"><StackPanel><TextBlock Text="Abwesend" Foreground="#DC2626" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Urlaub" Foreground="#DC2626" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="7" Grid.Column="2" Style="{StaticResource CellShift}" Background="#FEE2E2"><StackPanel><TextBlock Text="Abwesend" Foreground="#DC2626" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Urlaub" Foreground="#DC2626" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="7" Grid.Column="3" Style="{StaticResource CellShift}" Background="#FEE2E2"><StackPanel><TextBlock Text="Abwesend" Foreground="#DC2626" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Urlaub" Foreground="#DC2626" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="7" Grid.Column="4" Style="{StaticResource CellShift}" Background="#FEE2E2"><StackPanel><TextBlock Text="Abwesend" Foreground="#DC2626" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Urlaub" Foreground="#DC2626" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="7" Grid.Column="5" Style="{StaticResource CellShift}" Background="#FEE2E2"><StackPanel><TextBlock Text="Abwesend" Foreground="#DC2626" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Urlaub" Foreground="#DC2626" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="7" Grid.Column="6" Style="{StaticResource CellShift}" Background="#FEE2E2"><StackPanel><TextBlock Text="Abwesend" Foreground="#DC2626" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Urlaub" Foreground="#DC2626" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                            <Border Grid.Row="7" Grid.Column="7" Style="{StaticResource CellShift}" Background="#FEE2E2"><StackPanel><TextBlock Text="Abwesend" Foreground="#DC2626" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Urlaub" Foreground="#DC2626" FontSize="10" HorizontalAlignment="Center"/></StackPanel></Border>
-                        </Grid>
-                    </Border>
-
-                    <!-- Legend -->
-                    <Grid Margin="24,0,24,16">
+                    <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="1.35*"/>
+                            <ColumnDefinition Width="0.95*"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal"><Ellipse Fill="#A7F3D0" Width="10" Height="10" Margin="0,3,10,0"/><StackPanel><TextBlock Text="Frühschicht" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="06:00 – 14:00" Style="{StaticResource MutedText}"/></StackPanel></StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal"><Ellipse Fill="#FDBA3B" Width="10" Height="10" Margin="0,3,10,0"/><StackPanel><TextBlock Text="Spätschicht" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="14:00 – 22:00" Style="{StaticResource MutedText}"/></StackPanel></StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal"><Ellipse Fill="#75A7F8" Width="10" Height="10" Margin="0,3,10,0"/><StackPanel><TextBlock Text="Nachtschicht" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="22:00 – 06:00" Style="{StaticResource MutedText}"/></StackPanel></StackPanel>
-                        <StackPanel Grid.Column="3" Orientation="Horizontal"><Ellipse Fill="#C084FC" Width="10" Height="10" Margin="0,3,10,0"/><StackPanel><TextBlock Text="Bereitschaft" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="24h" Style="{StaticResource MutedText}"/></StackPanel></StackPanel>
-                        <StackPanel Grid.Column="4" Orientation="Horizontal"><Ellipse Fill="#F87171" Width="10" Height="10" Margin="0,3,10,0"/><StackPanel><TextBlock Text="Abwesend" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="–" Style="{StaticResource MutedText}"/></StackPanel></StackPanel>
-                        <StackPanel Grid.Column="5" Orientation="Horizontal"><Ellipse Stroke="#94A3B8" StrokeDashArray="2" Width="10" Height="10" Margin="0,3,10,0"/><StackPanel><TextBlock Text="Offene Schicht" FontWeight="SemiBold" FontSize="11"/><TextBlock Text="Nicht besetzt" Style="{StaticResource MutedText}"/></StackPanel></StackPanel>
-                    </Grid>
 
-                    <!-- Details -->
-                    <Border Style="{StaticResource Card}" Padding="16">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="1.2*"/>
-                                <ColumnDefinition Width="1.2*"/>
-                                <ColumnDefinition Width="1.4*"/>
-                                <ColumnDefinition Width="1.6*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Margin="0,0,12,0">
-                                <TextBlock Text="Schichtdetails" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,0,0,12"/>
-                                <Border Background="#DCFCE7" CornerRadius="4" Padding="8,3" HorizontalAlignment="Left"><TextBlock Text="Frühschicht" Foreground="#166534" FontWeight="SemiBold" FontSize="11"/></Border>
-                                <TextBlock Text="Montag, 19. Mai 2024" Foreground="#0F172A" Margin="0,10,0,2"/>
-                                <TextBlock Text="06:00 – 14:00 (8 h)" FontSize="16" Foreground="#0F172A"/>
-                                <TextBlock Text="⌖  Station 1 – Zentrale Wache" Style="{StaticResource MutedText}" Margin="0,10,0,0"/>
-                            </StackPanel>
-                            <Border Grid.Column="1" BorderBrush="#E5EAF2" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
-                                <Grid>
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                                    <TextBlock Text="Zugewiesen" Style="{StaticResource MutedText}" FontWeight="SemiBold"/>
-                                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,14,0,0"><TextBlock Text="👩" FontSize="30" Margin="0,0,10,0"/><StackPanel><TextBlock Text="Anna Berger" FontWeight="SemiBold"/><TextBlock Text="Pflegefachkraft" Style="{StaticResource MutedText}"/><Border Background="#DCFCE7" CornerRadius="4" Padding="7,3" HorizontalAlignment="Left" Margin="0,4,0,0"><TextBlock Text="● Verfügbar" Foreground="#16A34A" FontSize="10"/></Border></StackPanel></StackPanel>
+                        <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,14,0">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,12">
+                                    <TextBlock Text="Geplante Schichten" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/>
+                                    <TextBlock Text="{Binding SchichtListe.Count, StringFormat={}{0} Einträge}" HorizontalAlignment="Right" Foreground="#64748B"/>
                                 </Grid>
-                            </Border>
-                            <Border Grid.Column="2" BorderBrush="#E5EAF2" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                                <ScrollViewer Height="520" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding SchichtListe}" ItemTemplate="{StaticResource SchichtCardTemplate}"/>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Grid.Column="1">
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                                 <StackPanel>
-                                    <TextBlock Text="Notizen" Style="{StaticResource MutedText}" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Übergabe um 05:45 Uhr mit Nachtschicht. Medikamentenrunde um 07:00 Uhr." TextWrapping="Wrap" Foreground="#334155" FontSize="12" Margin="0,14,0,0"/>
-                                </StackPanel>
-                            </Border>
-                            <Border Grid.Column="3" BorderBrush="#E5EAF2" BorderThickness="1" CornerRadius="8" Padding="12">
-                                <StackPanel>
-                                    <TextBlock Text="Aktionen" Style="{StaticResource MutedText}" FontWeight="SemiBold" Margin="0,0,0,14"/>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Button Content="✎ Bearbeiten" Style="{StaticResource TinyActionButton}"/>
-                                        <Button Content="⇄ Tauschanfrage" Style="{StaticResource TinyActionButton}" Margin="6,0" Command="{Binding ZuweisenCommand}"/>
-                                        <Button Content="🗑 Löschen" Style="{StaticResource TinyActionButton}" Foreground="#DC2626" BorderBrush="#FCA5A5" Command="{Binding SchichtLoeschenCommand}"/>
+                                    <TextBlock Text="Zuweisung &amp; Aktionen" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,0,0,10"/>
+                                    <TextBlock Text="Mitarbeiter" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox Height="30" ItemsSource="{Binding MitarbeiterView}" DisplayMemberPath="Name" SelectedItem="{Binding AusgewaehlterMitarbeiter, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="Schicht" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox Height="30" ItemsSource="{Binding SchichtView}" DisplayMemberPath="Name" SelectedItem="{Binding AusgewaehlteSchicht, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <Button Content="Zuweisen" Style="{StaticResource PrimaryButton}" Command="{Binding ZuweisenCommand}" Margin="0,0,8,0"/>
+                                        <Button Content="Schicht löschen" Style="{StaticResource DangerButton}" Command="{Binding SchichtLoeschenCommand}"/>
                                     </StackPanel>
-                                    <TextBlock Text="{Binding StatusNachricht}" Foreground="#64748B" FontSize="11" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                                    <ItemsControl ItemsSource="{Binding ZuweisungsFehler}" Margin="0,10,0,0">
+                                        <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="#DC2626" FontSize="12" TextWrapping="Wrap"/></DataTemplate></ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <ItemsControl ItemsSource="{Binding ZuweisungsWarnungen}" Margin="0,4,0,0">
+                                        <ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="#B45309" FontSize="12" TextWrapping="Wrap"/></DataTemplate></ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                             </Border>
-                        </Grid>
-                    </Border>
+
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="Mitarbeiter anlegen" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/>
+                                    <TextBlock Text="Name" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeuerMitarbeiterName, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="Abteilung" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueMitarbeiterAbteilung, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="Qualifikation" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeuerMitarbeiterQualifikation, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,6,0"><TextBlock Text="Sollstunden" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueMitarbeiterSollstunden, UpdateSourceTrigger=PropertyChanged}"/></StackPanel><StackPanel Grid.Column="1" Margin="6,0,0,0"><TextBlock Text="Stundenlohn" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeuerMitarbeiterStundenlohn, UpdateSourceTrigger=PropertyChanged}"/></StackPanel></Grid>
+                                    <Button Content="Mitarbeiter speichern" Style="{StaticResource PrimaryButton}" Command="{Binding MitarbeiterHinzufuegenCommand}" Margin="0,12,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <TextBlock Text="Schicht anlegen" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/>
+                                    <TextBlock Text="Name" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueSchichtName, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="Abteilung" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueSchichtAbteilung, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="Wochentag" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueSchichtWochentag, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="Datum" Style="{StaticResource FieldLabel}"/><DatePicker SelectedDate="{Binding NeueSchichtDatum, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,6,0"><TextBlock Text="Start" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueSchichtStartzeit, UpdateSourceTrigger=PropertyChanged}"/></StackPanel><StackPanel Grid.Column="1" Margin="6,0,0,0"><TextBlock Text="Ende" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueSchichtEndzeit, UpdateSourceTrigger=PropertyChanged}"/></StackPanel></Grid>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,6,0"><TextBlock Text="Kapazität" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueSchichtKapazitaet, UpdateSourceTrigger=PropertyChanged}"/></StackPanel><StackPanel Grid.Column="1" Margin="6,0,0,0"><TextBlock Text="Pause (h)" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding NeueSchichtPausenstunden, UpdateSourceTrigger=PropertyChanged}"/></StackPanel></Grid>
+                                    <Button Content="Schicht speichern" Style="{StaticResource PrimaryButton}" Command="{Binding SchichtHinzufuegenCommand}" Margin="0,12,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
 
-                <!-- Right rail -->
                 <StackPanel Grid.Column="1">
-                    <Border Style="{StaticResource Card}" Padding="14" Margin="0,3,0,14">
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                         <StackPanel>
-                            <Grid Margin="0,0,0,10"><TextBlock Text="Mai 2024" FontWeight="SemiBold" Foreground="#0F172A"/><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><TextBlock Text="‹" Margin="0,0,18,0" Foreground="#64748B"/><TextBlock Text="›" Foreground="#64748B"/></StackPanel></Grid>
-                            <UniformGrid Columns="7" Rows="7">
-                                <TextBlock Text="Mo" Style="{StaticResource MutedText}" TextAlignment="Center"/><TextBlock Text="Di" Style="{StaticResource MutedText}" TextAlignment="Center"/><TextBlock Text="Mi" Style="{StaticResource MutedText}" TextAlignment="Center"/><TextBlock Text="Do" Style="{StaticResource MutedText}" TextAlignment="Center"/><TextBlock Text="Fr" Style="{StaticResource MutedText}" TextAlignment="Center"/><TextBlock Text="Sa" Style="{StaticResource MutedText}" TextAlignment="Center"/><TextBlock Text="So" Style="{StaticResource MutedText}" TextAlignment="Center"/>
-                                <TextBlock Text="29" Foreground="#94A3B8" TextAlignment="Center"/><TextBlock Text="30" Foreground="#94A3B8" TextAlignment="Center"/><TextBlock Text="1" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="2" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="3" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="4" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="5" Foreground="#334155" TextAlignment="Center"/>
-                                <TextBlock Text="6" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="7" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="8" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="9" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="10" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="11" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="12" Foreground="#334155" TextAlignment="Center"/>
-                                <TextBlock Text="13" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="14" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="15" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="16" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="17" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="18" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="19" Foreground="#334155" TextAlignment="Center"/>
-                                <Border Background="#EAF3FF" CornerRadius="14" Margin="1"><TextBlock Text="20" Foreground="#0B67E8" TextAlignment="Center" VerticalAlignment="Center"/></Border><Border Background="#EAF3FF" Margin="0"><TextBlock Text="21" Foreground="#0B67E8" TextAlignment="Center" VerticalAlignment="Center"/></Border><Border Background="#EAF3FF" Margin="0"><TextBlock Text="22" Foreground="#0B67E8" TextAlignment="Center" VerticalAlignment="Center"/></Border><Border Background="#EAF3FF" Margin="0"><TextBlock Text="23" Foreground="#0B67E8" TextAlignment="Center" VerticalAlignment="Center"/></Border><Border Background="#EAF3FF" Margin="0"><TextBlock Text="24" Foreground="#0B67E8" TextAlignment="Center" VerticalAlignment="Center"/></Border><Border Background="#EAF3FF" Margin="0"><TextBlock Text="25" Foreground="#0B67E8" TextAlignment="Center" VerticalAlignment="Center"/></Border><Border Background="#0B67E8" CornerRadius="14" Margin="1"><TextBlock Text="19" Foreground="White" FontWeight="Bold" TextAlignment="Center" VerticalAlignment="Center"/></Border>
-                                <TextBlock Text="27" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="28" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="29" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="30" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="31" Foreground="#334155" TextAlignment="Center"/><TextBlock Text="1" Foreground="#94A3B8" TextAlignment="Center"/><TextBlock Text="2" Foreground="#94A3B8" TextAlignment="Center"/>
-                            </UniformGrid>
+                            <Grid Margin="0,0,0,10"><TextBlock Text="Mitarbeiter" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/><TextBlock Text="{Binding MitarbeiterListe.Count, StringFormat={}{0}}" HorizontalAlignment="Right" Foreground="#64748B"/></Grid>
+                            <ScrollViewer Height="210" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding MitarbeiterListe}" ItemTemplate="{StaticResource MitarbeiterTemplate}"/>
+                            </ScrollViewer>
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource Card}" Padding="14" Margin="0,0,0,14">
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                         <StackPanel>
-                            <Grid Margin="0,0,0,14"><TextBlock Text="Abwesenheiten" FontWeight="SemiBold" Foreground="#0F172A"/><TextBlock Text="Alle anzeigen" Foreground="#0B67E8" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right"/></Grid>
-                            <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions><Ellipse Fill="#FB7185" Width="8" Height="18"/><StackPanel Grid.Column="1" Margin="10,0"><TextBlock Text="Lisa Wagner" FontWeight="SemiBold" FontSize="12"/><TextBlock Text="19. – 25. Mai" Style="{StaticResource MutedText}"/><TextBlock Text="Urlaub" Style="{StaticResource MutedText}"/></StackPanel><TextBlock Grid.Column="2" Text="🌴" FontSize="18" VerticalAlignment="Center"/></Grid>
-                            <Grid Margin="0,0,0,14"><Grid.ColumnDefinitions><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions><Ellipse Fill="#F59E0B" Width="8" Height="18"/><StackPanel Grid.Column="1" Margin="10,0"><TextBlock Text="Kevin Baumann" FontWeight="SemiBold" FontSize="12"/><TextBlock Text="20. – 21. Mai" Style="{StaticResource MutedText}"/><TextBlock Text="Krank" Style="{StaticResource MutedText}"/></StackPanel><TextBlock Grid.Column="2" Text="✚" Foreground="#EF4444" FontSize="18" VerticalAlignment="Center"/></Grid>
-                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions><Ellipse Fill="#60A5FA" Width="8" Height="18"/><StackPanel Grid.Column="1" Margin="10,0"><TextBlock Text="Nina Schmid" FontWeight="SemiBold" FontSize="12"/><TextBlock Text="24. Mai" Style="{StaticResource MutedText}"/><TextBlock Text="Fortbildung" Style="{StaticResource MutedText}"/></StackPanel><TextBlock Grid.Column="2" Text="▰" Foreground="#1E1B4B" FontSize="18" VerticalAlignment="Center"/></Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Padding="14" Margin="0,0,0,14">
-                        <StackPanel>
-                            <TextBlock Text="Schnellaktionen" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,0,0,12"/>
-                            <Button Content="⇄  Tauschanfrage erstellen" Style="{StaticResource SecondaryButton}" HorizontalContentAlignment="Left" Margin="0,0,0,8" Command="{Binding ZuweisenCommand}"/>
-                            <Button Content="▤  Schichtvorlage anlegen" Style="{StaticResource SecondaryButton}" HorizontalContentAlignment="Left" Margin="0,0,0,8" Command="{Binding SchichtHinzufuegenCommand}"/>
-                            <Button Content="➤  Dienstplan veröffentlichen" Style="{StaticResource SecondaryButton}" HorizontalContentAlignment="Left" Command="{Binding DienstplanVeroeffentlichenCommand}"/>
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource Card}" Padding="14">
-                        <StackPanel>
-                            <Grid Margin="0,0,0,10"><TextBlock Text="Live-Daten" FontWeight="SemiBold" Foreground="#0F172A"/><Button Content="↻" Width="28" Height="24" HorizontalAlignment="Right" Command="{Binding ReportsAktualisierenCommand}"/></Grid>
-                            <ComboBox ItemsSource="{Binding MitarbeiterView}" DisplayMemberPath="Name" SelectedItem="{Binding AusgewaehlterMitarbeiter}" Height="30" Margin="0,0,0,8"/>
-                            <ComboBox ItemsSource="{Binding SchichtView}" DisplayMemberPath="Name" SelectedItem="{Binding AusgewaehlteSchicht}" Height="30" Margin="0,0,0,8"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                <Button Content="Zuweisen" Style="{StaticResource TinyActionButton}" Command="{Binding ZuweisenCommand}"/>
-                                <Button Content="Export CSV" Style="{StaticResource TinyActionButton}" Margin="6,0,0,0" Command="{Binding CsvExportCommand}"/>
+                            <TextBlock Text="Geschützte Exporte" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,0,0,8"/>
+                            <TextBlock Text="Mandant, Filiale, Rolle und Exportformat werden vor dem Export geprüft." TextWrapping="Wrap" Style="{StaticResource MutedText}" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="CSV" Style="{StaticResource SecondaryButton}" Width="70" Command="{Binding CsvExportCommand}" Margin="0,0,8,0"/>
+                                <Button Content="Excel" Style="{StaticResource SecondaryButton}" Width="70" Command="{Binding ExcelExportCommand}" Margin="0,0,8,0"/>
+                                <Button Content="PDF" Style="{StaticResource SecondaryButton}" Width="70" Command="{Binding PdfExportCommand}"/>
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10"><TextBlock Text="Reports" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/><Button Content="Aktualisieren" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Command="{Binding ReportsAktualisierenCommand}"/></Grid>
                             <ItemsControl ItemsSource="{Binding ReportListe}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border BorderBrush="#EEF2F7" BorderThickness="0,1,0,0" Padding="0,8">
                                             <StackPanel>
-                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="11"/>
-                                                <TextBlock Text="{Binding Wert}" Foreground="#0B67E8" FontSize="15" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock Text="{Binding Wert}" Foreground="#0B67E8" FontSize="17" FontWeight="Bold"/>
                                                 <TextBlock Text="{Binding Hinweis}" Style="{StaticResource MutedText}" TextWrapping="Wrap"/>
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10"><TextBlock Text="Lohn &amp; Zeiterfassung" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/><Button Content="Aktualisieren" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Right" Command="{Binding IntegrationenAktualisierenCommand}"/></Grid>
+                            <TextBlock Text="Lohnabrechnung" FontWeight="SemiBold" Foreground="#0F172A"/>
+                            <ScrollViewer Height="70"><ItemsControl ItemsSource="{Binding LohnabrechnungListe}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock FontSize="11" Foreground="#334155" Text="{Binding MitarbeiterName, StringFormat={}{0}: Soll/Ist/Kosten bereitgestellt}"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+                            <TextBlock Text="Zeiterfassung" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,8,0,0"/>
+                            <ScrollViewer Height="70"><ItemsControl ItemsSource="{Binding ZeiterfassungListe}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock FontSize="11" Foreground="#334155" Text="{Binding SchichtName, StringFormat={}{0}: Zeiten und Kostenstelle}"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Forecast-Import" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/>
+                            <TextBlock Text="CSV-Pfad" Style="{StaticResource FieldLabel}"/><TextBox Style="{StaticResource Input}" Text="{Binding ForecastImportPfad, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Content="Forecast importieren" Style="{StaticResource PrimaryButton}" Command="{Binding ForecastImportCommand}" Margin="0,10,0,8"/>
+                            <ScrollViewer Height="80"><ItemsControl ItemsSource="{Binding ForecastListe}"><ItemsControl.ItemTemplate><DataTemplate><TextBlock FontSize="11" Foreground="#334155" Text="{Binding FilialeName, StringFormat={}{0}: Forecast importiert}"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></ScrollViewer>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="DSGVO" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A"/>
+                            <TextBlock Text="Ausgewählten Mitarbeiter aus der Zuweisungsauswahl verwenden." TextWrapping="Wrap" Style="{StaticResource MutedText}" Margin="0,4,0,10"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Auskunft" Style="{StaticResource SecondaryButton}" Command="{Binding DsgvoAuskunftCommand}" Margin="0,0,8,0"/>
+                                <Button Content="Löschen" Style="{StaticResource DangerButton}" Command="{Binding DsgvoLoeschenCommand}"/>
+                            </StackPanel>
+                            <TextBox Text="{Binding DsgvoExportText}" Height="76" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Audit &amp; Compliance" FontSize="16" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,0,0,8"/>
+                            <TextBlock Text="{Binding ComplianceRichtlinie.Exportkonzept}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <ScrollViewer Height="120">
+                                <ItemsControl ItemsSource="{Binding AuditLog}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,6">
+                                                <TextBlock Text="{Binding Aktion}" FontWeight="SemiBold" FontSize="11"/>
+                                                <TextBlock Text="{Binding Benutzer}" Style="{StaticResource MutedText}"/>
+                                                <TextBlock Text="{Binding ZeitpunktUtc}" Style="{StaticResource MutedText}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
                         </StackPanel>
                     </Border>
                 </StackPanel>

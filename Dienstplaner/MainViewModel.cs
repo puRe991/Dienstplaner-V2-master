@@ -152,15 +152,11 @@ namespace Dienstplaner.ViewModels
             ZuweisungsFehler = new ObservableCollection<string>();
             ZuweisungsWarnungen = new ObservableCollection<string>();
 
-            SetzeSchnellstartStandardwerte();
-
-            if (MitarbeiterListe.Count == 0 && SchichtListe.Count == 0)
-                LadeDemoDienstplan();
 
             AktuellerKontext = new MandantKontext
             {
                 MandantId = 1,
-                MandantName = "DemoMandant",
+                MandantName = "Standardmandant",
                 FilialeId = 1,
                 FilialeName = "Zentrale",
                 Rolle = BenutzerRolle.Personalwesen
@@ -195,101 +191,6 @@ namespace Dienstplaner.ViewModels
 
             AktualisiereReports(null);
             AktualisiereIntegrationen(null);
-        }
-
-
-        private void SetzeSchnellstartStandardwerte()
-        {
-            NeuerMitarbeiterName = "Neue Pflegekraft";
-            NeueMitarbeiterAbteilung = "Pflege";
-            NeuerMitarbeiterQualifikation = "Pflegefachkraft";
-            NeueSchichtName = "Frühschicht";
-            NeueSchichtAbteilung = "Pflege";
-            NeueSchichtWochentag = "Montag";
-            NeueSchichtDatum = new DateTime(2024, 5, 19);
-            NeueSchichtStartzeit = "06:00";
-            NeueSchichtEndzeit = "14:00";
-            NeueSchichtKapazitaet = 2;
-            NeueSchichtPausenstunden = 0;
-        }
-
-        private void LadeDemoDienstplan()
-        {
-            var anna = ErstelleDemoMitarbeiter(1, "Anna Berger", "Pflege", "Pflegefachkraft", 40, 32);
-            var lukas = ErstelleDemoMitarbeiter(2, "Lukas Hofmann", "Pflege", "Pflegefachkraft", 40, 32);
-            var julia = ErstelleDemoMitarbeiter(3, "Julia Schneider", "Pflege", "Altenpflegerin", 32, 24);
-            var markus = ErstelleDemoMitarbeiter(4, "Markus Weber", "Pflege", "Pflegehelfer", 30, 24);
-            var sarah = ErstelleDemoMitarbeiter(5, "Sarah Müller", "Pflege", "Pflegefachkraft", 40, 32);
-            var thomas = ErstelleDemoMitarbeiter(6, "Thomas Richter", "Pflege", "Pflegehelfer", 32, 24);
-            MitarbeiterListe.Add(anna);
-            MitarbeiterListe.Add(lukas);
-            MitarbeiterListe.Add(julia);
-            MitarbeiterListe.Add(markus);
-            MitarbeiterListe.Add(sarah);
-            MitarbeiterListe.Add(thomas);
-
-            FuegeDemoSchichtHinzu(1, "Frühschicht", "Pflegefachkraft", "Montag", new DateTime(2024, 5, 19, 6, 0, 0), new DateTime(2024, 5, 19, 14, 0, 0), anna);
-            FuegeDemoSchichtHinzu(2, "Spätschicht", "Pflegefachkraft", "Montag", new DateTime(2024, 5, 19, 14, 0, 0), new DateTime(2024, 5, 19, 22, 0, 0), lukas);
-            FuegeDemoSchichtHinzu(3, "Nachtschicht", "Altenpflegerin", "Montag", new DateTime(2024, 5, 19, 22, 0, 0), new DateTime(2024, 5, 20, 6, 0, 0), julia);
-            FuegeDemoSchichtHinzu(4, "Frühschicht", "Pflegehelfer", "Dienstag", new DateTime(2024, 5, 20, 6, 0, 0), new DateTime(2024, 5, 20, 14, 0, 0), markus);
-            FuegeDemoSchichtHinzu(5, "Spätschicht", "Pflegefachkraft", "Mittwoch", new DateTime(2024, 5, 21, 14, 0, 0), new DateTime(2024, 5, 21, 22, 0, 0), sarah);
-            FuegeDemoSchichtHinzu(6, "Nachtschicht", "Pflegehelfer", "Freitag", new DateTime(2024, 5, 23, 22, 0, 0), new DateTime(2024, 5, 24, 6, 0, 0), thomas);
-            FuegeDemoSchichtHinzu(7, "Offene Frühschicht", "Pflegefachkraft", "Donnerstag", new DateTime(2024, 5, 22, 6, 0, 0), new DateTime(2024, 5, 22, 14, 0, 0), null);
-        }
-
-        private Mitarbeiter ErstelleDemoMitarbeiter(int id, string name, string abteilung, string qualifikation, decimal sollstunden, int aktuelleStunden)
-        {
-            return new Mitarbeiter
-            {
-                Id = id,
-                MandantId = 1,
-                FilialeId = 1,
-                Filiale = "Zentrale Wache",
-                StoreId = 1,
-                DepartmentId = 1,
-                RoleId = id,
-                Name = name,
-                Abteilung = abteilung,
-                Qualifikation = qualifikation,
-                SollstundenProWoche = sollstunden,
-                AktuelleWochenstunden = aktuelleStunden,
-                WochenstundenLimit = 48,
-                Stundenlohn = 22,
-                IstAktiv = true
-            };
-        }
-
-        private void FuegeDemoSchichtHinzu(int id, string name, string qualifikation, string wochentag, DateTime start, DateTime ende, Mitarbeiter mitarbeiter)
-        {
-            var schicht = new Schicht
-            {
-                Id = id,
-                MandantId = 1,
-                FilialeId = 1,
-                FilialeName = "Zentrale Wache",
-                Filiale = "Zentrale Wache",
-                StoreId = 1,
-                DepartmentId = 1,
-                RoleId = 1,
-                Name = name,
-                Abteilung = "Pflege",
-                Rolle = qualifikation,
-                Wochentag = wochentag,
-                Start = start,
-                Ende = ende,
-                BenoetigteMitarbeiter = 1,
-                BenoetigteQualifikation = qualifikation,
-                Pausenstunden = 0
-            };
-
-            if (mitarbeiter != null)
-            {
-                schicht.MitarbeiterNamen.Add(mitarbeiter.Name);
-                schicht.MitarbeiterIds.Add(mitarbeiter.Id);
-                mitarbeiter.Schichten.Add(schicht);
-            }
-
-            SchichtListe.Add(schicht);
         }
 
         private bool FilterSchicht(object item)
