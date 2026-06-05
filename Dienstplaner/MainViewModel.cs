@@ -607,6 +607,25 @@ namespace Dienstplaner.ViewModels
             return string.Empty;
         }
 
+        private void SetStatus(string nachricht)
+        {
+            StatusNachricht = nachricht;
+        }
+
+        private static int NaechsteId(IEnumerable<int> vorhandeneIds)
+        {
+            if (vorhandeneIds == null || !vorhandeneIds.Any())
+                return 1;
+
+            return vorhandeneIds.Max() + 1;
+        }
+
+        private static int ParseIntOrZero(string wert)
+        {
+            int zahl;
+            return int.TryParse(wert, out zahl) ? zahl : 0;
+        }
+
         private void OnPropertyChanged([CallerMemberName] string n = null)
         {
             var handler = PropertyChanged;
