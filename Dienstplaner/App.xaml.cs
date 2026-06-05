@@ -1,5 +1,4 @@
 using System;
-using System.Configuration;
 using System.Net;
 using System.Windows;
 using Dienstplaner.Infrastructure;
@@ -42,17 +41,8 @@ namespace Dienstplaner
 
             IDienstplanRepository repository = new SqlDienstplanRepository(connectionFactory);
             var dataService = new DienstplanDataService(repository);
-            if (IsDemoModeEnabled())
-                dataService.SeedDemoDataIfEmpty();
-
             var viewModel = new MainViewModel(dataService);
             return new MainWindow(viewModel);
-        }
-
-        private static bool IsDemoModeEnabled()
-        {
-            bool enabled;
-            return bool.TryParse(ConfigurationManager.AppSettings["DemoMode"], out enabled) && enabled;
         }
     }
 }

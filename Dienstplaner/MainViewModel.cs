@@ -152,10 +152,11 @@ namespace Dienstplaner.ViewModels
             ZuweisungsFehler = new ObservableCollection<string>();
             ZuweisungsWarnungen = new ObservableCollection<string>();
 
+
             AktuellerKontext = new MandantKontext
             {
                 MandantId = 1,
-                MandantName = "DemoMandant",
+                MandantName = "Standardmandant",
                 FilialeId = 1,
                 FilialeName = "Zentrale",
                 Rolle = BenutzerRolle.Personalwesen

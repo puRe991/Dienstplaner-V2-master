@@ -6,8 +6,8 @@ regelkonform Schichten zuzuweisen, Planungsdaten auszuwerten und relevante
 Informationen sicher zu exportieren.
 
 > **Projektstatus:** Der aktuelle Stand ist ein funktionsfähiger Prototyp mit
-> lokalen Demo-Daten. Vor einem produktiven Einsatz sollten insbesondere
-> Persistenz, Authentifizierung, Berechtigungskonzept und Datenschutzprozesse an
+> SQL-Server-Persistenzpfad. Vor einem produktiven Einsatz sollten insbesondere
+> Authentifizierung, Berechtigungskonzept und Datenschutzprozesse an
 > die eigene Umgebung angepasst und geprüft werden.
 
 ## Inhaltsverzeichnis
@@ -99,8 +99,9 @@ msbuild Dienstplaner.sln /m /p:Configuration=Release /p:Platform="Any CPU"
 - Das Projekt **Dienstplaner** als Startprojekt auswählen.
 - Mit `F5` starten.
 
-Beim Start lädt die Anwendung lokale Demo-Daten, sodass die wichtigsten
-Planungs-, Reporting- und Exportfunktionen direkt ausprobiert werden können.
+Beim Start verbindet sich die Anwendung mit der in `App.config` hinterlegten
+Datenbank, führt ausstehende Migrationen aus und lädt die persistierten
+Planungsdaten.
 
 ## Tests und Qualitätssicherung
 
@@ -135,7 +136,7 @@ CodeQL-Analyse.
 ├── Dienstplaner.sln               # Visual-Studio-Projektmappe
 ├── Dienstplaner/                  # WPF-Anwendung und Fachlogik
 │   ├── MainWindow.xaml            # Benutzeroberfläche
-│   ├── MainViewModel.cs           # UI-Zustand, Commands und Demo-Daten
+│   ├── MainViewModel.cs           # UI-Zustand, Commands und Bindings
 │   ├── PlanningRules.cs           # Fachliche Regeln der Schichtzuweisung
 │   ├── ZuweisungsService.cs       # Ausführung und Prüfung von Zuweisungen
 │   ├── Services/                  # Export-, Forecast-, Reporting- und Integrationsdienste
@@ -145,8 +146,7 @@ CodeQL-Analyse.
 
 ## Konfiguration und Datenhaltung
 
-Die Anwendung arbeitet im aktuellen UI-Ablauf mit lokalen Demo-Daten im
-`MainViewModel`. Zusätzlich enthält das Repository eine vorbereitete
+Die Anwendung arbeitet im UI-Ablauf mit der vorbereiteten
 SQL-Server-Infrastruktur. Die standardmäßige LocalDB-Verbindung ist in
 `Dienstplaner/App.config` hinterlegt:
 

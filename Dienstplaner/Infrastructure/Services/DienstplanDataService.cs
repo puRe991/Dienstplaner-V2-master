@@ -58,48 +58,5 @@ namespace Dienstplaner.Infrastructure.Services
             _repository.DeleteSchicht(_mandantId, schicht.DatabaseId);
         }
 
-        public void SeedDemoDataIfEmpty()
-        {
-#if DEBUG
-            if (_repository.HasAnyData(_mandantId))
-                return;
-
-            Mitarbeiter mitarbeiter = _repository.AddMitarbeiter(_mandantId, "Max Mustermann", "Kasse", "Standard", 40);
-            DateTime demoStart = GetNaechsterWochentag("Montag").Date.AddHours(8);
-            Schicht schicht = _repository.AddSchicht(_mandantId, "Frühschicht", "Kasse", "Montag", demoStart, demoStart.AddHours(8), 2, "Standard");
-            _repository.Assign(_mandantId, mitarbeiter.DatabaseId, schicht.DatabaseId);
-#endif
-        }
-
-        private static DateTime GetNaechsterWochentag(string wochentag)
-        {
-            DayOfWeek target;
-            if (!TryParseDayOfWeek(wochentag, out target))
-                return DateTime.Today;
-
-            int days = ((int)target - (int)DateTime.Today.DayOfWeek + 7) % 7;
-            if (days == 0)
-                days = 7;
-            return DateTime.Today.AddDays(days);
-        }
-
-        private static bool TryParseDayOfWeek(string value, out DayOfWeek dayOfWeek)
-        {
-            dayOfWeek = DayOfWeek.Monday;
-            if (string.IsNullOrWhiteSpace(value))
-                return false;
-
-            switch (value.Trim().ToLowerInvariant())
-            {
-                case "montag": dayOfWeek = DayOfWeek.Monday; return true;
-                case "dienstag": dayOfWeek = DayOfWeek.Tuesday; return true;
-                case "mittwoch": dayOfWeek = DayOfWeek.Wednesday; return true;
-                case "donnerstag": dayOfWeek = DayOfWeek.Thursday; return true;
-                case "freitag": dayOfWeek = DayOfWeek.Friday; return true;
-                case "samstag": dayOfWeek = DayOfWeek.Saturday; return true;
-                case "sonntag": dayOfWeek = DayOfWeek.Sunday; return true;
-                default: return Enum.TryParse(value, true, out dayOfWeek);
-            }
-        }
     }
 }
