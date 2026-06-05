@@ -67,6 +67,24 @@ Für Entwicklung und Ausführung werden empfohlen:
 > WPF und .NET Framework 4.7.2 sind Windows-Technologien. Build, Tests und
 > Anwendungsausführung sollten deshalb in einer Windows-Umgebung erfolgen.
 
+### Hinweis zu Visual Studio 2019
+
+Die Projektmappe ist bewusst im Visual-Studio-2019-Format gespeichert. Auch das
+Testprojekt verwendet ein klassisches .NET-Framework-Projektformat statt eines
+SDK-Style-Projekts, damit Visual Studio 2019 es ohne Abhängigkeit von neueren
+.NET-SDK-/MSBuild-Versionen laden kann.
+
+Wenn Visual Studio dennoch meldet, dass mindestens ein Projekt nicht geladen
+werden konnte, prüfe zuerst diese Punkte:
+
+1. Visual Studio 2019 auf Version 16.11 aktualisieren.
+2. Im Visual-Studio-Installer die Workload **.NET-Desktopentwicklung** und das
+   **.NET Framework 4.7.2 Developer Pack** installieren.
+3. Die Projektmappe schließen, den Ordner `.vs` löschen und `Dienstplaner.sln`
+   erneut öffnen.
+4. NuGet-Pakete über `nuget restore Dienstplaner.sln` oder über Visual Studio
+   wiederherstellen.
+
 ## Schnellstart
 
 ### 1. Repository klonen
