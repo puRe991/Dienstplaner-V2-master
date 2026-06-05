@@ -20,18 +20,13 @@ namespace Dienstplaner
             try
             {
                 MainWindow = CreateMainWindow();
-                MainWindow.Show();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    "Dienstplaner konnte nicht gestartet werden. Die Datenbankverbindung oder die Datenbankmigration ist fehlgeschlagen. " +
-                    "Bitte prüfen Sie die Verbindungszeichenfolge 'DienstplanerDb' und ob SQL Server erreichbar ist.\n\nTechnische Details: " + ex.Message,
-                    "Startfehler",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                Shutdown(1);
+                MainWindow = CreateDemoMainWindow(ex);
             }
+
+            MainWindow.Show();
         }
 
         private static MainWindow CreateMainWindow()
@@ -46,6 +41,13 @@ namespace Dienstplaner
                 dataService.SeedDemoDataIfEmpty();
 
             var viewModel = new MainViewModel(dataService);
+            return new MainWindow(viewModel);
+        }
+
+        private static MainWindow CreateDemoMainWindow(Exception startupException)
+        {
+            var viewModel = new MainViewModel();
+            viewModel.StatusNachricht = "Demo-Modus aktiv: Datenbank nicht erreichbar (" + startupException.Message + ").";
             return new MainWindow(viewModel);
         }
 
