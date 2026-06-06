@@ -14,12 +14,15 @@ Die Anwendung nutzt nur die Python-Standardbibliothek (`tkinter`, `sqlite3`, `cs
 
 ## Funktionsumfang
 
-- Dashboard-Oberfläche im Stil der Dienstplanung-Pro-Vorlage mit Kopfbereich, Navigation, Wochenraster, Kennzahlenkarten, Kalender, Abwesenheiten und Schnellaktionen.
-- Demo-Woche wird beim ersten Start regelkonform erzeugt, wenn noch keine SQLite-Daten vorhanden sind.
-- Schichten anlegen, bearbeiten, löschen, suchen und im Wochenraster auswählen.
+- Dashboard-Oberfläche im Stil der Dienstplanung-Pro-Vorlage mit klickbarer Navigation, Kopfbereich, Wochenraster, Kennzahlenkarten, Kalender, Abwesenheiten und Schnellaktionen.
+- Keine Demo-Stammdaten: Ein neuer Datenbestand startet leer und wird ausschließlich über die Oberfläche gepflegt.
+- Mitarbeitende über Schnellaktion oder Verwaltungsfenster anlegen, bearbeiten, deaktivieren oder löschen; Mitarbeitendenstammdaten werden mit bestehenden Zuweisungen synchronisiert.
+- Abwesenheiten über Schnellaktion oder Verwaltungsfenster erfassen und löschen; Überschneidungen mit bestehenden Schichten werden blockiert.
+- Schichten über Schnellaktion, Wochenraster oder Verwaltungsfenster anlegen, bearbeiten, löschen, suchen, im Wochenraster auswählen und Mitarbeitenden regelgeprüft zuweisen.
+- Verwaltungsfenster für Mitarbeitende, Abwesenheiten, Schichten, Berichte und Einstellungen sind über die linke Navigation erreichbar.
 - Harte Planungsregeln prüfen: Kapazität, aktive Mitarbeitende, Doppelzuweisung, Abteilung, Filiale, Qualifikation, Wochenstundenlimit, Tageshöchstarbeitszeit, Ruhezeit, Zeitkonflikte und Abwesenheiten.
 - Weiche Warnungen erzeugen: fehlende Verfügbarkeit und lange Schichten.
-- Abwesenheiten zusammen mit Mitarbeitenden und Zuweisungen in SQLite speichern und laden.
+- Abwesenheiten, Mitarbeitende, Schichten und Zuweisungen vollständig in SQLite speichern und laden.
 - Reports für Personalkosten, Besetzungsgrad, Überstunden und Regelverstöße berechnen.
 - Dienstplan als CSV oder Textdatei exportieren.
 - Forecast-CSV mit dem Format `FilialeId;Filiale;Datum;Umsatz;Kunden` importieren.

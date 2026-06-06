@@ -18,6 +18,12 @@ class Absence:
     start: datetime
     end: datetime
     reason: str = ""
+    id: str = field(default_factory=lambda: str(uuid4()))
+
+    def __post_init__(self) -> None:
+        self.reason = self.reason.strip()
+        if self.end <= self.start:
+            raise ValueError("Abwesenheitsende muss nach dem Start liegen.")
 
     def overlaps(self, start: datetime, end: datetime) -> bool:
         return start < self.end and end > self.start

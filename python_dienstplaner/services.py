@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, List
 
-from .models import AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, Shift
+from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, Shift
 from .rules import PlanningRules
 
 
@@ -23,6 +23,7 @@ class SchedulerService:
         weekly_hours_limit: int = 40,
         branch: str = "Zentrale",
         hourly_wage: float = 15.0,
+        is_active: bool = True,
     ) -> Employee:
         employee = Employee(
             name=name,
@@ -31,9 +32,54 @@ class SchedulerService:
             weekly_hours_limit=weekly_hours_limit,
             branch=branch,
             hourly_wage=hourly_wage,
+            is_active=is_active,
         )
         self.employees.append(employee)
         return employee
+
+    def update_employee(
+        self,
+        employee_id: str,
+        name: str,
+        department: str,
+        qualification: str = "",
+        weekly_hours_limit: int = 40,
+        branch: str = "Zentrale",
+        hourly_wage: float = 15.0,
+        is_active: bool = True,
+    ) -> Employee:
+        employee = self.find_employee(employee_id)
+        if employee is None:
+            raise ValueError("Mitarbeiter wurde nicht gefunden.")
+        updated = Employee(
+            id=employee.id,
+            name=name,
+            department=department,
+            qualification=qualification,
+            weekly_hours_limit=weekly_hours_limit,
+            branch=branch,
+            hourly_wage=hourly_wage,
+            is_active=is_active,
+            shifts=list(employee.shifts),
+            absences=list(employee.absences),
+            availabilities=list(employee.availabilities),
+        )
+        index = self.employees.index(employee)
+        self.employees[index] = updated
+        for shift in self.shifts:
+            for pos, assigned_id in enumerate(shift.employee_ids):
+                if assigned_id == updated.id and pos < len(shift.employee_names):
+                    shift.employee_names[pos] = updated.name
+        return updated
+
+    def delete_employee(self, employee_id: str) -> bool:
+        employee = self.find_employee(employee_id)
+        if employee is None:
+            return False
+        self.employees = [item for item in self.employees if item.id != employee_id]
+        for shift in self.shifts:
+            self._remove_assignment_from_shift(shift, employee_id)
+        return True
 
     def add_shift(
         self,
@@ -70,6 +116,35 @@ class SchedulerService:
         shift.employee_names.append(employee.name)
         return AssignmentResult(True, [], outcome.warnings)
 
+    def unassign(self, employee_id: str, shift_id: str) -> bool:
+        employee = self.find_employee(employee_id)
+        shift = self.find_shift(shift_id)
+        if employee is None or shift is None or employee_id not in shift.employee_ids:
+            return False
+        employee.shifts = [item for item in employee.shifts if item.id != shift_id]
+        self._remove_assignment_from_shift(shift, employee_id)
+        return True
+
+    def add_absence(self, employee_id: str, start: datetime, end: datetime, reason: str = "") -> Absence:
+        employee = self.find_employee(employee_id)
+        if employee is None:
+            raise ValueError("Mitarbeiter wurde nicht gefunden.")
+        absence = Absence(start=start, end=end, reason=reason)
+        conflicts = [shift for shift in employee.shifts if absence.overlaps(shift.start, shift.end)]
+        if conflicts:
+            names = ", ".join(f"{shift.name} {shift.start:%d.%m. %H:%M}" for shift in conflicts[:3])
+            raise ValueError(f"Abwesenheit überschneidet sich mit bestehenden Schichten: {names}")
+        employee.absences.append(absence)
+        return absence
+
+    def delete_absence(self, absence_id: str) -> bool:
+        for employee in self.employees:
+            before = len(employee.absences)
+            employee.absences = [item for item in employee.absences if item.id != absence_id]
+            if len(employee.absences) != before:
+                return True
+        return False
+
     def find_employee(self, employee_id: str) -> Employee | None:
         return next((employee for employee in self.employees if employee.id == employee_id), None)
 
@@ -77,6 +152,7 @@ class SchedulerService:
         return next((shift for shift in self.shifts if shift.id == shift_id), None)
 
     def create_reports(self) -> List[ReportMetric]:
+        active_employees = [employee for employee in self.employees if employee.is_active]
         personnel_costs = sum(
             sum(shift.duration_hours * employee.hourly_wage for shift in employee.shifts)
             for employee in self.employees
@@ -89,6 +165,7 @@ class SchedulerService:
         return [
             ReportMetric("Kosten", "Personalkosten", f"{personnel_costs:.2f} EUR", "Iststunden auf Basis des Stundenlohns"),
             ReportMetric("Planung", "Besetzungsgrad", f"{occupancy:.1f} %", "Zugewiesene im Verhältnis zum Bedarf"),
+            ReportMetric("Personal", "Aktive Mitarbeitende", str(len(active_employees)), "Inaktive werden nicht eingeplant"),
             ReportMetric("Arbeitszeit", "Überstunden", f"{overtime:.1f} h", "Iststunden über Sollstunden"),
             ReportMetric("Compliance", "Regelverstöße", str(rule_violations), "Unterbesetzung und Limits"),
         ]
@@ -104,7 +181,7 @@ class SchedulerService:
         with output.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle, delimiter=delimiter)
             writer.writerow(["Schicht", "Abteilung", "Filiale", "Start", "Ende", "Kapazität", "Mitarbeitende"])
-            for shift in self.shifts:
+            for shift in sorted(self.shifts, key=lambda item: (item.start, item.name)):
                 writer.writerow([
                     shift.name,
                     shift.department,
@@ -118,10 +195,22 @@ class SchedulerService:
 
     def _schedule_as_text(self) -> str:
         lines = ["Dienstplan", "========", ""]
-        for shift in self.shifts:
+        for shift in sorted(self.shifts, key=lambda item: (item.start, item.name)):
             employees = ", ".join(shift.employee_names) or "nicht besetzt"
             lines.append(f"{shift.name} | {shift.start:%d.%m.%Y %H:%M}-{shift.end:%H:%M} | {employees}")
         return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _remove_assignment_from_shift(shift: Shift, employee_id: str) -> None:
+        kept_ids: list[str] = []
+        kept_names: list[str] = []
+        for index, assigned_id in enumerate(shift.employee_ids):
+            if assigned_id == employee_id:
+                continue
+            kept_ids.append(assigned_id)
+            kept_names.append(shift.employee_names[index] if index < len(shift.employee_names) else "")
+        shift.employee_ids = kept_ids
+        shift.employee_names = kept_names
 
 
 class ForecastImportService:
