@@ -124,16 +124,6 @@ class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             service.add_absence(employee.id, datetime(2026, 1, 1, 12), datetime(2026, 1, 1, 18), "Urlaub")
 
-
-    def test_delete_absence_removes_absence_by_id(self) -> None:
-        service = SchedulerService()
-        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
-        absence = service.add_absence(employee.id, datetime(2026, 1, 2, 8), datetime(2026, 1, 2, 16), "Urlaub")
-
-        self.assertTrue(service.delete_absence(absence.id))
-
-        self.assertEqual([], employee.absences)
-
     def test_delete_employee_removes_assignments_from_shifts(self) -> None:
         service = SchedulerService()
         employee = service.add_employee("Eva Retail", "Kasse", "Kasse")

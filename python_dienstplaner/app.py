@@ -810,6 +810,125 @@ class SchedulerApp(tk.Tk):
         ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
         return dialog
 
+    def _open_employee_dialog(self, employee: Employee | None = None) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Mitarbeiter bearbeiten" if employee else "Mitarbeiter anlegen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        values = {
+            "name": tk.StringVar(value=employee.name if employee else ""),
+            "department": tk.StringVar(value=employee.department if employee else ""),
+            "qualification": tk.StringVar(value=employee.qualification if employee else ""),
+            "hours": tk.StringVar(value=str(employee.weekly_hours_limit if employee else 40)),
+            "branch": tk.StringVar(value=employee.branch if employee else "Zentrale"),
+            "wage": tk.StringVar(value=str(employee.hourly_wage if employee else 15.0)),
+            "active": tk.BooleanVar(value=employee.is_active if employee else True),
+        }
+        fields = [("name", "Name"), ("department", "Abteilung"), ("qualification", "Qualifikation"), ("hours", "Wochenstunden"), ("branch", "Filiale"), ("wage", "Stundenlohn")]
+        for row, (key, label) in enumerate(fields):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+        ttk.Checkbutton(dialog, text="Aktiv", variable=values["active"]).grid(row=len(fields), column=1, sticky="w", padx=18, pady=7)
+
+        def save_employee() -> None:
+            try:
+                hours = int(values["hours"].get())
+                wage = float(values["wage"].get().replace(",", "."))
+                if employee is None:
+                    self.service.add_employee(values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                else:
+                    self.service.update_employee(employee.id, values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Mitarbeiter gespeichert.")
+            except ValueError as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        if employee is not None:
+            def delete_employee() -> None:
+                if not messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=dialog):
+                    return
+                self.service.delete_employee(employee.id)
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Mitarbeiter gelöscht.")
+
+            ttk.Button(dialog, text="Löschen", style="Danger.TButton", command=delete_employee).grid(row=len(fields) + 1, column=0, sticky="w", padx=18, pady=(12, 18))
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_employee).grid(row=len(fields) + 1, column=1, sticky="e", padx=18, pady=(12, 18))
+
+    def _open_absence_dialog(self) -> None:
+        if not self.service.employees:
+            messagebox.showinfo("Abwesenheit", "Bitte zuerst Mitarbeitende anlegen.", parent=self)
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Abwesenheit erfassen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        employees = sorted(self.service.employees, key=lambda item: item.name)
+        employee_options = {f"{employee.name} ({employee.department})": employee.id for employee in employees}
+        values = {
+            "employee": tk.StringVar(value=next(iter(employee_options))),
+            "start": tk.StringVar(value=self.week_start.strftime("%Y-%m-%d 00:00")),
+            "end": tk.StringVar(value=(self.week_start + timedelta(days=1)).strftime("%Y-%m-%d 00:00")),
+            "reason": tk.StringVar(value="Urlaub"),
+        }
+        rows = [("employee", "Mitarbeiter"), ("start", "Start"), ("end", "Ende"), ("reason", "Grund")]
+        for row, (key, label) in enumerate(rows):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            if key == "employee":
+                ttk.Combobox(dialog, textvariable=values[key], values=list(employee_options), width=32, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+            else:
+                ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+
+        def save_absence() -> None:
+            try:
+                employee_id = employee_options[values["employee"].get()]
+                self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get())
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Abwesenheit gespeichert.")
+            except (KeyError, ValueError) as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_absence).grid(row=4, column=1, sticky="e", padx=18, pady=(12, 18))
+
+    def _open_assignment_dialog(self) -> None:
+        if not self.service.employees or not self.service.shifts:
+            messagebox.showinfo("Zuweisung", "Bitte zuerst Mitarbeitende und Schichten anlegen.", parent=self)
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Mitarbeitenden zuweisen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        employees = sorted([item for item in self.service.employees if item.is_active], key=lambda item: item.name)
+        shifts = sorted(self.service.shifts, key=lambda item: (item.start, item.name))
+        employee_options = {f"{employee.name} ({employee.department}, {employee.branch})": employee.id for employee in employees}
+        shift_options = {f"{shift.name} {shift.start:%d.%m. %H:%M} ({len(shift.employee_ids)}/{shift.required_employees})": shift.id for shift in shifts}
+        if not employee_options:
+            messagebox.showinfo("Zuweisung", "Es gibt keine aktiven Mitarbeitenden.", parent=self)
+            dialog.destroy()
+            return
+        values = {"employee": tk.StringVar(value=next(iter(employee_options))), "shift": tk.StringVar(value=next(iter(shift_options)))}
+        for row, (key, label, options) in enumerate([("employee", "Mitarbeiter", employee_options), ("shift", "Schicht", shift_options)]):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Combobox(dialog, textvariable=values[key], values=list(options), width=46, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+
+        def assign_employee() -> None:
+            try:
+                result = self.service.assign(employee_options[values["employee"].get()], shift_options[values["shift"].get()])
+                if not result.success:
+                    raise ValueError(result.message)
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status(result.message)
+            except (KeyError, ValueError) as exc:
+                messagebox.showerror("Zuweisung nicht möglich", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
+
     def _replace_shift(self, old_shift: Shift, new_shift: Shift) -> None:
         index = self.service.shifts.index(old_shift)
         self.service.shifts[index] = new_shift

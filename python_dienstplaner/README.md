@@ -14,12 +14,11 @@ Die Anwendung nutzt nur die Python-Standardbibliothek (`tkinter`, `sqlite3`, `cs
 
 ## Funktionsumfang
 
-- Dashboard-Oberfläche im Stil der Dienstplanung-Pro-Vorlage mit klickbarer Navigation, Kopfbereich, Wochenraster, Kennzahlenkarten, Kalender, Abwesenheiten und Schnellaktionen.
+- Dashboard-Oberfläche im Stil der Dienstplanung-Pro-Vorlage mit Kopfbereich, Navigation, Wochenraster, Kennzahlenkarten, Kalender, Abwesenheiten und Schnellaktionen.
 - Keine Demo-Stammdaten: Ein neuer Datenbestand startet leer und wird ausschließlich über die Oberfläche gepflegt.
-- Mitarbeitende über Schnellaktion oder Verwaltungsfenster anlegen, bearbeiten, deaktivieren oder löschen; Mitarbeitendenstammdaten werden mit bestehenden Zuweisungen synchronisiert.
-- Abwesenheiten über Schnellaktion oder Verwaltungsfenster erfassen und löschen; Überschneidungen mit bestehenden Schichten werden blockiert.
-- Schichten über Schnellaktion, Wochenraster oder Verwaltungsfenster anlegen, bearbeiten, löschen, suchen, im Wochenraster auswählen und Mitarbeitenden regelgeprüft zuweisen.
-- Verwaltungsfenster für Mitarbeitende, Abwesenheiten, Schichten, Berichte und Einstellungen sind über die linke Navigation erreichbar.
+- Mitarbeitende anlegen, bearbeiten, deaktivieren oder löschen; Mitarbeitendenstammdaten werden mit bestehenden Zuweisungen synchronisiert.
+- Abwesenheiten erfassen und per Doppelklick löschen; Überschneidungen mit bestehenden Schichten werden blockiert.
+- Schichten anlegen, bearbeiten, löschen, suchen, im Wochenraster auswählen und Mitarbeitenden regelgeprüft zuweisen.
 - Harte Planungsregeln prüfen: Kapazität, aktive Mitarbeitende, Doppelzuweisung, Abteilung, Filiale, Qualifikation, Wochenstundenlimit, Tageshöchstarbeitszeit, Ruhezeit, Zeitkonflikte und Abwesenheiten.
 - Weiche Warnungen erzeugen: fehlende Verfügbarkeit und lange Schichten.
 - Abwesenheiten, Mitarbeitende, Schichten und Zuweisungen vollständig in SQLite speichern und laden.
