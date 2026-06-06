@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
-from .models import Employee, Shift
+from .models import Absence, Employee, Shift
 from .services import SchedulerService
 
 
@@ -24,6 +24,7 @@ class SQLiteSchedulerRepository:
     def save(self, service: SchedulerService) -> None:
         with self._connect() as connection:
             connection.execute("DELETE FROM assignments")
+            connection.execute("DELETE FROM absences")
             connection.execute("DELETE FROM shifts")
             connection.execute("DELETE FROM employees")
             connection.executemany(
@@ -68,6 +69,14 @@ class SQLiteSchedulerRepository:
                 "INSERT INTO assignments(employee_id, shift_id) VALUES(?, ?)",
                 [(employee.id, shift.id) for employee in service.employees for shift in employee.shifts],
             )
+            connection.executemany(
+                "INSERT INTO absences(employee_id, start, end, reason) VALUES(?, ?, ?, ?)",
+                [
+                    (employee.id, absence.start.isoformat(), absence.end.isoformat(), absence.reason)
+                    for employee in service.employees
+                    for absence in employee.absences
+                ],
+            )
 
     def load(self) -> SchedulerService:
         service = SchedulerService()
@@ -111,6 +120,12 @@ class SQLiteSchedulerRepository:
                 shift.employee_ids.append(employee.id)
                 shift.employee_names.append(employee.name)
 
+            for employee_id, start, end, reason in connection.execute("SELECT employee_id, start, end, reason FROM absences"):
+                employee = employees.get(employee_id)
+                if employee is None:
+                    continue
+                employee.absences.append(Absence(datetime.fromisoformat(start), datetime.fromisoformat(end), reason or ""))
+
         service.employees.extend(employees.values())
         service.shifts.extend(shifts.values())
         return service
@@ -147,6 +162,12 @@ class SQLiteSchedulerRepository:
                     employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
                     shift_id TEXT NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
                     PRIMARY KEY(employee_id, shift_id)
+                );
+                CREATE TABLE IF NOT EXISTS absences(
+                    employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                    start TEXT NOT NULL,
+                    end TEXT NOT NULL,
+                    reason TEXT NOT NULL DEFAULT ''
                 );
                 """
             )
