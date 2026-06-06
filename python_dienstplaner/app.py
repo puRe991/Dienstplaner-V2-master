@@ -3,7 +3,7 @@ from __future__ import annotations
 import calendar
 import tkinter as tk
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -54,7 +54,6 @@ class SchedulerApp(tk.Tk):
         self.minsize(1180, 720)
         self.configure(bg="#F8FAFC")
         self._configure_styles()
-        self._ensure_demo_data()
         self._build_ui()
         self._refresh_all()
 
@@ -100,8 +99,9 @@ class SchedulerApp(tk.Tk):
         search.bind("<FocusIn>", self._clear_search_placeholder)
         search.bind("<Return>", lambda _event: self._apply_search())
 
-        tk.Label(header, text="🔔 3", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12)).grid(row=0, column=3, padx=(12, 24))
-        tk.Label(header, text="Max Mustermann\nAdministrator", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
+        self.notification_label = tk.Label(header, text="🔔 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
+        self.notification_label.grid(row=0, column=3, padx=(12, 24))
+        tk.Label(header, text="Lokaler Benutzer\nPlanung", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
@@ -116,10 +116,13 @@ class SchedulerApp(tk.Tk):
         card = tk.Frame(sidebar, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
         card.grid(row=9, column=0, sticky="ew", padx=20, pady=20)
         tk.Label(card, text="🌙  Nächste Schicht", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=18, pady=(16, 12))
-        tk.Label(card, text="Heute, 20:00 – 06:00", bg="#FFFFFF", fg="#0F172A").pack(anchor="w", padx=18)
-        tk.Label(card, text="Nachtschicht", bg="#DBEAFE", fg="#0B4DB3", font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=18, pady=8)
-        tk.Label(card, text="Standort\n📍  Zentrale Wache", bg="#FFFFFF", fg="#475569", justify="left").pack(anchor="w", padx=18, pady=(16, 18))
-        tk.Label(sidebar, text="© 2024 Dienstplanung Pro", bg="#FFFFFF", fg="#64748B").grid(row=10, column=0, sticky="w", padx=24, pady=(0, 16))
+        self.next_shift_time_label = tk.Label(card, text="Keine Schicht geplant", bg="#FFFFFF", fg="#0F172A")
+        self.next_shift_time_label.pack(anchor="w", padx=18)
+        self.next_shift_name_label = tk.Label(card, text="Offen", bg="#E2E8F0", fg="#334155", font=("Segoe UI", 9, "bold"))
+        self.next_shift_name_label.pack(anchor="w", padx=18, pady=8)
+        self.next_shift_branch_label = tk.Label(card, text="Standort\n–", bg="#FFFFFF", fg="#475569", justify="left")
+        self.next_shift_branch_label.pack(anchor="w", padx=18, pady=(16, 18))
+        tk.Label(sidebar, text="© 2026 Dienstplanung Pro", bg="#FFFFFF", fg="#64748B").grid(row=10, column=0, sticky="w", padx=24, pady=(0, 16))
 
     def _build_content(self) -> None:
         content = ttk.Frame(self, padding=(28, 20, 22, 16))
@@ -184,7 +187,7 @@ class SchedulerApp(tk.Tk):
         self.detail_body = tk.Label(details, text="Bitte eine Schicht auswählen.", bg="#FFFFFF", fg="#334155", justify="left")
         self.detail_body.grid(row=1, column=0, sticky="w", padx=18, pady=(0, 16))
         ttk.Button(details, text="Bearbeiten", style="Ghost.TButton", command=self._open_shift_dialog_for_selected).grid(row=1, column=2, padx=4, pady=14)
-        ttk.Button(details, text="Tauschanfrage", style="Ghost.TButton", command=self._show_swap_info).grid(row=1, column=3, padx=4, pady=14)
+        ttk.Button(details, text="Zuweisen", style="Ghost.TButton", command=self._open_assignment_dialog).grid(row=1, column=3, padx=4, pady=14)
         ttk.Button(details, text="Löschen", style="Danger.TButton", command=self._delete_selected_shift).grid(row=1, column=4, padx=(4, 18), pady=14)
 
     def _build_right_panel(self, parent: ttk.Frame) -> None:
@@ -199,7 +202,9 @@ class SchedulerApp(tk.Tk):
         actions.grid(row=2, column=0, sticky="ew")
         tk.Label(actions, text="Schnellaktionen", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=16, pady=(14, 8))
         for text, command in [
-            ("↔  Tauschanfrage erstellen", self._show_swap_info),
+            ("👥 Mitarbeiter anlegen", self._open_employee_dialog),
+            ("☂ Abwesenheit erfassen", self._open_absence_dialog),
+            ("➕ Mitarbeitenden zuweisen", self._open_assignment_dialog),
             ("▤  Schichtvorlage anlegen", self._open_shift_dialog),
             ("✈  Dienstplan veröffentlichen", self._publish_schedule),
             ("📈 Forecast importieren", self._import_forecast),
@@ -210,22 +215,39 @@ class SchedulerApp(tk.Tk):
 
     def _refresh_all(self) -> None:
         self.week_label.configure(text=f"📅  {self.week_start.day}. – {(self.week_start + timedelta(days=6)).day}. {self._month_name(self.week_start)} {self.week_start.year}")
+        self._refresh_header_state()
         self._refresh_cards()
         self._refresh_schedule_grid()
         self._refresh_calendar()
         self._refresh_absences()
         self._refresh_details()
 
+    def _refresh_header_state(self) -> None:
+        open_slots = sum(max(0, shift.required_employees - len(shift.employee_ids)) for shift in self._week_shifts())
+        current_time = datetime.now()
+        upcoming = next((shift for shift in sorted(self.service.shifts, key=lambda item: item.start) if shift.start >= current_time), None)
+        self.notification_label.configure(text=f"🔔 {open_slots}")
+        if upcoming is None:
+            self.next_shift_time_label.configure(text="Keine Schicht geplant")
+            self.next_shift_name_label.configure(text="Offen", bg="#E2E8F0", fg="#334155")
+            self.next_shift_branch_label.configure(text="Standort\n–")
+            return
+        style = self._style_for_shift(upcoming)
+        self.next_shift_time_label.configure(text=f"{upcoming.start:%d.%m.%Y, %H:%M} – {upcoming.end:%H:%M}")
+        self.next_shift_name_label.configure(text=upcoming.name, bg=style.background, fg=style.foreground)
+        self.next_shift_branch_label.configure(text=f"Standort\n📍  {upcoming.branch}")
+
     def _refresh_cards(self) -> None:
         for child in self.cards_frame.winfo_children():
             child.destroy()
+        active_count = sum(1 for employee in self.service.employees if employee.is_active)
         open_shifts = sum(max(0, shift.required_employees - len(shift.employee_ids)) for shift in self._week_shifts())
         absences = sum(1 for employee in self.service.employees for absence in employee.absences if self._range_in_week(absence.start, absence.end))
         hours = sum(shift.duration_hours * len(shift.employee_ids) for shift in self._week_shifts())
         avg_hours = hours / max(1, len(self.service.employees))
         cards = [
-            ("👥", "Mitarbeiter", str(len(self.service.employees)), "Aktiv"),
-            ("▣", "Offene Schichten", str(open_shifts), "Davon 2 kritisch" if open_shifts else "Voll besetzt"),
+            ("👥", "Mitarbeiter", str(active_count), f"{len(self.service.employees) - active_count} inaktiv" if len(self.service.employees) != active_count else "Aktiv"),
+            ("▣", "Offene Schichten", str(open_shifts), "Kritisch prüfen" if open_shifts else "Voll besetzt"),
             ("☂", "Abwesenheiten", str(absences), "Genehmigt"),
             ("◷", "Stunden diese Woche", f"{hours:.0f} h", f"Ø {avg_hours:.1f} h pro Mitarbeiter"),
         ]
@@ -250,10 +272,16 @@ class SchedulerApp(tk.Tk):
             tk.Label(self.grid_frame, text=text, bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 9, "bold"), justify="center", height=3).grid(row=0, column=column, sticky="nsew")
 
         filtered_employees = self._filtered_employees()
+        if not filtered_employees:
+            message = "Keine Mitarbeitenden vorhanden. Bitte über Schnellaktionen anlegen." if not self.service.employees else "Keine Mitarbeitenden passend zur Suche."
+            tk.Label(self.grid_frame, text=message, bg="#FFFFFF", fg="#64748B", pady=28).grid(row=1, column=0, columnspan=8, sticky="nsew")
+            return
         for row_index, employee in enumerate(filtered_employees, start=1):
             self.employee_rows[employee.id] = row_index
             employee_text = f"{self._avatar(employee.name)}  {employee.name}\n{employee.qualification or employee.department}\n● {self._availability_text(employee)}"
-            tk.Label(self.grid_frame, text=employee_text, bg="#FFFFFF", fg="#0F172A", justify="left", anchor="w", padx=14, pady=8).grid(row=row_index, column=0, sticky="nsew")
+            employee_label = tk.Label(self.grid_frame, text=employee_text, bg="#FFFFFF", fg="#0F172A", justify="left", anchor="w", padx=14, pady=8, cursor="hand2")
+            employee_label.grid(row=row_index, column=0, sticky="nsew")
+            employee_label.bind("<Double-Button-1>", lambda _event, employee_id=employee.id: self._open_employee_dialog(self.service.find_employee(employee_id)))
             for day_index in range(7):
                 cell = self._make_schedule_cell(employee, day_index)
                 cell.grid(row=row_index, column=day_index + 1, sticky="nsew", padx=4, pady=5)
@@ -300,7 +328,9 @@ class SchedulerApp(tk.Tk):
             return
         for employee, absence in rows[:4]:
             text = f"{employee.name}\n{absence.start:%d.%m.} – {absence.end:%d.%m.}\n{absence.reason or 'Abwesenheit'}"
-            tk.Label(self.absence_frame, text=text, bg="#FFFFFF", fg="#334155", justify="left").pack(anchor="w", padx=16, pady=(0, 12))
+            label = tk.Label(self.absence_frame, text=text, bg="#FFFFFF", fg="#334155", justify="left", cursor="hand2")
+            label.pack(anchor="w", padx=16, pady=(0, 12))
+            label.bind("<Double-Button-1>", lambda _event, absence_id=absence.id: self._delete_absence(absence_id))
 
     def _refresh_details(self) -> None:
         shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id else None
@@ -317,10 +347,20 @@ class SchedulerApp(tk.Tk):
             text=(
                 f"{shift.start:%A, %d.%m.%Y}\n"
                 f"{shift.start:%H:%M} – {shift.end:%H:%M} ({shift.duration_hours:.0f} h)\n"
-                f"Station 1 – {shift.branch}\n"
+                f"{shift.department} – {shift.branch}\n"
+                f"Kapazität: {len(shift.employee_ids)}/{shift.required_employees}\n"
                 f"Zugewiesen: {assigned}"
             )
         )
+
+    def _delete_absence(self, absence_id: str) -> None:
+        if not messagebox.askyesno("Abwesenheit löschen", "Soll diese Abwesenheit gelöscht werden?", parent=self):
+            return
+        if self.service.delete_absence(absence_id):
+            self._refresh_all()
+            self._set_status("Abwesenheit gelöscht.")
+        else:
+            self._set_status("Abwesenheit wurde nicht gefunden.")
 
     def _open_shift_dialog_for_selected(self) -> None:
         shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id else None
@@ -376,6 +416,125 @@ class SchedulerApp(tk.Tk):
                 messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
 
         ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_shift).grid(row=7, column=1, sticky="e", padx=18, pady=(12, 18))
+
+    def _open_employee_dialog(self, employee: Employee | None = None) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Mitarbeiter bearbeiten" if employee else "Mitarbeiter anlegen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        values = {
+            "name": tk.StringVar(value=employee.name if employee else ""),
+            "department": tk.StringVar(value=employee.department if employee else ""),
+            "qualification": tk.StringVar(value=employee.qualification if employee else ""),
+            "hours": tk.StringVar(value=str(employee.weekly_hours_limit if employee else 40)),
+            "branch": tk.StringVar(value=employee.branch if employee else "Zentrale"),
+            "wage": tk.StringVar(value=str(employee.hourly_wage if employee else 15.0)),
+            "active": tk.BooleanVar(value=employee.is_active if employee else True),
+        }
+        fields = [("name", "Name"), ("department", "Abteilung"), ("qualification", "Qualifikation"), ("hours", "Wochenstunden"), ("branch", "Filiale"), ("wage", "Stundenlohn")]
+        for row, (key, label) in enumerate(fields):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+        ttk.Checkbutton(dialog, text="Aktiv", variable=values["active"]).grid(row=len(fields), column=1, sticky="w", padx=18, pady=7)
+
+        def save_employee() -> None:
+            try:
+                hours = int(values["hours"].get())
+                wage = float(values["wage"].get().replace(",", "."))
+                if employee is None:
+                    self.service.add_employee(values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                else:
+                    self.service.update_employee(employee.id, values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Mitarbeiter gespeichert.")
+            except ValueError as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        if employee is not None:
+            def delete_employee() -> None:
+                if not messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=dialog):
+                    return
+                self.service.delete_employee(employee.id)
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Mitarbeiter gelöscht.")
+
+            ttk.Button(dialog, text="Löschen", style="Danger.TButton", command=delete_employee).grid(row=len(fields) + 1, column=0, sticky="w", padx=18, pady=(12, 18))
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_employee).grid(row=len(fields) + 1, column=1, sticky="e", padx=18, pady=(12, 18))
+
+    def _open_absence_dialog(self) -> None:
+        if not self.service.employees:
+            messagebox.showinfo("Abwesenheit", "Bitte zuerst Mitarbeitende anlegen.", parent=self)
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Abwesenheit erfassen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        employees = sorted(self.service.employees, key=lambda item: item.name)
+        employee_options = {f"{employee.name} ({employee.department})": employee.id for employee in employees}
+        values = {
+            "employee": tk.StringVar(value=next(iter(employee_options))),
+            "start": tk.StringVar(value=self.week_start.strftime("%Y-%m-%d 00:00")),
+            "end": tk.StringVar(value=(self.week_start + timedelta(days=1)).strftime("%Y-%m-%d 00:00")),
+            "reason": tk.StringVar(value="Urlaub"),
+        }
+        rows = [("employee", "Mitarbeiter"), ("start", "Start"), ("end", "Ende"), ("reason", "Grund")]
+        for row, (key, label) in enumerate(rows):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            if key == "employee":
+                ttk.Combobox(dialog, textvariable=values[key], values=list(employee_options), width=32, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+            else:
+                ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+
+        def save_absence() -> None:
+            try:
+                employee_id = employee_options[values["employee"].get()]
+                self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get())
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Abwesenheit gespeichert.")
+            except (KeyError, ValueError) as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_absence).grid(row=4, column=1, sticky="e", padx=18, pady=(12, 18))
+
+    def _open_assignment_dialog(self) -> None:
+        if not self.service.employees or not self.service.shifts:
+            messagebox.showinfo("Zuweisung", "Bitte zuerst Mitarbeitende und Schichten anlegen.", parent=self)
+            return
+        dialog = tk.Toplevel(self)
+        dialog.title("Mitarbeitenden zuweisen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        employees = sorted([item for item in self.service.employees if item.is_active], key=lambda item: item.name)
+        shifts = sorted(self.service.shifts, key=lambda item: (item.start, item.name))
+        employee_options = {f"{employee.name} ({employee.department}, {employee.branch})": employee.id for employee in employees}
+        shift_options = {f"{shift.name} {shift.start:%d.%m. %H:%M} ({len(shift.employee_ids)}/{shift.required_employees})": shift.id for shift in shifts}
+        if not employee_options:
+            messagebox.showinfo("Zuweisung", "Es gibt keine aktiven Mitarbeitenden.", parent=self)
+            dialog.destroy()
+            return
+        values = {"employee": tk.StringVar(value=next(iter(employee_options))), "shift": tk.StringVar(value=next(iter(shift_options)))}
+        for row, (key, label, options) in enumerate([("employee", "Mitarbeiter", employee_options), ("shift", "Schicht", shift_options)]):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Combobox(dialog, textvariable=values[key], values=list(options), width=46, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+
+        def assign_employee() -> None:
+            try:
+                result = self.service.assign(employee_options[values["employee"].get()], shift_options[values["shift"].get()])
+                if not result.success:
+                    raise ValueError(result.message)
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status(result.message)
+            except (KeyError, ValueError) as exc:
+                messagebox.showerror("Zuweisung nicht möglich", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
 
     def _replace_shift(self, old_shift: Shift, new_shift: Shift) -> None:
         index = self.service.shifts.index(old_shift)
@@ -445,10 +604,6 @@ class SchedulerApp(tk.Tk):
     def _show_view_info(self) -> None:
         messagebox.showinfo("Ansicht", "Die Python-Version zeigt aktuell die Wochenansicht.", parent=self)
 
-    def _show_swap_info(self) -> None:
-        messagebox.showinfo("Tauschanfrage", "Tauschanfragen sind vorbereitet und werden als Schnellaktion protokolliert.", parent=self)
-        self._set_status("Tauschanfrage vorbereitet.")
-
     def _apply_search(self) -> None:
         self._refresh_schedule_grid()
         self._set_status("Suche angewendet.")
@@ -512,48 +667,6 @@ class SchedulerApp(tk.Tk):
     def _build_footer(self) -> None:
         footer = ttk.Label(self, textvariable=self.status, relief="sunken", anchor="w", padding=(10, 5))
         footer.grid(row=2, column=0, columnspan=2, sticky="ew")
-
-    def _ensure_demo_data(self) -> None:
-        if self.service.employees or self.service.shifts:
-            return
-        employees = [
-            self.service.add_employee("Anna Berger", "Pflege", "Pflegefachkraft", 48, "Zentrale Wache", 23.5),
-            self.service.add_employee("Lukas Hofmann", "Pflege", "Pflegefachkraft", 40, "Zentrale Wache", 22.0),
-            self.service.add_employee("Julia Schneider", "Pflege", "Altenpflegerin", 40, "Zentrale Wache", 21.0),
-            self.service.add_employee("Markus Weber", "Pflege", "Pflegehelfer", 30, "Zentrale Wache", 18.5),
-            self.service.add_employee("Sarah Müller", "Pflege", "Pflegefachkraft", 35, "Zentrale Wache", 23.0),
-            self.service.add_employee("Thomas Richter", "Pflege", "Pflegehelfer", 32, "Zentrale Wache", 18.0),
-            self.service.add_employee("Lisa Wagner", "Pflege", "Pflegefachkraft", 40, "Zentrale Wache", 23.5),
-        ]
-        employees[-1].absences.append(Absence(self.week_start, self.week_start + timedelta(days=6, hours=23), "Urlaub"))
-        patterns = {
-            0: ["Frühschicht", "Frühschicht", "Frühschicht", "Frühschicht", None, "Spätschicht", "Spätschicht"],
-            1: ["Spätschicht", "Spätschicht", None, "Spätschicht", "Spätschicht", None, None],
-            2: ["Nachtschicht", "Nachtschicht", None, "Nachtschicht", "Nachtschicht", None, "Nachtschicht"],
-            3: [None, "Frühschicht", None, "Frühschicht", None, "Frühschicht", None],
-            4: ["Spätschicht", None, "Spätschicht", None, "Spätschicht", "Spätschicht", None],
-            5: [None, "Nachtschicht", "Nachtschicht", None, "Nachtschicht", None, "Nachtschicht"],
-        }
-        shift_times = {
-            "Frühschicht": (time(6, 0), time(14, 0)),
-            "Spätschicht": (time(14, 0), time(22, 0)),
-            "Nachtschicht": (time(22, 0), time(6, 0)),
-        }
-        for employee_index, daily_names in patterns.items():
-            employee = employees[employee_index]
-            for day_index, shift_name in enumerate(daily_names):
-                if shift_name is None:
-                    continue
-                start_time, end_time = shift_times[shift_name]
-                day = self.week_start + timedelta(days=day_index)
-                start = datetime.combine(day.date(), start_time)
-                end_date = day.date() + (timedelta(days=1) if end_time <= start_time else timedelta())
-                end = datetime.combine(end_date, end_time)
-                shift = self.service.add_shift(shift_name, employee.department, start, end, 1, employee.qualification, employee.branch)
-                result = self.service.assign(employee.id, shift.id)
-                if not result.success:
-                    raise RuntimeError(result.message)
-
 
 def create_app(database_path: str | Path = "python_dienstplaner/data/dienstplaner.sqlite3") -> SchedulerApp:
     repository = SQLiteSchedulerRepository(database_path)
