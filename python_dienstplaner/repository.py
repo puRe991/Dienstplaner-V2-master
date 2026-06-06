@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
+from uuid import uuid4
 from pathlib import Path
 from typing import Iterable
 
@@ -70,9 +71,9 @@ class SQLiteSchedulerRepository:
                 [(employee.id, shift.id) for employee in service.employees for shift in employee.shifts],
             )
             connection.executemany(
-                "INSERT INTO absences(employee_id, start, end, reason) VALUES(?, ?, ?, ?)",
+                "INSERT INTO absences(id, employee_id, start, end, reason) VALUES(?, ?, ?, ?, ?)",
                 [
-                    (employee.id, absence.start.isoformat(), absence.end.isoformat(), absence.reason)
+                    (absence.id, employee.id, absence.start.isoformat(), absence.end.isoformat(), absence.reason)
                     for employee in service.employees
                     for absence in employee.absences
                 ],
@@ -120,11 +121,11 @@ class SQLiteSchedulerRepository:
                 shift.employee_ids.append(employee.id)
                 shift.employee_names.append(employee.name)
 
-            for employee_id, start, end, reason in connection.execute("SELECT employee_id, start, end, reason FROM absences"):
+            for absence_id, employee_id, start, end, reason in connection.execute("SELECT id, employee_id, start, end, reason FROM absences"):
                 employee = employees.get(employee_id)
                 if employee is None:
                     continue
-                employee.absences.append(Absence(datetime.fromisoformat(start), datetime.fromisoformat(end), reason or ""))
+                employee.absences.append(Absence(datetime.fromisoformat(start), datetime.fromisoformat(end), reason or "", id=absence_id))
 
         service.employees.extend(employees.values())
         service.shifts.extend(shifts.values())
@@ -164,6 +165,7 @@ class SQLiteSchedulerRepository:
                     PRIMARY KEY(employee_id, shift_id)
                 );
                 CREATE TABLE IF NOT EXISTS absences(
+                    id TEXT PRIMARY KEY,
                     employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
                     start TEXT NOT NULL,
                     end TEXT NOT NULL,
@@ -171,6 +173,12 @@ class SQLiteSchedulerRepository:
                 );
                 """
             )
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(absences)")}
+            if "id" not in columns:
+                connection.execute("ALTER TABLE absences ADD COLUMN id TEXT")
+                for rowid, in connection.execute("SELECT rowid FROM absences WHERE id IS NULL OR id = ''"):
+                    connection.execute("UPDATE absences SET id = ? WHERE rowid = ?", (str(uuid4()), rowid))
+                connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_absences_id ON absences(id)")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)

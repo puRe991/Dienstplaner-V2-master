@@ -91,19 +91,43 @@ class ForecastImportTests(unittest.TestCase):
         self.assertEqual(120, forecasts[0].expected_customers)
 
 
-class DashboardDemoDataTests(unittest.TestCase):
-    def test_demo_data_bootstraps_valid_week_without_rule_dead_ends(self) -> None:
+class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
+    def test_updates_employee_name_in_existing_assignments(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        service.update_employee(employee.id, "Eva Neu", "Kasse", "Kasse", 40, "Zentrale", 16.0, True)
+
+        self.assertEqual(["Eva Neu"], shift.employee_names)
+
+    def test_add_absence_rejects_existing_shift_overlap(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        with self.assertRaises(ValueError):
+            service.add_absence(employee.id, datetime(2026, 1, 1, 12), datetime(2026, 1, 1, 18), "Urlaub")
+
+    def test_delete_employee_removes_assignments_from_shifts(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        self.assertTrue(service.delete_employee(employee.id))
+
+        self.assertEqual([], shift.employee_ids)
+        self.assertEqual([], shift.employee_names)
+
+
+class DashboardStartupTests(unittest.TestCase):
+    def test_scheduler_app_no_longer_bootstraps_demo_data(self) -> None:
         from python_dienstplaner.app import SchedulerApp
 
-        app = SchedulerApp.__new__(SchedulerApp)
-        app.service = SchedulerService()
-        app.week_start = SchedulerApp.WEEK_START
-
-        SchedulerApp._ensure_demo_data(app)
-
-        self.assertEqual(7, len(app.service.employees))
-        self.assertTrue(app.service.shifts)
-        self.assertTrue(all(shift.employee_ids for shift in app.service.shifts))
+        self.assertFalse(hasattr(SchedulerApp, "_ensure_demo_data"))
 
 
 if __name__ == "__main__":
