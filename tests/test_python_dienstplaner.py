@@ -45,6 +45,19 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("Der Mitarbeiter ist im Schichtzeitraum abwesend (Urlaub).", result.errors)
 
+
+    def test_unassign_removes_employee_and_shift_links(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        self.assertTrue(service.unassign(employee.id, shift.id))
+
+        self.assertEqual([], employee.shifts)
+        self.assertEqual([], shift.employee_ids)
+        self.assertEqual([], shift.employee_names)
+
     def test_exports_schedule_as_csv(self) -> None:
         service = SchedulerService()
         employee = service.add_employee("Eva Retail", "Kasse", "Kasse")

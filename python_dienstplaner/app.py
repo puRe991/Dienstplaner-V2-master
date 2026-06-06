@@ -48,6 +48,8 @@ class SchedulerApp(tk.Tk):
         self.week_start = self.WEEK_START
         self.employee_rows: dict[str, int] = {}
         self.schedule_cells: dict[tuple[str, int], tk.Label] = {}
+        self.sidebar_buttons: dict[str, tk.Button] = {}
+        self.active_view = "Dienstplan"
 
         self.title("Dienstplanung Pro")
         self.geometry("1440x840")
@@ -107,10 +109,33 @@ class SchedulerApp(tk.Tk):
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
         sidebar.grid(row=1, column=0, sticky="nsew")
         sidebar.grid_propagate(False)
-        for index, item in enumerate(["⌂  Dashboard", "▣  Dienstplan", "👥  Mitarbeiter", "☂  Abwesenheiten", "◷  Schichten", "▥  Berichte", "⚙  Einstellungen"]):
-            style = "SidebarActive.TLabel" if "Dienstplan" in item else "Sidebar.TLabel"
-            label = ttk.Label(sidebar, text=item, style=style, padding=(24, 14))
-            label.grid(row=index, column=0, sticky="ew", padx=14, pady=(8 if index == 0 else 0, 0))
+        navigation = [
+            ("Dashboard", "⌂  Dashboard", self._show_dashboard),
+            ("Dienstplan", "▣  Dienstplan", self._show_schedule),
+            ("Mitarbeiter", "👥  Mitarbeiter", self._open_employee_manager),
+            ("Abwesenheiten", "☂  Abwesenheiten", self._open_absence_manager),
+            ("Schichten", "◷  Schichten", self._open_shift_manager),
+            ("Berichte", "▥  Berichte", self._open_reports_window),
+            ("Einstellungen", "⚙  Einstellungen", self._open_settings_window),
+        ]
+        for index, (key, text, command) in enumerate(navigation):
+            button = tk.Button(
+                sidebar,
+                text=text,
+                anchor="w",
+                borderwidth=0,
+                cursor="hand2",
+                font=("Segoe UI", 11, "bold" if key == self.active_view else "normal"),
+                bg="#EAF2FF" if key == self.active_view else "#FFFFFF",
+                fg="#0B66E4" if key == self.active_view else "#0F172A",
+                activebackground="#EAF2FF",
+                activeforeground="#0B66E4",
+                padx=24,
+                pady=12,
+                command=lambda item_key=key, item_command=command: self._activate_sidebar(item_key, item_command),
+            )
+            button.grid(row=index, column=0, sticky="ew", padx=14, pady=(8 if index == 0 else 0, 0))
+            self.sidebar_buttons[key] = button
 
         sidebar.rowconfigure(8, weight=1)
         card = tk.Frame(sidebar, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
@@ -213,6 +238,248 @@ class SchedulerApp(tk.Tk):
         ttk.Button(actions, text="💾 Speichern", style="Ghost.TButton", command=self._save).pack(fill="x", padx=12, pady=(5, 12))
         ttk.Button(actions, text="CSV Export", style="Ghost.TButton", command=self._export_csv).pack(fill="x", padx=12, pady=(0, 12))
 
+    def _activate_sidebar(self, key: str, command: object) -> None:
+        self.active_view = key
+        for item_key, button in self.sidebar_buttons.items():
+            is_active = item_key == key
+            button.configure(
+                bg="#EAF2FF" if is_active else "#FFFFFF",
+                fg="#0B66E4" if is_active else "#0F172A",
+                font=("Segoe UI", 11, "bold" if is_active else "normal"),
+            )
+        if callable(command):
+            command()
+
+    def _show_dashboard(self) -> None:
+        self._refresh_all()
+        self._set_status("Dashboard aktualisiert.")
+
+    def _show_schedule(self) -> None:
+        self._refresh_all()
+        self._set_status("Dienstplanansicht geöffnet.")
+
+    def _open_employee_manager(self) -> None:
+        window = self._create_manager_window("Mitarbeiter verwalten", "920x520")
+        columns = ("name", "department", "qualification", "hours", "branch", "wage", "active")
+        tree = self._create_tree(window, columns, {
+            "name": "Name",
+            "department": "Abteilung",
+            "qualification": "Qualifikation",
+            "hours": "Wochenstunden",
+            "branch": "Filiale",
+            "wage": "Stundenlohn",
+            "active": "Status",
+        })
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            for employee in sorted(self.service.employees, key=lambda item: item.name):
+                tree.insert("", "end", iid=employee.id, values=(
+                    employee.name,
+                    employee.department,
+                    employee.qualification or "-",
+                    employee.weekly_hours_limit,
+                    employee.branch,
+                    f"{employee.hourly_wage:.2f}",
+                    "Aktiv" if employee.is_active else "Inaktiv",
+                ))
+
+        def selected_employee() -> Employee | None:
+            selection = tree.selection()
+            return self.service.find_employee(selection[0]) if selection else None
+
+        def add() -> None:
+            dialog = self._open_employee_dialog()
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def edit() -> None:
+            employee = selected_employee()
+            if employee is None:
+                self._set_status("Bitte einen Mitarbeiter auswählen.")
+                return
+            dialog = self._open_employee_dialog(employee)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def delete() -> None:
+            employee = selected_employee()
+            if employee is None:
+                self._set_status("Bitte einen Mitarbeiter auswählen.")
+                return
+            if messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=window):
+                self.service.delete_employee(employee.id)
+                self._refresh_all()
+                refresh()
+                self._set_status("Mitarbeiter gelöscht.")
+
+        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Löschen", delete), ("Aktualisieren", refresh)])
+        tree.bind("<Double-Button-1>", lambda _event: edit())
+        refresh()
+
+    def _open_absence_manager(self) -> None:
+        window = self._create_manager_window("Abwesenheiten verwalten", "820x500")
+        columns = ("employee", "start", "end", "reason")
+        tree = self._create_tree(window, columns, {"employee": "Mitarbeiter", "start": "Start", "end": "Ende", "reason": "Grund"})
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            for employee in sorted(self.service.employees, key=lambda item: item.name):
+                for absence in sorted(employee.absences, key=lambda item: item.start):
+                    tree.insert("", "end", iid=absence.id, values=(employee.name, f"{absence.start:%d.%m.%Y %H:%M}", f"{absence.end:%d.%m.%Y %H:%M}", absence.reason or "-"))
+
+        def add() -> None:
+            dialog = self._open_absence_dialog()
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def delete() -> None:
+            selection = tree.selection()
+            if not selection:
+                self._set_status("Bitte eine Abwesenheit auswählen.")
+                return
+            if messagebox.askyesno("Abwesenheit löschen", "Soll die Abwesenheit gelöscht werden?", parent=window):
+                self.service.delete_absence(selection[0])
+                self._refresh_all()
+                refresh()
+                self._set_status("Abwesenheit gelöscht.")
+
+        self._add_manager_buttons(window, [("Neu", add), ("Löschen", delete), ("Aktualisieren", refresh)])
+        tree.bind("<Double-Button-1>", lambda _event: delete())
+        refresh()
+
+    def _open_shift_manager(self) -> None:
+        window = self._create_manager_window("Schichten verwalten", "980x520")
+        columns = ("name", "department", "start", "end", "capacity", "branch", "employees")
+        tree = self._create_tree(window, columns, {
+            "name": "Name",
+            "department": "Abteilung",
+            "start": "Start",
+            "end": "Ende",
+            "capacity": "Besetzung",
+            "branch": "Filiale",
+            "employees": "Mitarbeitende",
+        })
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            for shift in sorted(self.service.shifts, key=lambda item: (item.start, item.name)):
+                tree.insert("", "end", iid=shift.id, values=(
+                    shift.name,
+                    shift.department,
+                    f"{shift.start:%d.%m.%Y %H:%M}",
+                    f"{shift.end:%d.%m.%Y %H:%M}",
+                    f"{len(shift.employee_ids)}/{shift.required_employees}",
+                    shift.branch,
+                    ", ".join(shift.employee_names) or "-",
+                ))
+
+        def selected_shift() -> Shift | None:
+            selection = tree.selection()
+            return self.service.find_shift(selection[0]) if selection else None
+
+        def add() -> None:
+            dialog = self._open_shift_dialog()
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def edit() -> None:
+            shift = selected_shift()
+            if shift is None:
+                self._set_status("Bitte eine Schicht auswählen.")
+                return
+            self.selected_shift_id = shift.id
+            dialog = self._open_shift_dialog(shift)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def assign() -> None:
+            shift = selected_shift()
+            if shift is not None:
+                self.selected_shift_id = shift.id
+            dialog = self._open_assignment_dialog(preselected_shift_id=self.selected_shift_id)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def unassign() -> None:
+            shift = selected_shift()
+            if shift is None or not shift.employee_ids:
+                self._set_status("Bitte eine besetzte Schicht auswählen.")
+                return
+            employee_id = shift.employee_ids[-1]
+            self.service.unassign(employee_id, shift.id)
+            self._refresh_all()
+            refresh()
+            self._set_status("Letzte Zuweisung entfernt.")
+
+        def delete() -> None:
+            shift = selected_shift()
+            if shift is None:
+                self._set_status("Bitte eine Schicht auswählen.")
+                return
+            self.selected_shift_id = shift.id
+            self._delete_selected_shift(parent=window, refresh_callback=refresh)
+
+        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Zuweisen", assign), ("Zuweisung entfernen", unassign), ("Löschen", delete), ("Aktualisieren", refresh)])
+        tree.bind("<Double-Button-1>", lambda _event: edit())
+        refresh()
+
+    def _open_reports_window(self) -> None:
+        window = self._create_manager_window("Berichte", "760x420")
+        columns = ("category", "name", "value", "note")
+        tree = self._create_tree(window, columns, {"category": "Kategorie", "name": "Kennzahl", "value": "Wert", "note": "Hinweis"})
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            for index, metric in enumerate(self.service.create_reports()):
+                tree.insert("", "end", iid=str(index), values=(metric.category, metric.name, metric.value, metric.note))
+
+        self._add_manager_buttons(window, [("Aktualisieren", refresh), ("CSV Export", self._export_csv)])
+        refresh()
+
+    def _open_settings_window(self) -> None:
+        window = self._create_manager_window("Einstellungen", "640x300")
+        text = tk.Text(window, height=8, bg="#FFFFFF", fg="#0F172A", relief="flat", wrap="word")
+        text.pack(fill="both", expand=True, padx=16, pady=16)
+        text.insert("end", f"SQLite-Datenbank:\n{self.repository.database_path}\n\n")
+        text.insert("end", "Aktionen:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen und Abwesenheiten dauerhaft.\n• Export erzeugt CSV/Textdateien.\n• Forecast importiert Umsatzprognosen aus CSV.")
+        text.configure(state="disabled")
+        self._add_manager_buttons(window, [("Jetzt speichern", self._save), ("CSV Export", self._export_csv)])
+
+    def _create_manager_window(self, title: str, geometry: str) -> tk.Toplevel:
+        window = tk.Toplevel(self)
+        window.title(title)
+        window.geometry(geometry)
+        window.transient(self)
+        window.configure(bg="#F8FAFC")
+        return window
+
+    def _create_tree(self, parent: tk.Toplevel, columns: tuple[str, ...], headings: dict[str, str]) -> ttk.Treeview:
+        tree = ttk.Treeview(parent, columns=columns, show="headings", selectmode="browse")
+        for column in columns:
+            tree.heading(column, text=headings[column])
+            tree.column(column, minwidth=90, width=130, stretch=True)
+        tree.pack(fill="both", expand=True, padx=16, pady=(16, 8))
+        return tree
+
+    def _add_manager_buttons(self, parent: tk.Toplevel, buttons: list[tuple[str, object]]) -> None:
+        frame = ttk.Frame(parent)
+        frame.pack(fill="x", padx=16, pady=(0, 16))
+        for text, command in buttons:
+            if callable(command):
+                ttk.Button(frame, text=text, style="Ghost.TButton", command=command).pack(side="left", padx=(0, 8))
+
+    @staticmethod
+    def _clear_tree(tree: ttk.Treeview) -> None:
+        for item_id in tree.get_children():
+            tree.delete(item_id)
+
     def _refresh_all(self) -> None:
         self.week_label.configure(text=f"📅  {self.week_start.day}. – {(self.week_start + timedelta(days=6)).day}. {self._month_name(self.week_start)} {self.week_start.year}")
         self._refresh_header_state()
@@ -295,7 +562,9 @@ class SchedulerApp(tk.Tk):
 
         shift = next((item for item in employee.shifts if item.start.date() == day), None)
         if shift is None:
-            return tk.Label(self.grid_frame, text="-", bg="#FFFFFF", fg="#64748B", font=("Segoe UI", 12, "bold"))
+            label = tk.Label(self.grid_frame, text="+", bg="#FFFFFF", fg="#94A3B8", font=("Segoe UI", 12, "bold"), cursor="hand2")
+            label.bind("<Button-1>", lambda _event: self._open_assignment_dialog())
+            return label
         style = self._style_for_shift(shift)
         label = tk.Label(self.grid_frame, text=f"{shift.start:%H:%M} – {shift.end:%H:%M}\n{style.label}", bg=style.background, fg=style.foreground, font=("Segoe UI", 8, "bold"), justify="center", cursor="hand2")
         label.bind("<Button-1>", lambda _event, shift_id=shift.id: self._select_shift(shift_id))
@@ -366,7 +635,7 @@ class SchedulerApp(tk.Tk):
         shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id else None
         self._open_shift_dialog(shift)
 
-    def _open_shift_dialog(self, shift: Shift | None = None) -> None:
+    def _open_shift_dialog(self, shift: Shift | None = None) -> tk.Toplevel:
         dialog = tk.Toplevel(self)
         dialog.title("Schicht bearbeiten" if shift else "Schicht hinzufügen")
         dialog.transient(self)
@@ -416,6 +685,130 @@ class SchedulerApp(tk.Tk):
                 messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
 
         ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_shift).grid(row=7, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
+
+    def _open_employee_dialog(self, employee: Employee | None = None) -> tk.Toplevel:
+        dialog = tk.Toplevel(self)
+        dialog.title("Mitarbeiter bearbeiten" if employee else "Mitarbeiter anlegen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        values = {
+            "name": tk.StringVar(value=employee.name if employee else ""),
+            "department": tk.StringVar(value=employee.department if employee else ""),
+            "qualification": tk.StringVar(value=employee.qualification if employee else ""),
+            "hours": tk.StringVar(value=str(employee.weekly_hours_limit if employee else 40)),
+            "branch": tk.StringVar(value=employee.branch if employee else "Zentrale"),
+            "wage": tk.StringVar(value=str(employee.hourly_wage if employee else 15.0)),
+            "active": tk.BooleanVar(value=employee.is_active if employee else True),
+        }
+        fields = [("name", "Name"), ("department", "Abteilung"), ("qualification", "Qualifikation"), ("hours", "Wochenstunden"), ("branch", "Filiale"), ("wage", "Stundenlohn")]
+        for row, (key, label) in enumerate(fields):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+        ttk.Checkbutton(dialog, text="Aktiv", variable=values["active"]).grid(row=len(fields), column=1, sticky="w", padx=18, pady=7)
+
+        def save_employee() -> None:
+            try:
+                hours = int(values["hours"].get())
+                wage = float(values["wage"].get().replace(",", "."))
+                if employee is None:
+                    self.service.add_employee(values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                else:
+                    self.service.update_employee(employee.id, values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Mitarbeiter gespeichert.")
+            except ValueError as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        if employee is not None:
+            def delete_employee() -> None:
+                if not messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=dialog):
+                    return
+                self.service.delete_employee(employee.id)
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Mitarbeiter gelöscht.")
+
+            ttk.Button(dialog, text="Löschen", style="Danger.TButton", command=delete_employee).grid(row=len(fields) + 1, column=0, sticky="w", padx=18, pady=(12, 18))
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_employee).grid(row=len(fields) + 1, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
+
+    def _open_absence_dialog(self) -> tk.Toplevel | None:
+        if not self.service.employees:
+            messagebox.showinfo("Abwesenheit", "Bitte zuerst Mitarbeitende anlegen.", parent=self)
+            return None
+        dialog = tk.Toplevel(self)
+        dialog.title("Abwesenheit erfassen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        employees = sorted(self.service.employees, key=lambda item: item.name)
+        employee_options = {f"{employee.name} ({employee.department})": employee.id for employee in employees}
+        values = {
+            "employee": tk.StringVar(value=next(iter(employee_options))),
+            "start": tk.StringVar(value=self.week_start.strftime("%Y-%m-%d 00:00")),
+            "end": tk.StringVar(value=(self.week_start + timedelta(days=1)).strftime("%Y-%m-%d 00:00")),
+            "reason": tk.StringVar(value="Urlaub"),
+        }
+        rows = [("employee", "Mitarbeiter"), ("start", "Start"), ("end", "Ende"), ("reason", "Grund")]
+        for row, (key, label) in enumerate(rows):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            if key == "employee":
+                ttk.Combobox(dialog, textvariable=values[key], values=list(employee_options), width=32, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+            else:
+                ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+
+        def save_absence() -> None:
+            try:
+                employee_id = employee_options[values["employee"].get()]
+                self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get())
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Abwesenheit gespeichert.")
+            except (KeyError, ValueError) as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_absence).grid(row=4, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
+
+    def _open_assignment_dialog(self, preselected_shift_id: str | None = None) -> tk.Toplevel | None:
+        if not self.service.employees or not self.service.shifts:
+            messagebox.showinfo("Zuweisung", "Bitte zuerst Mitarbeitende und Schichten anlegen.", parent=self)
+            return None
+        dialog = tk.Toplevel(self)
+        dialog.title("Mitarbeitenden zuweisen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        employees = sorted([item for item in self.service.employees if item.is_active], key=lambda item: item.name)
+        shifts = sorted(self.service.shifts, key=lambda item: (item.start, item.name))
+        employee_options = {f"{employee.name} ({employee.department}, {employee.branch})": employee.id for employee in employees}
+        shift_options = {f"{shift.name} {shift.start:%d.%m. %H:%M} ({len(shift.employee_ids)}/{shift.required_employees})": shift.id for shift in shifts}
+        if not employee_options:
+            messagebox.showinfo("Zuweisung", "Es gibt keine aktiven Mitarbeitenden.", parent=self)
+            dialog.destroy()
+            return None
+        selected_shift_label = next((label for label, shift_id in shift_options.items() if shift_id == preselected_shift_id), next(iter(shift_options)))
+        values = {"employee": tk.StringVar(value=next(iter(employee_options))), "shift": tk.StringVar(value=selected_shift_label)}
+        for row, (key, label, options) in enumerate([("employee", "Mitarbeiter", employee_options), ("shift", "Schicht", shift_options)]):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Combobox(dialog, textvariable=values[key], values=list(options), width=46, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+
+        def assign_employee() -> None:
+            try:
+                result = self.service.assign(employee_options[values["employee"].get()], shift_options[values["shift"].get()])
+                if not result.success:
+                    raise ValueError(result.message)
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status(result.message)
+            except (KeyError, ValueError) as exc:
+                messagebox.showerror("Zuweisung nicht möglich", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
 
     def _open_employee_dialog(self, employee: Employee | None = None) -> None:
         dialog = tk.Toplevel(self)
@@ -542,18 +935,20 @@ class SchedulerApp(tk.Tk):
         for employee in self.service.employees:
             employee.shifts = [new_shift if item.id == old_shift.id else item for item in employee.shifts]
 
-    def _delete_selected_shift(self) -> None:
+    def _delete_selected_shift(self, parent: tk.Misc | None = None, refresh_callback: object | None = None) -> None:
         shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id else None
         if shift is None:
             self._set_status("Keine Schicht ausgewählt.")
             return
-        if not messagebox.askyesno("Schicht löschen", f"Soll '{shift.name}' wirklich gelöscht werden?", parent=self):
+        if not messagebox.askyesno("Schicht löschen", f"Soll '{shift.name}' wirklich gelöscht werden?", parent=parent or self):
             return
         self.service.shifts = [item for item in self.service.shifts if item.id != shift.id]
         for employee in self.service.employees:
             employee.shifts = [item for item in employee.shifts if item.id != shift.id]
         self.selected_shift_id = None
         self._refresh_all()
+        if callable(refresh_callback):
+            refresh_callback()
         self._set_status("Schicht gelöscht.")
 
     def _select_shift(self, shift_id: str) -> None:
