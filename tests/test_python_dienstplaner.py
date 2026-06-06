@@ -65,6 +65,7 @@ class RepositoryTests(unittest.TestCase):
             repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
             service = SchedulerService()
             employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            employee.absences.append(Absence(datetime(2026, 1, 2, 8), datetime(2026, 1, 2, 16), "Urlaub"))
             shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
             service.assign(employee.id, shift.id)
             repository.save(service)
@@ -74,6 +75,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(1, len(loaded.employees))
         self.assertEqual(1, len(loaded.shifts))
         self.assertEqual([loaded.shifts[0]], loaded.employees[0].shifts)
+        self.assertEqual("Urlaub", loaded.employees[0].absences[0].reason)
 
 
 class ForecastImportTests(unittest.TestCase):
@@ -87,6 +89,21 @@ class ForecastImportTests(unittest.TestCase):
         self.assertEqual(1, len(forecasts))
         self.assertEqual(1234.50, forecasts[0].expected_revenue)
         self.assertEqual(120, forecasts[0].expected_customers)
+
+
+class DashboardDemoDataTests(unittest.TestCase):
+    def test_demo_data_bootstraps_valid_week_without_rule_dead_ends(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        app = SchedulerApp.__new__(SchedulerApp)
+        app.service = SchedulerService()
+        app.week_start = SchedulerApp.WEEK_START
+
+        SchedulerApp._ensure_demo_data(app)
+
+        self.assertEqual(7, len(app.service.employees))
+        self.assertTrue(app.service.shifts)
+        self.assertTrue(all(shift.employee_ids for shift in app.service.shifts))
 
 
 if __name__ == "__main__":

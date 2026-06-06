@@ -14,10 +14,12 @@ Die Anwendung nutzt nur die Python-Standardbibliothek (`tkinter`, `sqlite3`, `cs
 
 ## Funktionsumfang
 
-- Mitarbeitende und Schichten anlegen.
-- Mitarbeitende Schichten zuweisen.
+- Dashboard-Oberfläche im Stil der Dienstplanung-Pro-Vorlage mit Kopfbereich, Navigation, Wochenraster, Kennzahlenkarten, Kalender, Abwesenheiten und Schnellaktionen.
+- Demo-Woche wird beim ersten Start regelkonform erzeugt, wenn noch keine SQLite-Daten vorhanden sind.
+- Schichten anlegen, bearbeiten, löschen, suchen und im Wochenraster auswählen.
 - Harte Planungsregeln prüfen: Kapazität, aktive Mitarbeitende, Doppelzuweisung, Abteilung, Filiale, Qualifikation, Wochenstundenlimit, Tageshöchstarbeitszeit, Ruhezeit, Zeitkonflikte und Abwesenheiten.
 - Weiche Warnungen erzeugen: fehlende Verfügbarkeit und lange Schichten.
+- Abwesenheiten zusammen mit Mitarbeitenden und Zuweisungen in SQLite speichern und laden.
 - Reports für Personalkosten, Besetzungsgrad, Überstunden und Regelverstöße berechnen.
 - Dienstplan als CSV oder Textdatei exportieren.
 - Forecast-CSV mit dem Format `FilialeId;Filiale;Datum;Umsatz;Kunden` importieren.
