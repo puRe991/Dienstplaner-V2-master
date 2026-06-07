@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime
-from uuid import uuid4
 from pathlib import Path
 from typing import Iterable
+from uuid import uuid4
 
-from .models import Absence, Employee, Shift
+from .models import Absence, Employee, RevenueForecast, Shift
 from .services import SchedulerService
 
 
@@ -25,6 +25,7 @@ class SQLiteSchedulerRepository:
         with self._connect() as connection:
             connection.execute("DELETE FROM assignments")
             connection.execute("DELETE FROM absences")
+            connection.execute("DELETE FROM forecasts")
             connection.execute("DELETE FROM shifts")
             connection.execute("DELETE FROM employees")
             connection.executemany(
@@ -48,8 +49,11 @@ class SQLiteSchedulerRepository:
             )
             connection.executemany(
                 """
-                INSERT INTO shifts(id, name, department, start, end, required_employees, required_qualification, branch)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO shifts(
+                    id, name, department, start, end, required_employees, required_qualification,
+                    branch, published_at, published_by
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -61,6 +65,8 @@ class SQLiteSchedulerRepository:
                         shift.required_employees,
                         shift.required_qualification,
                         shift.branch,
+                        shift.published_at.isoformat() if shift.published_at else None,
+                        shift.published_by,
                     )
                     for shift in service.shifts
                 ],
@@ -75,6 +81,26 @@ class SQLiteSchedulerRepository:
                     (absence.id, employee.id, absence.start.isoformat(), absence.end.isoformat(), absence.reason)
                     for employee in service.employees
                     for absence in employee.absences
+                ],
+            )
+            connection.executemany(
+                """
+                INSERT INTO forecasts(branch_id, branch, date, expected_revenue, expected_customers)
+                VALUES(?, ?, ?, ?, ?)
+                ON CONFLICT(branch_id, date) DO UPDATE SET
+                    branch = excluded.branch,
+                    expected_revenue = excluded.expected_revenue,
+                    expected_customers = excluded.expected_customers
+                """,
+                [
+                    (
+                        forecast.branch_id,
+                        forecast.branch,
+                        forecast.date.date().isoformat(),
+                        forecast.expected_revenue,
+                        forecast.expected_customers,
+                    )
+                    for forecast in service.forecasts
                 ],
             )
 
@@ -106,9 +132,16 @@ class SQLiteSchedulerRepository:
                     required_employees=row[5],
                     required_qualification=row[6],
                     branch=row[7],
+                    published_at=datetime.fromisoformat(row[8]) if row[8] else None,
+                    published_by=row[9] or "",
                 )
                 for row in connection.execute(
-                    "SELECT id, name, department, start, end, required_employees, required_qualification, branch FROM shifts ORDER BY start, name"
+                    """
+                    SELECT id, name, department, start, end, required_employees,
+                           required_qualification, branch, published_at, published_by
+                    FROM shifts
+                    ORDER BY start, name
+                    """
                 )
             }
             for employee_id, shift_id in self._assignment_rows(connection):
@@ -125,6 +158,19 @@ class SQLiteSchedulerRepository:
                 if employee is None:
                     continue
                 employee.absences.append(Absence(datetime.fromisoformat(start), datetime.fromisoformat(end), reason or "", id=absence_id))
+
+            service.forecasts.extend(
+                RevenueForecast(
+                    branch_id=row[0],
+                    branch=row[1],
+                    date=datetime.fromisoformat(row[2]),
+                    expected_revenue=row[3],
+                    expected_customers=row[4],
+                )
+                for row in connection.execute(
+                    "SELECT branch_id, branch, date, expected_revenue, expected_customers FROM forecasts ORDER BY date, branch"
+                )
+            )
 
         service.employees.extend(employees.values())
         service.shifts.extend(shifts.values())
@@ -156,7 +202,9 @@ class SQLiteSchedulerRepository:
                     end TEXT NOT NULL,
                     required_employees INTEGER NOT NULL CHECK(required_employees > 0),
                     required_qualification TEXT NOT NULL,
-                    branch TEXT NOT NULL
+                    branch TEXT NOT NULL,
+                    published_at TEXT,
+                    published_by TEXT NOT NULL DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS assignments(
                     employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
@@ -170,14 +218,28 @@ class SQLiteSchedulerRepository:
                     end TEXT NOT NULL,
                     reason TEXT NOT NULL DEFAULT ''
                 );
+                CREATE TABLE IF NOT EXISTS forecasts(
+                    branch_id INTEGER NOT NULL,
+                    branch TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    expected_revenue REAL NOT NULL CHECK(expected_revenue >= 0),
+                    expected_customers INTEGER NOT NULL CHECK(expected_customers >= 0),
+                    PRIMARY KEY(branch_id, date)
+                );
                 """
             )
-            columns = {row[1] for row in connection.execute("PRAGMA table_info(absences)")}
-            if "id" not in columns:
-                connection.execute("ALTER TABLE absences ADD COLUMN id TEXT")
-                for rowid, in connection.execute("SELECT rowid FROM absences WHERE id IS NULL OR id = ''"):
-                    connection.execute("UPDATE absences SET id = ? WHERE rowid = ?", (str(uuid4()), rowid))
-                connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_absences_id ON absences(id)")
+            self._ensure_column(connection, "absences", "id", "TEXT")
+            for rowid, in connection.execute("SELECT rowid FROM absences WHERE id IS NULL OR id = ''"):
+                connection.execute("UPDATE absences SET id = ? WHERE rowid = ?", (str(uuid4()), rowid))
+            connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_absences_id ON absences(id)")
+            self._ensure_column(connection, "shifts", "published_at", "TEXT")
+            self._ensure_column(connection, "shifts", "published_by", "TEXT NOT NULL DEFAULT ''")
+
+    @staticmethod
+    def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
