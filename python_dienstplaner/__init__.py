@@ -1,4 +1,4 @@
-"""Separate Python implementation of the Dienstplaner prototype."""
+"""Python implementation of the Dienstplaner application."""
 
 from .models import Employee, Shift
 from .services import SchedulerService
