@@ -50,6 +50,8 @@ class Shift:
     id: str = field(default_factory=lambda: str(uuid4()))
     employee_ids: List[str] = field(default_factory=list)
     employee_names: List[str] = field(default_factory=list)
+    published_at: datetime | None = None
+    published_by: str = ""
 
     def __post_init__(self) -> None:
         self.name = self.name.strip()

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
 
@@ -14,6 +14,7 @@ class SchedulerService:
         self.rules = rules or PlanningRules()
         self.employees: list[Employee] = []
         self.shifts: list[Shift] = []
+        self.forecasts: list[RevenueForecast] = []
 
     def add_employee(
         self,
@@ -151,6 +152,44 @@ class SchedulerService:
     def find_shift(self, shift_id: str) -> Shift | None:
         return next((shift for shift in self.shifts if shift.id == shift_id), None)
 
+    def publish_week(self, week_start: datetime, published_by: str = "Lokaler Modus") -> int:
+        week_end = week_start + timedelta(days=7)
+        week_shifts = [shift for shift in self.shifts if week_start <= shift.start < week_end]
+        if not week_shifts:
+            raise ValueError("In dieser Woche gibt es keine Schichten zum Veröffentlichen.")
+        open_slots = sum(max(0, shift.required_employees - len(shift.employee_ids)) for shift in week_shifts)
+        if open_slots:
+            raise ValueError(f"Es sind noch {open_slots} offene Besetzungen vorhanden.")
+        published_at = datetime.now()
+        for shift in week_shifts:
+            shift.published_at = published_at
+            shift.published_by = published_by.strip() or "Lokaler Modus"
+        return len(week_shifts)
+
+    def add_forecasts(self, forecasts: Iterable[RevenueForecast]) -> int:
+        added = 0
+        existing_keys = {(item.branch_id, item.date.date()) for item in self.forecasts}
+        for forecast in forecasts:
+            key = (forecast.branch_id, forecast.date.date())
+            if key in existing_keys:
+                self.forecasts = [item for item in self.forecasts if (item.branch_id, item.date.date()) != key]
+            else:
+                added += 1
+                existing_keys.add(key)
+            self.forecasts.append(forecast)
+        self.forecasts.sort(key=lambda item: (item.date, item.branch))
+        return added
+
+    def forecast_staffing_recommendations(self) -> list[ReportMetric]:
+        metrics: list[ReportMetric] = []
+        for forecast in self.forecasts:
+            recommended = max(1, round(forecast.expected_customers / 35))
+            planned = sum(shift.required_employees for shift in self.shifts if shift.branch.lower() == forecast.branch.lower() and shift.start.date() == forecast.date.date())
+            delta = planned - recommended
+            note = "Plan deckt Forecast" if delta >= 0 else f"{abs(delta)} Mitarbeitende zusätzlich empfohlen"
+            metrics.append(ReportMetric("Forecast", f"{forecast.branch} {forecast.date:%d.%m.%Y}", f"{recommended} MA Bedarf", note))
+        return metrics
+
     def create_reports(self) -> List[ReportMetric]:
         active_employees = [employee for employee in self.employees if employee.is_active]
         personnel_costs = sum(
@@ -162,13 +201,15 @@ class SchedulerService:
         rule_violations = sum(1 for shift in self.shifts if len(shift.employee_ids) < shift.required_employees)
         rule_violations += sum(1 for employee in self.employees if employee.planned_hours > employee.weekly_hours_limit)
 
-        return [
-            ReportMetric("Kosten", "Personalkosten", f"{personnel_costs:.2f} EUR", "Iststunden auf Basis des Stundenlohns"),
+        metrics = [
+            ReportMetric("Kosten", "Personalkosten", f"{personnel_costs:.2f} EUR", "Planstunden auf Basis des Stundenlohns"),
             ReportMetric("Planung", "Besetzungsgrad", f"{occupancy:.1f} %", "Zugewiesene im Verhältnis zum Bedarf"),
             ReportMetric("Personal", "Aktive Mitarbeitende", str(len(active_employees)), "Inaktive werden nicht eingeplant"),
-            ReportMetric("Arbeitszeit", "Überstunden", f"{overtime:.1f} h", "Iststunden über Sollstunden"),
+            ReportMetric("Arbeitszeit", "Überstunden", f"{overtime:.1f} h", "Planstunden über Sollstunden"),
             ReportMetric("Compliance", "Regelverstöße", str(rule_violations), "Unterbesetzung und Limits"),
         ]
+        metrics.extend(self.forecast_staffing_recommendations())
+        return metrics
 
     def export_schedule(self, path: str | Path, export_format: ExportFormat = ExportFormat.CSV) -> Path:
         output = Path(path)
@@ -191,6 +232,16 @@ class SchedulerService:
                     shift.required_employees,
                     ", ".join(shift.employee_names),
                 ])
+        return output
+
+    def export_reports(self, path: str | Path) -> Path:
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle, delimiter=";")
+            writer.writerow(["Kategorie", "Kennzahl", "Wert", "Hinweis"])
+            for metric in self.create_reports():
+                writer.writerow([metric.category, metric.name, metric.value, metric.note])
         return output
 
     def _schedule_as_text(self) -> str:
@@ -217,16 +268,20 @@ class ForecastImportService:
     def import_csv(self, path: str | Path) -> List[RevenueForecast]:
         input_path = Path(path)
         if not input_path.exists() or not input_path.is_file():
-            return []
+            raise FileNotFoundError(f"Forecast-Datei wurde nicht gefunden: {input_path}")
 
         result: list[RevenueForecast] = []
         with input_path.open("r", newline="", encoding="utf-8-sig") as handle:
             reader = csv.reader(handle, delimiter=";")
-            next(reader, None)
+            header = next(reader, None)
+            if header is None:
+                raise ValueError("Forecast-Datei ist leer.")
             for row in reader:
                 forecast = self._parse_row(row)
                 if forecast is not None:
                     result.append(forecast)
+        if not result:
+            raise ValueError("Forecast-Datei enthält keine gültigen Datenzeilen.")
         return result
 
     @staticmethod

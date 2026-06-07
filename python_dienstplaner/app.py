@@ -101,9 +101,9 @@ class SchedulerApp(tk.Tk):
         search.bind("<FocusIn>", self._clear_search_placeholder)
         search.bind("<Return>", lambda _event: self._apply_search())
 
-        self.notification_label = tk.Label(header, text="🔔 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
+        self.notification_label = tk.Label(header, text="Offene Slots: 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
         self.notification_label.grid(row=0, column=3, padx=(12, 24))
-        tk.Label(header, text="Lokaler Benutzer\nPlanung", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
+        tk.Label(header, text="Lokaler Modus\nOhne Rollenprüfung", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
@@ -164,8 +164,7 @@ class SchedulerApp(tk.Tk):
         self.week_label = ttk.Label(toolbar, text="", style="Card.TLabel", padding=(18, 9))
         self.week_label.grid(row=0, column=2, sticky="w")
         ttk.Button(toolbar, text="›", style="Ghost.TButton", command=lambda: self._move_week(7)).grid(row=0, column=3, padx=(0, 20))
-        ttk.Button(toolbar, text="Ansicht", style="Ghost.TButton", command=self._show_view_info).grid(row=0, column=4, padx=6)
-        ttk.Button(toolbar, text="+ Schicht hinzufügen", style="Primary.TButton", command=self._open_shift_dialog).grid(row=0, column=5, padx=6)
+        ttk.Button(toolbar, text="+ Schicht hinzufügen", style="Primary.TButton", command=self._open_shift_dialog).grid(row=0, column=4, padx=6)
 
         self.cards_frame = ttk.Frame(content)
         self.cards_frame.grid(row=1, column=0, sticky="ew", pady=(0, 16))
@@ -230,7 +229,7 @@ class SchedulerApp(tk.Tk):
             ("👥 Mitarbeiter anlegen", self._open_employee_dialog),
             ("☂ Abwesenheit erfassen", self._open_absence_dialog),
             ("➕ Mitarbeitenden zuweisen", self._open_assignment_dialog),
-            ("▤  Schichtvorlage anlegen", self._open_shift_dialog),
+            ("▤  Schicht anlegen", self._open_shift_dialog),
             ("✈  Dienstplan veröffentlichen", self._publish_schedule),
             ("📈 Forecast importieren", self._import_forecast),
         ]:
@@ -440,7 +439,7 @@ class SchedulerApp(tk.Tk):
             for index, metric in enumerate(self.service.create_reports()):
                 tree.insert("", "end", iid=str(index), values=(metric.category, metric.name, metric.value, metric.note))
 
-        self._add_manager_buttons(window, [("Aktualisieren", refresh), ("CSV Export", self._export_csv)])
+        self._add_manager_buttons(window, [("Aktualisieren", refresh), ("Report CSV Export", self._export_reports_csv)])
         refresh()
 
     def _open_settings_window(self) -> None:
@@ -448,9 +447,9 @@ class SchedulerApp(tk.Tk):
         text = tk.Text(window, height=8, bg="#FFFFFF", fg="#0F172A", relief="flat", wrap="word")
         text.pack(fill="both", expand=True, padx=16, pady=16)
         text.insert("end", f"SQLite-Datenbank:\n{self.repository.database_path}\n\n")
-        text.insert("end", "Aktionen:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen und Abwesenheiten dauerhaft.\n• Export erzeugt CSV/Textdateien.\n• Forecast importiert Umsatzprognosen aus CSV.")
+        text.insert("end", "Systeminfo:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen, Abwesenheiten, Forecasts und Veröffentlichungsstatus dauerhaft.\n• Export erzeugt Dienstplan-CSV/Textdateien oder Report-CSV.\n• Forecast importiert Umsatzprognosen und ergänzt daraus Personalbedarfs-Hinweise in Berichten.\n\nHinweis: Die App läuft im lokalen Modus ohne Benutzer-/Rollenprüfung.")
         text.configure(state="disabled")
-        self._add_manager_buttons(window, [("Jetzt speichern", self._save), ("CSV Export", self._export_csv)])
+        self._add_manager_buttons(window, [("Jetzt speichern", self._save), ("Dienstplan CSV Export", self._export_csv)])
 
     def _create_manager_window(self, title: str, geometry: str) -> tk.Toplevel:
         window = tk.Toplevel(self)
@@ -493,7 +492,7 @@ class SchedulerApp(tk.Tk):
         open_slots = sum(max(0, shift.required_employees - len(shift.employee_ids)) for shift in self._week_shifts())
         current_time = datetime.now()
         upcoming = next((shift for shift in sorted(self.service.shifts, key=lambda item: item.start) if shift.start >= current_time), None)
-        self.notification_label.configure(text=f"🔔 {open_slots}")
+        self.notification_label.configure(text=f"Offene Slots: {open_slots}")
         if upcoming is None:
             self.next_shift_time_label.configure(text="Keine Schicht geplant")
             self.next_shift_name_label.configure(text="Offen", bg="#E2E8F0", fg="#334155")
@@ -515,7 +514,7 @@ class SchedulerApp(tk.Tk):
         cards = [
             ("👥", "Mitarbeiter", str(active_count), f"{len(self.service.employees) - active_count} inaktiv" if len(self.service.employees) != active_count else "Aktiv"),
             ("▣", "Offene Schichten", str(open_shifts), "Kritisch prüfen" if open_shifts else "Voll besetzt"),
-            ("☂", "Abwesenheiten", str(absences), "Genehmigt"),
+            ("☂", "Abwesenheiten", str(absences), "Erfasst"),
             ("◷", "Stunden diese Woche", f"{hours:.0f} h", f"Ø {avg_hours:.1f} h pro Mitarbeiter"),
         ]
         colors = ["#0B66E4", "#F59E0B", "#22C55E", "#A855F7"]
@@ -611,6 +610,7 @@ class SchedulerApp(tk.Tk):
             self.detail_body.configure(text="Keine Schichten vorhanden.")
             return
         assigned = ", ".join(shift.employee_names) or "Nicht besetzt"
+        published = f"{shift.published_at:%d.%m.%Y %H:%M} durch {shift.published_by}" if shift.published_at else "Nein"
         self.detail_title.configure(text=f"Schichtdetails · {shift.name}")
         self.detail_body.configure(
             text=(
@@ -618,7 +618,8 @@ class SchedulerApp(tk.Tk):
                 f"{shift.start:%H:%M} – {shift.end:%H:%M} ({shift.duration_hours:.0f} h)\n"
                 f"{shift.department} – {shift.branch}\n"
                 f"Kapazität: {len(shift.employee_ids)}/{shift.required_employees}\n"
-                f"Zugewiesen: {assigned}"
+                f"Zugewiesen: {assigned}\n"
+                f"Veröffentlicht: {published}"
             )
         )
 
@@ -676,6 +677,8 @@ class SchedulerApp(tk.Tk):
                         required_employees=capacity,
                         required_qualification=values["qualification"].get(),
                         branch=values["branch"].get(),
+                        published_at=shift.published_at,
+                        published_by=shift.published_by,
                     )
                     self._replace_shift(shift, updated)
                 dialog.destroy()
@@ -810,125 +813,6 @@ class SchedulerApp(tk.Tk):
         ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
         return dialog
 
-    def _open_employee_dialog(self, employee: Employee | None = None) -> None:
-        dialog = tk.Toplevel(self)
-        dialog.title("Mitarbeiter bearbeiten" if employee else "Mitarbeiter anlegen")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.configure(bg="#FFFFFF")
-        values = {
-            "name": tk.StringVar(value=employee.name if employee else ""),
-            "department": tk.StringVar(value=employee.department if employee else ""),
-            "qualification": tk.StringVar(value=employee.qualification if employee else ""),
-            "hours": tk.StringVar(value=str(employee.weekly_hours_limit if employee else 40)),
-            "branch": tk.StringVar(value=employee.branch if employee else "Zentrale"),
-            "wage": tk.StringVar(value=str(employee.hourly_wage if employee else 15.0)),
-            "active": tk.BooleanVar(value=employee.is_active if employee else True),
-        }
-        fields = [("name", "Name"), ("department", "Abteilung"), ("qualification", "Qualifikation"), ("hours", "Wochenstunden"), ("branch", "Filiale"), ("wage", "Stundenlohn")]
-        for row, (key, label) in enumerate(fields):
-            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
-            ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
-        ttk.Checkbutton(dialog, text="Aktiv", variable=values["active"]).grid(row=len(fields), column=1, sticky="w", padx=18, pady=7)
-
-        def save_employee() -> None:
-            try:
-                hours = int(values["hours"].get())
-                wage = float(values["wage"].get().replace(",", "."))
-                if employee is None:
-                    self.service.add_employee(values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
-                else:
-                    self.service.update_employee(employee.id, values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
-                dialog.destroy()
-                self._refresh_all()
-                self._set_status("Mitarbeiter gespeichert.")
-            except ValueError as exc:
-                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
-
-        if employee is not None:
-            def delete_employee() -> None:
-                if not messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=dialog):
-                    return
-                self.service.delete_employee(employee.id)
-                dialog.destroy()
-                self._refresh_all()
-                self._set_status("Mitarbeiter gelöscht.")
-
-            ttk.Button(dialog, text="Löschen", style="Danger.TButton", command=delete_employee).grid(row=len(fields) + 1, column=0, sticky="w", padx=18, pady=(12, 18))
-        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_employee).grid(row=len(fields) + 1, column=1, sticky="e", padx=18, pady=(12, 18))
-
-    def _open_absence_dialog(self) -> None:
-        if not self.service.employees:
-            messagebox.showinfo("Abwesenheit", "Bitte zuerst Mitarbeitende anlegen.", parent=self)
-            return
-        dialog = tk.Toplevel(self)
-        dialog.title("Abwesenheit erfassen")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.configure(bg="#FFFFFF")
-        employees = sorted(self.service.employees, key=lambda item: item.name)
-        employee_options = {f"{employee.name} ({employee.department})": employee.id for employee in employees}
-        values = {
-            "employee": tk.StringVar(value=next(iter(employee_options))),
-            "start": tk.StringVar(value=self.week_start.strftime("%Y-%m-%d 00:00")),
-            "end": tk.StringVar(value=(self.week_start + timedelta(days=1)).strftime("%Y-%m-%d 00:00")),
-            "reason": tk.StringVar(value="Urlaub"),
-        }
-        rows = [("employee", "Mitarbeiter"), ("start", "Start"), ("end", "Ende"), ("reason", "Grund")]
-        for row, (key, label) in enumerate(rows):
-            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
-            if key == "employee":
-                ttk.Combobox(dialog, textvariable=values[key], values=list(employee_options), width=32, state="readonly").grid(row=row, column=1, padx=18, pady=7)
-            else:
-                ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
-
-        def save_absence() -> None:
-            try:
-                employee_id = employee_options[values["employee"].get()]
-                self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get())
-                dialog.destroy()
-                self._refresh_all()
-                self._set_status("Abwesenheit gespeichert.")
-            except (KeyError, ValueError) as exc:
-                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
-
-        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_absence).grid(row=4, column=1, sticky="e", padx=18, pady=(12, 18))
-
-    def _open_assignment_dialog(self) -> None:
-        if not self.service.employees or not self.service.shifts:
-            messagebox.showinfo("Zuweisung", "Bitte zuerst Mitarbeitende und Schichten anlegen.", parent=self)
-            return
-        dialog = tk.Toplevel(self)
-        dialog.title("Mitarbeitenden zuweisen")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.configure(bg="#FFFFFF")
-        employees = sorted([item for item in self.service.employees if item.is_active], key=lambda item: item.name)
-        shifts = sorted(self.service.shifts, key=lambda item: (item.start, item.name))
-        employee_options = {f"{employee.name} ({employee.department}, {employee.branch})": employee.id for employee in employees}
-        shift_options = {f"{shift.name} {shift.start:%d.%m. %H:%M} ({len(shift.employee_ids)}/{shift.required_employees})": shift.id for shift in shifts}
-        if not employee_options:
-            messagebox.showinfo("Zuweisung", "Es gibt keine aktiven Mitarbeitenden.", parent=self)
-            dialog.destroy()
-            return
-        values = {"employee": tk.StringVar(value=next(iter(employee_options))), "shift": tk.StringVar(value=next(iter(shift_options)))}
-        for row, (key, label, options) in enumerate([("employee", "Mitarbeiter", employee_options), ("shift", "Schicht", shift_options)]):
-            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
-            ttk.Combobox(dialog, textvariable=values[key], values=list(options), width=46, state="readonly").grid(row=row, column=1, padx=18, pady=7)
-
-        def assign_employee() -> None:
-            try:
-                result = self.service.assign(employee_options[values["employee"].get()], shift_options[values["shift"].get()])
-                if not result.success:
-                    raise ValueError(result.message)
-                dialog.destroy()
-                self._refresh_all()
-                self._set_status(result.message)
-            except (KeyError, ValueError) as exc:
-                messagebox.showerror("Zuweisung nicht möglich", str(exc), parent=dialog)
-
-        ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
-
     def _replace_shift(self, old_shift: Shift, new_shift: Shift) -> None:
         index = self.service.shifts.index(old_shift)
         self.service.shifts[index] = new_shift
@@ -967,6 +851,20 @@ class SchedulerApp(tk.Tk):
         except OSError as exc:
             messagebox.showerror("Speichern fehlgeschlagen", str(exc), parent=self)
 
+    def _export_reports_csv(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Berichte exportieren",
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv")],
+        )
+        if not path:
+            return
+        try:
+            output = self.service.export_reports(path)
+            self._set_status(f"Berichte exportiert: {output}")
+        except OSError as exc:
+            messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
+
     def _export_csv(self) -> None:
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
@@ -986,18 +884,25 @@ class SchedulerApp(tk.Tk):
         path = filedialog.askopenfilename(title="Forecast CSV importieren", filetypes=[("CSV", "*.csv"), ("Alle Dateien", "*.*")])
         if not path:
             return
-        forecasts = ForecastImportService().import_csv(path)
-        self._set_status(f"{len(forecasts)} Forecast-Zeilen importiert.")
+        try:
+            forecasts = ForecastImportService().import_csv(path)
+            added = self.service.add_forecasts(forecasts)
+            self.repository.save(self.service)
+            self._refresh_all()
+            self._set_status(f"{len(forecasts)} Forecast-Zeilen importiert, {added} neu gespeichert.")
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Forecast-Import fehlgeschlagen", str(exc), parent=self)
 
     def _publish_schedule(self) -> None:
-        open_slots = sum(max(0, shift.required_employees - len(shift.employee_ids)) for shift in self._week_shifts())
-        if open_slots:
-            messagebox.showwarning("Dienstplan prüfen", f"Es sind noch {open_slots} offene Besetzungen vorhanden.", parent=self)
-            return
-        self._set_status("Dienstplan veröffentlicht.")
-
-    def _show_view_info(self) -> None:
-        messagebox.showinfo("Ansicht", "Die Python-Version zeigt aktuell die Wochenansicht.", parent=self)
+        try:
+            count = self.service.publish_week(self.week_start)
+            self.repository.save(self.service)
+            self._refresh_all()
+            self._set_status(f"Dienstplan veröffentlicht: {count} Schichten gespeichert.")
+        except ValueError as exc:
+            messagebox.showwarning("Dienstplan prüfen", str(exc), parent=self)
+        except OSError as exc:
+            messagebox.showerror("Veröffentlichung fehlgeschlagen", str(exc), parent=self)
 
     def _apply_search(self) -> None:
         self._refresh_schedule_grid()

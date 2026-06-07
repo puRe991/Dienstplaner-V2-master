@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-rem Startet die separate Python-Version des Dienstplaners unter Windows.
+rem Startet die Python-Version des Dienstplaners unter Windows.
 rem Das Arbeitsverzeichnis wird auf den Ordner dieser Batch-Datei gesetzt,
 rem damit relative Pfade wie python_dienstplaner\data stabil funktionieren.
 cd /d "%~dp0"
