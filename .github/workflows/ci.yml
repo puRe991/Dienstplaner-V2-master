@@ -9,37 +9,20 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  pull-requests: read
 
 jobs:
-  build-test-static-analysis:
-    name: Restore, Build, Tests und statische Analyse
-    runs-on: windows-latest
+  python-tests:
+    name: Python-Tests
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Setup NuGet
-        uses: NuGet/setup-nuget@v2
-
-      - name: Initialize CodeQL static analysis
-        uses: github/codeql-action/init@v3
+      - name: Python einrichten
+        uses: actions/setup-python@v5
         with:
-          languages: csharp
+          python-version: '3.12'
 
-      - name: Restore NuGet packages
-        run: nuget restore Dienstplaner.sln
-
-      - name: Build solution
-        run: msbuild Dienstplaner.sln /m /p:Configuration=Release /p:Platform="Any CPU" /p:TreatWarningsAsErrors=true
-
-      - name: Run unit tests
-        run: dotnet test Dienstplaner.Tests\Dienstplaner.Tests.csproj --configuration Release --no-build --framework net472 --logger "trx"
-
-      - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+      - name: Unit-Tests ausführen
+        run: python -m unittest discover -s tests -p 'test_python_*.py'

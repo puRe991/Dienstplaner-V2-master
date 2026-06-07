@@ -11,10 +11,9 @@ from .services import SchedulerService
 
 
 class SQLiteSchedulerRepository:
-    """Small SQLite persistence layer for the standalone Python version.
+    """SQLite persistence layer for the Python Dienstplaner application.
 
-    The repository stores the Python application's own data under python_dienstplaner/data
-    by default and does not read from or write to the original C#/SQL Server setup.
+    The repository stores application data under python_dienstplaner/data by default.
     """
 
     def __init__(self, database_path: str | Path = "python_dienstplaner/data/dienstplaner.sqlite3") -> None:
