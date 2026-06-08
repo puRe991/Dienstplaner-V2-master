@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import List
 from uuid import uuid4
@@ -27,6 +27,26 @@ DEFAULT_ABSENCE_REASONS: tuple[str, ...] = (
     "Behördengang",
     "Sonstige Abwesenheit",
 )
+
+
+@dataclass(frozen=True)
+class LicenseInfo:
+    company_name: str
+    license_id: str
+    valid_until: date
+    max_users: int
+    features: List[str]
+    signature: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.company_name.strip():
+            raise ValueError("Firmenname ist erforderlich.")
+        if not self.license_id.strip():
+            raise ValueError("Lizenz-ID ist erforderlich.")
+        if self.max_users <= 0:
+            raise ValueError("Maximale Nutzerzahl muss größer als 0 sein.")
+        if any(not feature.strip() for feature in self.features):
+            raise ValueError("Lizenzfeatures dürfen nicht leer sein.")
 
 
 @dataclass

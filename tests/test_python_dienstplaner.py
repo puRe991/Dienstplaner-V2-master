@@ -13,6 +13,25 @@ from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
 
+TEST_LICENSE_RSA_MODULUS = int(
+    "c0d244d118c03575f1395b8a559b4e31cf7df01c015a08d35d496b375a9d05"
+    "a3e5b9138979ee26437e691e19c36e8bea751d96dd6c3445e28126768ece"
+    "e0ff71cabc2f08a4f8397d9353971e1a26e385a4561b847347bf314ddb"
+    "b22f00326ba958d2710d8fc6ba52569b22a095acee105cdbabba9762ac66"
+    "0a57546b501d41ed",
+    16,
+)
+TEST_LICENSE_RSA_PUBLIC_EXPONENT = 65537
+TEST_LICENSE_RSA_PRIVATE_EXPONENT = int(
+    "2a24cb0db88f2a20211d1c38dc0519ce213fb15f2d9c74195e66519cc39d"
+    "5642404f7749b0f0b0444838c96f701b9551254fd64d86fcd5d96fc8ec58"
+    "c236c31dc674e040d674c617b684b718f5df5e129a819c58f24c55a97243"
+    "1845860b6452e6128ff1ef0d5f734581cab4b8dfc553833b20b6c5372ea1"
+    "63c34c93d22abeb1",
+    16,
+)
+
+
 class SchedulerServiceTests(unittest.TestCase):
     def test_service_exposes_default_retail_departments_and_custom_options(self) -> None:
         service = SchedulerService()
@@ -218,6 +237,7 @@ class ForecastImportTests(unittest.TestCase):
         self.assertEqual(120, forecasts[0].expected_customers)
 
 
+
 class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
     def test_updates_employee_name_in_existing_assignments(self) -> None:
         service = SchedulerService()
@@ -248,6 +268,86 @@ class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
 
         self.assertEqual([], shift.employee_ids)
         self.assertEqual([], shift.employee_names)
+
+
+class LicenseManagerTests(unittest.TestCase):
+    def _signed_license(self, path: Path, *, valid_until, company_name: str = "Muster GmbH", max_users: int = 10):
+        from python_dienstplaner.licensing import LicenseManager
+        from python_dienstplaner.models import LicenseInfo
+
+        public_key = (TEST_LICENSE_RSA_MODULUS, TEST_LICENSE_RSA_PUBLIC_EXPONENT)
+        private_key = (TEST_LICENSE_RSA_MODULUS, TEST_LICENSE_RSA_PRIVATE_EXPONENT)
+        manager = LicenseManager(path, public_key=public_key, private_key=private_key)
+        license_info = LicenseInfo(
+            company_name=company_name,
+            license_id="LIC-2026-001",
+            valid_until=valid_until,
+            max_users=max_users,
+            features=["dienstplan", "berichte"],
+        )
+        signed = LicenseInfo(
+            company_name=license_info.company_name,
+            license_id=license_info.license_id,
+            valid_until=license_info.valid_until,
+            max_users=license_info.max_users,
+            features=license_info.features,
+            signature=manager.sign(license_info),
+        )
+        manager.save(signed)
+        return manager
+
+    def test_accepts_valid_license(self) -> None:
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "license.json"
+            manager = self._signed_license(path, valid_until=date(2026, 12, 31), company_name="Retail AG")
+
+            result = manager.check(current_user_count=3, today=date(2026, 6, 8))
+
+        self.assertTrue(result.valid)
+        self.assertEqual("Retail AG", result.company_name)
+        self.assertEqual("Lizenz gültig.", result.message)
+
+    def test_rejects_expired_license(self) -> None:
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "license.json"
+            manager = self._signed_license(path, valid_until=date(2026, 1, 31))
+
+            result = manager.check(today=date(2026, 6, 8))
+
+        self.assertFalse(result.valid)
+        self.assertIn("abgelaufen", result.message)
+
+    def test_rejects_tampered_license_fields(self) -> None:
+        import json
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "license.json"
+            manager = self._signed_license(path, valid_until=date(2026, 12, 31), max_users=5)
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["max_users"] = 500
+            path.write_text(json.dumps(data), encoding="utf-8")
+
+            result = manager.check(today=date(2026, 6, 8))
+
+        self.assertFalse(result.valid)
+        self.assertIn("signatur", result.message.lower())
+
+    def test_reports_missing_license(self) -> None:
+        from datetime import date
+        from python_dienstplaner.licensing import LicenseManager
+
+        with tempfile.TemporaryDirectory() as directory:
+            manager = LicenseManager(Path(directory) / "missing-license.json")
+
+            result = manager.check(today=date(2026, 6, 8))
+
+        self.assertFalse(result.valid)
+        self.assertIn("fehlt", result.message)
 
 
 class DashboardStartupTests(unittest.TestCase):
