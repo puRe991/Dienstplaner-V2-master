@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat
+from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, Permission, User, UserRole
 from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -365,6 +365,73 @@ class PublishingAndForecastTests(unittest.TestCase):
             content = output.read_text(encoding="utf-8")
 
         self.assertIn("Kategorie;Kennzahl;Wert;Hinweis", content)
+
+class UserAuthenticationTests(unittest.TestCase):
+    def test_create_user_hashes_password_with_unique_salt_and_authenticates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+
+            user = repository.create_user("admin", "sicheres-passwort", "admin", "Admin")
+            authenticated = repository.authenticate_user("ADMIN", "sicheres-passwort")
+
+            self.assertEqual(1, repository.user_count())
+            self.assertIsNotNone(authenticated)
+            self.assertEqual(user.id, authenticated.id)
+            self.assertNotEqual("sicheres-passwort", user.password_hash)
+            self.assertRegex(user.password_salt, r"^[0-9a-f]{32}$")
+            self.assertRegex(user.password_hash, r"^[0-9a-f]{64}$")
+            self.assertIsNone(repository.authenticate_user("admin", "falsch"))
+
+    def test_password_salts_are_unique_per_user(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+
+            first = repository.create_user("first", "gleiches-passwort", UserRole.ADMIN)
+            second = repository.create_user("second", "gleiches-passwort", UserRole.PLANNER)
+
+            self.assertNotEqual(first.password_salt, second.password_salt)
+            self.assertNotEqual(first.password_hash, second.password_hash)
+
+    def test_rejects_short_passwords_and_duplicate_usernames(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            repository.create_user("admin", "sicheres-passwort", UserRole.ADMIN)
+
+            with self.assertRaises(ValueError):
+                repository.create_user("admin", "anderes-passwort", UserRole.ADMIN)
+            with self.assertRaises(ValueError):
+                repository.create_user("viewer", "kurz", UserRole.VIEWER)
+
+
+class RolePermissionTests(unittest.TestCase):
+    def test_role_permissions_match_locked_actions(self) -> None:
+        admin = User("admin", UserRole.ADMIN)
+        planner = User("planer", UserRole.PLANNER)
+        viewer = User("viewer", UserRole.VIEWER)
+
+        self.assertTrue(admin.has_permission(Permission.MANAGE_EMPLOYEES))
+        self.assertTrue(admin.has_permission(Permission.MANAGE_ABSENCES))
+        self.assertTrue(admin.has_permission(Permission.PUBLISH_SCHEDULE))
+        self.assertTrue(admin.has_permission(Permission.EXPORT))
+        self.assertFalse(planner.has_permission(Permission.MANAGE_EMPLOYEES))
+        self.assertTrue(planner.has_permission(Permission.MANAGE_ABSENCES))
+        self.assertTrue(planner.has_permission(Permission.PUBLISH_SCHEDULE))
+        self.assertTrue(planner.has_permission(Permission.EXPORT))
+        self.assertFalse(viewer.has_permission(Permission.EXPORT))
+
+    def test_app_permission_helper_blocks_locked_actions_for_viewer(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        viewer = User("viewer", UserRole.VIEWER)
+        planner = User("planer", UserRole.PLANNER)
+
+        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.EXPORT))
+        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.PUBLISH_SCHEDULE))
+        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.MANAGE_ABSENCES))
+        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.MANAGE_EMPLOYEES))
+        self.assertTrue(SchedulerApp._user_has_permission(planner, Permission.EXPORT))
+        self.assertFalse(SchedulerApp._user_has_permission(planner, Permission.MANAGE_EMPLOYEES))
+        self.assertFalse(SchedulerApp._user_has_permission(None, Permission.EXPORT))
 
 
 class AppIntegrityTests(unittest.TestCase):

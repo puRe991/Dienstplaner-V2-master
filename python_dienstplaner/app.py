@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Shift
+from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Permission, Shift, User, UserRole
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -56,12 +56,14 @@ class SchedulerApp(tk.Tk):
         self.schedule_cells: dict[tuple[str, int], tk.Label] = {}
         self.sidebar_buttons: dict[str, tk.Button] = {}
         self.active_view = "Dienstplan"
+        self.current_user: User | None = None
 
         self.title("Dienstplanung Pro")
         self.geometry("1440x840")
         self.minsize(1180, 720)
         self.configure(bg="#F8FAFC")
         self._configure_styles()
+        self._authenticate_on_start()
         self._build_ui()
         self._refresh_all()
 
@@ -91,6 +93,92 @@ class SchedulerApp(tk.Tk):
         style.configure("Ghost.TButton", background="#FFFFFF", foreground="#334155", padding=(12, 9))
         style.configure("Danger.TButton", background="#FFFFFF", foreground="#DC2626", padding=(12, 9))
 
+    def _authenticate_on_start(self) -> None:
+        if self.repository.user_count() == 0:
+            self.current_user = self._run_initial_setup()
+        while self.current_user is None:
+            self.current_user = self._run_login_dialog()
+            if self.current_user is None:
+                self.destroy()
+                raise SystemExit("Login abgebrochen.")
+
+    def _run_initial_setup(self) -> User | None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Ersten Administrator einrichten")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        dialog.protocol("WM_DELETE_WINDOW", lambda: None)
+        result: dict[str, User | None] = {"user": None}
+        values = {
+            "username": tk.StringVar(value="admin"),
+            "display_name": tk.StringVar(value="Administrator"),
+            "password": tk.StringVar(),
+            "repeat": tk.StringVar(),
+        }
+        tk.Label(dialog, text="Initialer Administrator", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 8))
+        tk.Label(dialog, text="Legen Sie den ersten lokalen Admin an. Das Passwort wird mit Salt gehasht gespeichert.", bg="#FFFFFF", fg="#334155", wraplength=360, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 12))
+        for row, (key, label) in enumerate([("username", "Benutzername"), ("display_name", "Anzeigename"), ("password", "Passwort"), ("repeat", "Passwort wiederholen")], start=2):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=6)
+            ttk.Entry(dialog, textvariable=values[key], width=34, show="*" if "password" in key or key == "repeat" else "").grid(row=row, column=1, padx=18, pady=6)
+
+        def create_admin() -> None:
+            if values["password"].get() != values["repeat"].get():
+                messagebox.showerror("Setup fehlgeschlagen", "Die Passwörter stimmen nicht überein.", parent=dialog)
+                return
+            try:
+                result["user"] = self.repository.create_user(values["username"].get(), values["password"].get(), UserRole.ADMIN, values["display_name"].get())
+                dialog.destroy()
+            except ValueError as exc:
+                messagebox.showerror("Setup fehlgeschlagen", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Administrator anlegen", style="Primary.TButton", command=create_admin).grid(row=6, column=1, sticky="e", padx=18, pady=(12, 18))
+        self.wait_window(dialog)
+        return result["user"]
+
+    def _run_login_dialog(self) -> User | None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Anmelden")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        result: dict[str, User | None] = {"user": None}
+        username = tk.StringVar()
+        password = tk.StringVar()
+        tk.Label(dialog, text="Anmelden", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 10))
+        for row, (label, variable, show) in enumerate([("Benutzername", username, ""), ("Passwort", password, "*")], start=1):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Entry(dialog, textvariable=variable, width=34, show=show).grid(row=row, column=1, padx=18, pady=7)
+
+        def login() -> None:
+            user = self.repository.authenticate_user(username.get(), password.get())
+            if user is None:
+                messagebox.showerror("Anmeldung fehlgeschlagen", "Benutzername oder Passwort ist falsch.", parent=dialog)
+                return
+            result["user"] = user
+            dialog.destroy()
+
+        ttk.Button(dialog, text="Anmelden", style="Primary.TButton", command=login).grid(row=3, column=1, sticky="e", padx=18, pady=(12, 18))
+        dialog.bind("<Return>", lambda _event: login())
+        self.wait_window(dialog)
+        return result["user"]
+
+    def _current_user_label(self) -> str:
+        if self.current_user is None:
+            return "Nicht angemeldet"
+        return f"{self.current_user.display_name}\nRolle: {self.current_user.role.value}"
+
+    @staticmethod
+    def _user_has_permission(user: User | None, permission: Permission) -> bool:
+        return user is not None and user.has_permission(permission)
+
+    def _require_permission(self, permission: Permission, action: str, parent: tk.Misc | None = None) -> bool:
+        if self._user_has_permission(self.current_user, permission):
+            return True
+        messagebox.showwarning("Keine Berechtigung", f"Sie haben keine Berechtigung für: {action}", parent=parent or self)
+        self._set_status(f"Aktion gesperrt: {action}")
+        return False
+
     def _build_ui(self) -> None:
         self.columnconfigure(1, weight=1)
         self.rowconfigure(1, weight=1)
@@ -118,7 +206,7 @@ class SchedulerApp(tk.Tk):
 
         self.notification_label = tk.Label(header, text="Offene Slots: 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
         self.notification_label.grid(row=0, column=3, padx=(12, 24))
-        tk.Label(header, text="Lokaler Modus\nOhne Rollenprüfung", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
+        tk.Label(header, text=self._current_user_label(), bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
@@ -284,6 +372,8 @@ class SchedulerApp(tk.Tk):
         self._set_status("Dienstplanansicht für die aktuelle Woche geöffnet.")
 
     def _open_employee_manager(self) -> None:
+        if not self._require_permission(Permission.MANAGE_EMPLOYEES, "Mitarbeiter bearbeiten"):
+            return
         window = self._create_manager_window("Mitarbeiter verwalten", "1040x540")
         columns = ("name", "department", "qualification", "hours", "break", "branch", "wage", "active")
         tree = self._create_tree(window, columns, {
@@ -388,6 +478,8 @@ class SchedulerApp(tk.Tk):
         refresh()
 
     def _open_absence_manager(self) -> None:
+        if not self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten bearbeiten"):
+            return
         window = self._create_manager_window("Abwesenheiten verwalten", "820x500")
         columns = ("employee", "start", "end", "reason")
         tree = self._create_tree(window, columns, {"employee": "Mitarbeiter", "start": "Start", "end": "Ende", "reason": "Grund"})
@@ -527,7 +619,7 @@ class SchedulerApp(tk.Tk):
         text = tk.Text(window, height=8, bg="#FFFFFF", fg="#0F172A", relief="flat", wrap="word")
         text.pack(fill="both", expand=True, padx=16, pady=16)
         text.insert("end", f"SQLite-Datenbank:\n{self.repository.database_path}\n\n")
-        text.insert("end", "Systeminfo:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen, Abwesenheiten, Forecasts und Veröffentlichungsstatus dauerhaft.\n• Export erzeugt Dienstplan-CSV/Textdateien oder Report-CSV.\n• Forecast importiert Umsatzprognosen und ergänzt daraus Personalbedarfs-Hinweise in Berichten.\n\nHinweis: Die App läuft im lokalen Modus ohne Benutzer-/Rollenprüfung.")
+        text.insert("end", "Systeminfo:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen, Abwesenheiten, Forecasts und Veröffentlichungsstatus dauerhaft.\n• Export erzeugt Dienstplan-CSV/Textdateien oder Report-CSV.\n• Forecast importiert Umsatzprognosen und ergänzt daraus Personalbedarfs-Hinweise in Berichten.\n\nHinweis: Lokale Benutzer- und Rollenprüfung ist aktiv.")
         text.configure(state="disabled")
         self._add_manager_buttons(window, [("Jetzt speichern", self._save), ("Dienstplan CSV Export", self._export_csv)])
 
@@ -862,6 +954,8 @@ class SchedulerApp(tk.Tk):
         )
 
     def _delete_absence(self, absence_id: str) -> None:
+        if not self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten löschen"):
+            return
         if not messagebox.askyesno("Abwesenheit löschen", "Soll diese Abwesenheit gelöscht werden?", parent=self):
             return
         if self.service.delete_absence(absence_id):
@@ -973,7 +1067,9 @@ class SchedulerApp(tk.Tk):
         ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_shift).grid(row=7, column=1, sticky="e", padx=18, pady=(12, 18))
         return dialog
 
-    def _open_employee_dialog(self, employee: Employee | None = None) -> tk.Toplevel:
+    def _open_employee_dialog(self, employee: Employee | None = None) -> tk.Toplevel | None:
+        if not self._require_permission(Permission.MANAGE_EMPLOYEES, "Mitarbeiter bearbeiten"):
+            return None
         dialog = tk.Toplevel(self)
         dialog.title("Mitarbeiter bearbeiten" if employee else "Mitarbeiter anlegen")
         dialog.transient(self)
@@ -1046,6 +1142,8 @@ class SchedulerApp(tk.Tk):
         return dialog
 
     def _open_absence_dialog(self) -> tk.Toplevel | None:
+        if not self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten bearbeiten"):
+            return None
         if not self.service.employees:
             messagebox.showinfo("Abwesenheit", "Bitte zuerst Mitarbeitende anlegen.", parent=self)
             return None
@@ -1171,6 +1269,8 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Speichern fehlgeschlagen", str(exc), parent=self)
 
     def _export_reports_csv(self) -> None:
+        if not self._require_permission(Permission.EXPORT, "Export"):
+            return
         path = filedialog.asksaveasfilename(
             title="Berichte exportieren",
             defaultextension=".csv",
@@ -1185,6 +1285,8 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
 
     def _export_csv(self) -> None:
+        if not self._require_permission(Permission.EXPORT, "Export"):
+            return
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
             defaultextension=".csv",
@@ -1213,8 +1315,11 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Forecast-Import fehlgeschlagen", str(exc), parent=self)
 
     def _publish_schedule(self) -> None:
+        if not self._require_permission(Permission.PUBLISH_SCHEDULE, "Dienstplan veröffentlichen"):
+            return
         try:
-            count = self.service.publish_week(self.week_start)
+            published_by = self.current_user.display_name if self.current_user else "Lokaler Benutzer"
+            count = self.service.publish_week(self.week_start, published_by)
             self.repository.save(self.service)
             self._refresh_all()
             self._set_status(f"Dienstplan veröffentlicht: {count} Schichten gespeichert.")
