@@ -199,21 +199,8 @@ class SchedulerApp(tk.Tk):
             self.grid_frame.columnconfigure(column, weight=1, minsize=115)
 
     def _build_legend_and_details(self, parent: ttk.Frame) -> None:
-        legend = ttk.Frame(parent)
-        legend.grid(row=1, column=0, sticky="ew", pady=(14, 10))
-        items = [
-            ("#A7E8B0", "Frühschicht\n06:00 – 14:00"),
-            ("#F8C266", "Spätschicht\n14:00 – 22:00"),
-            ("#7BAAF7", "Nachtschicht\n22:00 – 06:00"),
-            ("#C084FC", "Bereitschaft\n24h"),
-            ("#F87171", "Abwesend\n–"),
-            ("#CBD5E1", "Offene Schicht\nNicht besetzt"),
-        ]
-        for color, label in items:
-            item = ttk.Frame(legend)
-            item.pack(side="left", padx=(0, 28))
-            tk.Label(item, text="●", fg=color, bg="#F8FAFC", font=("Segoe UI", 14)).pack(side="left")
-            ttk.Label(item, text=label, style="Muted.TLabel", justify="left").pack(side="left", padx=(6, 0))
+        self.legend_frame = ttk.Frame(parent)
+        self.legend_frame.grid(row=1, column=0, sticky="ew", pady=(14, 10))
 
         details = tk.Frame(parent, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
         details.grid(row=2, column=0, sticky="ew")
@@ -501,10 +488,55 @@ class SchedulerApp(tk.Tk):
             return f"{self.week_start.day}. – {week_end.day}. {self._month_name(self.week_start)} {self.week_start.year}"
         return f"{self._format_date(self.week_start)} – {self._format_date(week_end)}"
 
+
+    def _refresh_legend(self) -> None:
+        for child in self.legend_frame.winfo_children():
+            child.destroy()
+
+        items = self._legend_items_for_state(self._week_shifts(), self._week_absences())
+        if not items:
+            ttk.Label(self.legend_frame, text="Keine eingetragenen Schichten oder Abwesenheiten in dieser Woche.", style="Muted.TLabel").pack(side="left")
+            return
+
+        for color, label in items:
+            item = ttk.Frame(self.legend_frame)
+            item.pack(side="left", padx=(0, 28))
+            tk.Label(item, text="●", fg=color, bg="#F8FAFC", font=("Segoe UI", 14)).pack(side="left")
+            ttk.Label(item, text=label, style="Muted.TLabel", justify="left").pack(side="left", padx=(6, 0))
+
+    @classmethod
+    def _legend_items_for_state(cls, week_shifts: list[Shift], week_absences: list[Absence]) -> list[tuple[str, str]]:
+        """Return legend entries only for objects that exist in the selected week."""
+        items: list[tuple[str, str]] = []
+        seen_shift_labels: set[str] = set()
+
+        for shift in sorted(week_shifts, key=lambda item: (item.start, item.name)):
+            style = cls._style_for_shift(shift)
+            label = f"{style.label}\n{cls._legend_time_label(shift)}"
+            if label in seen_shift_labels:
+                continue
+            items.append((style.foreground, label))
+            seen_shift_labels.add(label)
+
+        if week_absences:
+            items.append(("#F87171", "Abwesend\nEingetragen"))
+
+        if any(len(shift.employee_ids) < shift.required_employees for shift in week_shifts):
+            items.append(("#CBD5E1", "Offene Schicht\nNicht besetzt"))
+
+        return items
+
+    @staticmethod
+    def _legend_time_label(shift: Shift) -> str:
+        if shift.duration_hours >= 23.5:
+            return "24h"
+        return f"{shift.start:%H:%M} – {shift.end:%H:%M}"
+
     def _refresh_all(self) -> None:
         self.week_label.configure(text=f"📅  {self._format_week_range()}")
         self._refresh_header_state()
         self._refresh_cards()
+        self._refresh_legend()
         self._refresh_schedule_grid()
         self._refresh_calendar()
         self._refresh_absences()
@@ -623,13 +655,16 @@ class SchedulerApp(tk.Tk):
             label.bind("<Double-Button-1>", lambda _event, absence_id=absence.id: self._delete_absence(absence_id))
 
     def _refresh_details(self) -> None:
-        shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id else None
-        if shift is None and self.service.shifts:
-            shift = self._week_shifts()[0] if self._week_shifts() else self.service.shifts[0]
+        week_shifts = self._week_shifts()
+        week_shift_ids = {shift.id for shift in week_shifts}
+        shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id in week_shift_ids else None
+        if shift is None and week_shifts:
+            shift = week_shifts[0]
             self.selected_shift_id = shift.id
         if shift is None:
+            self.selected_shift_id = None
             self.detail_title.configure(text="Schichtdetails")
-            self.detail_body.configure(text="Keine Schichten vorhanden.")
+            self.detail_body.configure(text="Keine Schichten in dieser Woche eingetragen.")
             return
         assigned = ", ".join(shift.employee_names) or "Nicht besetzt"
         published = f"{shift.published_at:%d.%m.%Y %H:%M} durch {shift.published_by}" if shift.published_at else "Nein"
@@ -944,11 +979,23 @@ class SchedulerApp(tk.Tk):
         week_end = self.week_start + timedelta(days=7)
         return sorted([shift for shift in self.service.shifts if self.week_start <= shift.start < week_end], key=lambda shift: (shift.start, shift.name))
 
+    def _week_absences(self) -> list[Absence]:
+        return sorted(
+            [
+                absence
+                for employee in self.service.employees
+                for absence in employee.absences
+                if self._range_in_week(absence.start, absence.end)
+            ],
+            key=lambda absence: (absence.start, absence.reason),
+        )
+
     def _range_in_week(self, start: datetime, end: datetime) -> bool:
         week_end = self.week_start + timedelta(days=7)
         return start < week_end and end >= self.week_start
 
-    def _style_for_shift(self, shift: Shift) -> ShiftStyle:
+    @staticmethod
+    def _style_for_shift(shift: Shift) -> ShiftStyle:
         normalized = shift.name.strip().lower()
         for key, style in SHIFT_STYLES.items():
             if key in normalized:

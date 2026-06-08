@@ -166,6 +166,30 @@ class DashboardStartupTests(unittest.TestCase):
 
         self.assertFalse(hasattr(SchedulerApp, "_ensure_demo_data"))
 
+    def test_legend_only_contains_existing_week_entries(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        service.add_shift("Frühschicht", "Kasse", datetime(2026, 1, 1, 6), datetime(2026, 1, 1, 14), 2, "Kasse")
+        employee.absences.append(Absence(datetime(2026, 1, 2, 8), datetime(2026, 1, 2, 16), "Urlaub"))
+
+        items = SchedulerApp._legend_items_for_state(service.shifts, employee.absences)
+
+        self.assertEqual(
+            [
+                ("#12713A", "Frühschicht\n06:00 – 14:00"),
+                ("#F87171", "Abwesend\nEingetragen"),
+                ("#CBD5E1", "Offene Schicht\nNicht besetzt"),
+            ],
+            items,
+        )
+
+    def test_legend_returns_no_defaults_without_entries(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        self.assertEqual([], SchedulerApp._legend_items_for_state([], []))
+
 
 class PublishingAndForecastTests(unittest.TestCase):
     def test_publish_week_persists_status(self) -> None:
