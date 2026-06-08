@@ -41,6 +41,9 @@ class SchedulerApp(tk.Tk):
     GERMAN_MONTH_ABBR = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
     SIDEBAR_WIDTH = 250
     RIGHT_PANEL_WIDTH = 250
+    UNASSIGNED_EMPLOYEE_BG = "#FEF3C7"
+    UNASSIGNED_EMPLOYEE_FG = "#92400E"
+    UNASSIGNED_CELL_BG = "#FFFBEB"
 
     def __init__(self, service: SchedulerService, repository: SQLiteSchedulerRepository) -> None:
         super().__init__()
@@ -493,7 +496,11 @@ class SchedulerApp(tk.Tk):
         for child in self.legend_frame.winfo_children():
             child.destroy()
 
-        items = self._legend_items_for_state(self._week_shifts(), self._week_absences())
+        items = self._legend_items_for_state(
+            self._week_shifts(),
+            self._week_absences(),
+            unassigned_employees=self._unassigned_employee_count(),
+        )
         if not items:
             ttk.Label(self.legend_frame, text="Keine eingetragenen Schichten oder Abwesenheiten in dieser Woche.", style="Muted.TLabel").pack(side="left")
             return
@@ -505,7 +512,12 @@ class SchedulerApp(tk.Tk):
             ttk.Label(item, text=label, style="Muted.TLabel", justify="left").pack(side="left", padx=(6, 0))
 
     @classmethod
-    def _legend_items_for_state(cls, week_shifts: list[Shift], week_absences: list[Absence]) -> list[tuple[str, str]]:
+    def _legend_items_for_state(
+        cls,
+        week_shifts: list[Shift],
+        week_absences: list[Absence],
+        unassigned_employees: int = 0,
+    ) -> list[tuple[str, str]]:
         """Return legend entries only for objects that exist in the selected week."""
         items: list[tuple[str, str]] = []
         seen_shift_labels: set[str] = set()
@@ -523,6 +535,9 @@ class SchedulerApp(tk.Tk):
 
         if any(len(shift.employee_ids) < shift.required_employees for shift in week_shifts):
             items.append(("#CBD5E1", "Offene Schicht\nNicht besetzt"))
+
+        if unassigned_employees > 0:
+            items.append((cls.UNASSIGNED_EMPLOYEE_FG, f"Ohne Schicht\n{unassigned_employees} Mitarbeitende"))
 
         return items
 
@@ -561,12 +576,18 @@ class SchedulerApp(tk.Tk):
         for child in self.cards_frame.winfo_children():
             child.destroy()
         active_count = sum(1 for employee in self.service.employees if employee.is_active)
+        unassigned_count = self._unassigned_employee_count()
         open_shifts = sum(max(0, shift.required_employees - len(shift.employee_ids)) for shift in self._week_shifts())
         absences = sum(1 for employee in self.service.employees for absence in employee.absences if self._range_in_week(absence.start, absence.end))
         hours = sum(shift.duration_hours * len(shift.employee_ids) for shift in self._week_shifts())
         avg_hours = hours / max(1, len(self.service.employees))
+        employee_note = (
+            f"{unassigned_count} ohne Schicht"
+            if unassigned_count
+            else (f"{len(self.service.employees) - active_count} inaktiv" if len(self.service.employees) != active_count else "Alle geplant")
+        )
         cards = [
-            ("👥", "Mitarbeiter", str(active_count), f"{len(self.service.employees) - active_count} inaktiv" if len(self.service.employees) != active_count else "Aktiv"),
+            ("👥", "Mitarbeiter", str(active_count), employee_note),
             ("▣", "Offene Schichten", str(open_shifts), "Kritisch prüfen" if open_shifts else "Voll besetzt"),
             ("☂", "Abwesenheiten", str(absences), "Erfasst"),
             ("◷", "Stunden diese Woche", f"{hours:.0f} h", f"Ø {avg_hours:.1f} h pro Mitarbeiter"),
@@ -598,16 +619,32 @@ class SchedulerApp(tk.Tk):
             return
         for row_index, employee in enumerate(filtered_employees, start=1):
             self.employee_rows[employee.id] = row_index
-            employee_text = f"{self._avatar(employee.name)}  {employee.name}\n{employee.qualification or employee.department}\n● {self._availability_text(employee)}"
-            employee_label = tk.Label(self.grid_frame, text=employee_text, bg="#FFFFFF", fg="#0F172A", justify="left", anchor="w", padx=14, pady=8, cursor="hand2")
+            week_shifts = self._employee_week_shifts(employee, self.week_start)
+            is_unassigned = self._is_unassigned_for_week(employee, self.week_start)
+            employee_text = (
+                f"{self._avatar(employee.name)}  {employee.name}\n"
+                f"{employee.qualification or employee.department}\n"
+                f"● {self._availability_text(employee)} · {self._employee_week_assignment_text(week_shifts)}"
+            )
+            employee_label = tk.Label(
+                self.grid_frame,
+                text=employee_text,
+                bg=self.UNASSIGNED_EMPLOYEE_BG if is_unassigned else "#FFFFFF",
+                fg=self.UNASSIGNED_EMPLOYEE_FG if is_unassigned else "#0F172A",
+                justify="left",
+                anchor="w",
+                padx=14,
+                pady=8,
+                cursor="hand2",
+            )
             employee_label.grid(row=row_index, column=0, sticky="nsew")
             employee_label.bind("<Double-Button-1>", lambda _event, employee_id=employee.id: self._open_employee_dialog(self.service.find_employee(employee_id)))
             for day_index in range(7):
-                cell = self._make_schedule_cell(employee, day_index)
+                cell = self._make_schedule_cell(employee, day_index, is_unassigned)
                 cell.grid(row=row_index, column=day_index + 1, sticky="nsew", padx=4, pady=5)
                 self.schedule_cells[(employee.id, day_index)] = cell
 
-    def _make_schedule_cell(self, employee: Employee, day_index: int) -> tk.Label:
+    def _make_schedule_cell(self, employee: Employee, day_index: int, is_unassigned: bool = False) -> tk.Label:
         day = self.week_start.date() + timedelta(days=day_index)
         absence = next((item for item in employee.absences if item.start.date() <= day <= item.end.date()), None)
         if absence is not None:
@@ -615,11 +652,27 @@ class SchedulerApp(tk.Tk):
 
         shift = next((item for item in employee.shifts if item.start.date() == day), None)
         if shift is None:
-            label = tk.Label(self.grid_frame, text="+", bg="#FFFFFF", fg="#94A3B8", font=("Segoe UI", 12, "bold"), cursor="hand2")
+            label = tk.Label(
+                self.grid_frame,
+                text="+\nNicht geplant" if is_unassigned else "+",
+                bg=self.UNASSIGNED_CELL_BG if is_unassigned else "#FFFFFF",
+                fg=self.UNASSIGNED_EMPLOYEE_FG if is_unassigned else "#94A3B8",
+                font=("Segoe UI", 9 if is_unassigned else 12, "bold"),
+                justify="center",
+                cursor="hand2",
+            )
             label.bind("<Button-1>", lambda _event: self._open_assignment_dialog())
             return label
         style = self._style_for_shift(shift)
-        label = tk.Label(self.grid_frame, text=f"{shift.start:%H:%M} – {shift.end:%H:%M}\n{style.label}", bg=style.background, fg=style.foreground, font=("Segoe UI", 8, "bold"), justify="center", cursor="hand2")
+        label = tk.Label(
+            self.grid_frame,
+            text=f"{shift.name}\n{shift.start:%H:%M} – {shift.end:%H:%M}",
+            bg=style.background,
+            fg=style.foreground,
+            font=("Segoe UI", 8, "bold"),
+            justify="center",
+            cursor="hand2",
+        )
         label.bind("<Button-1>", lambda _event, shift_id=shift.id: self._select_shift(shift_id))
         return label
 
@@ -983,7 +1036,41 @@ class SchedulerApp(tk.Tk):
         query = self.search_term.get().strip().lower()
         if not query or query == "suche nach mitarbeitenden, schichten...":
             return sorted(self.service.employees, key=lambda employee: employee.name)
-        return [employee for employee in sorted(self.service.employees, key=lambda item: item.name) if query in employee.name.lower() or query in employee.department.lower() or query in employee.qualification.lower()]
+        return [
+            employee
+            for employee in sorted(self.service.employees, key=lambda item: item.name)
+            if query in employee.name.lower()
+            or query in employee.department.lower()
+            or query in employee.qualification.lower()
+            or any(
+                query in shift.name.lower() or query in shift.department.lower()
+                for shift in self._employee_week_shifts(employee, self.week_start)
+            )
+        ]
+
+    def _unassigned_employee_count(self) -> int:
+        return sum(1 for employee in self.service.employees if self._is_unassigned_for_week(employee, self.week_start))
+
+    @staticmethod
+    def _employee_week_shifts(employee: Employee, week_start: datetime) -> list[Shift]:
+        week_end = week_start + timedelta(days=7)
+        return sorted(
+            [shift for shift in employee.shifts if week_start <= shift.start < week_end],
+            key=lambda shift: (shift.start, shift.name),
+        )
+
+    @classmethod
+    def _is_unassigned_for_week(cls, employee: Employee, week_start: datetime) -> bool:
+        return employee.is_active and not cls._employee_week_shifts(employee, week_start)
+
+    @classmethod
+    def _employee_week_assignment_text(cls, week_shifts: list[Shift]) -> str:
+        if not week_shifts:
+            return "Keine Schicht diese Woche"
+        if len(week_shifts) == 1:
+            shift = week_shifts[0]
+            return f"{shift.name} {cls.GERMAN_WEEKDAY_ABBR[shift.start.weekday()]} {shift.start:%H:%M}"
+        return f"{len(week_shifts)} Schichten diese Woche"
 
     def _week_shifts(self) -> list[Shift]:
         week_end = self.week_start + timedelta(days=7)

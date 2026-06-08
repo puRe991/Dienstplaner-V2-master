@@ -232,6 +232,31 @@ class DashboardStartupTests(unittest.TestCase):
 
         self.assertEqual([], SchedulerApp._legend_items_for_state([], []))
 
+    def test_legend_marks_unassigned_employees_when_requested(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        self.assertIn(
+            ("#92400E", "Ohne Schicht\n2 Mitarbeitende"),
+            SchedulerApp._legend_items_for_state([], [], unassigned_employees=2),
+        )
+
+    def test_employee_week_assignment_helpers_mark_missing_week_shift(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+        from python_dienstplaner.models import Employee, Shift
+
+        employee = Employee("Eva Retail", "Kasse", "Kasse")
+        week_start = datetime(2026, 1, 5)
+
+        self.assertTrue(SchedulerApp._is_unassigned_for_week(employee, week_start))
+        self.assertEqual("Keine Schicht diese Woche", SchedulerApp._employee_week_assignment_text([]))
+
+        shift = Shift("Früh", "Kasse", datetime(2026, 1, 5, 8), datetime(2026, 1, 5, 16), 1, "Kasse")
+        employee.shifts.append(shift)
+
+        self.assertFalse(SchedulerApp._is_unassigned_for_week(employee, week_start))
+        self.assertEqual([shift], SchedulerApp._employee_week_shifts(employee, week_start))
+        self.assertEqual("Früh Mo 08:00", SchedulerApp._employee_week_assignment_text([shift]))
+
 
 class PublishingAndForecastTests(unittest.TestCase):
     def test_publish_week_persists_status(self) -> None:
