@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from .licensing import LicenseCheckResult, LicenseManager
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
@@ -45,10 +46,11 @@ class SchedulerApp(tk.Tk):
     UNASSIGNED_EMPLOYEE_FG = "#92400E"
     UNASSIGNED_CELL_BG = "#FFFBEB"
 
-    def __init__(self, service: SchedulerService, repository: SQLiteSchedulerRepository) -> None:
+    def __init__(self, service: SchedulerService, repository: SQLiteSchedulerRepository, license_result: LicenseCheckResult | None = None) -> None:
         super().__init__()
         self.service = service
         self.repository = repository
+        self.license_result = license_result or LicenseCheckResult(False, "Lizenzprüfung wurde nicht ausgeführt.")
         self.status = tk.StringVar(value="Bereit")
         self.selected_shift_id: str | None = None
         self.week_start = self._default_week_start()
@@ -64,6 +66,7 @@ class SchedulerApp(tk.Tk):
         self._configure_styles()
         self._build_ui()
         self._refresh_all()
+        self._apply_license_status()
 
     @classmethod
     def _default_week_start(cls) -> datetime:
@@ -118,7 +121,19 @@ class SchedulerApp(tk.Tk):
 
         self.notification_label = tk.Label(header, text="Offene Slots: 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
         self.notification_label.grid(row=0, column=3, padx=(12, 24))
-        tk.Label(header, text="Lokaler Modus\nOhne Rollenprüfung", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
+        self.license_label = tk.Label(header, text="Lizenz wird geprüft", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10))
+        self.license_label.grid(row=0, column=4, padx=(0, 24))
+
+
+    def _apply_license_status(self) -> None:
+        color = "#15803D" if self.license_result.valid else "#B91C1C"
+        prefix = "Lizenz gültig" if self.license_result.valid else "Lizenzproblem"
+        if hasattr(self, "license_label"):
+            self.license_label.configure(
+                text=f"{prefix}\n{self.license_result.company_name}",
+                fg=color,
+            )
+        self._set_status(f"{prefix}: {self.license_result.display_text} — {self.license_result.message}")
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
@@ -1357,10 +1372,15 @@ class SchedulerApp(tk.Tk):
         footer = ttk.Label(self, textvariable=self.status, relief="sunken", anchor="w", padding=(10, 5))
         footer.grid(row=2, column=0, columnspan=2, sticky="ew")
 
-def create_app(database_path: str | Path = "python_dienstplaner/data/dienstplaner.sqlite3") -> SchedulerApp:
+def create_app(
+    database_path: str | Path = "python_dienstplaner/data/dienstplaner.sqlite3",
+    license_path: str | Path | None = None,
+) -> SchedulerApp:
     repository = SQLiteSchedulerRepository(database_path)
     service = repository.load()
-    return SchedulerApp(service, repository)
+    active_user_count = sum(1 for employee in service.employees if employee.is_active)
+    license_result = LicenseManager(license_path).check(current_user_count=active_user_count)
+    return SchedulerApp(service, repository, license_result)
 
 
 def main() -> None:
