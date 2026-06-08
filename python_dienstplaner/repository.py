@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import secrets
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 from uuid import uuid4
 
+from .auth import User, UserRole
 from .models import Absence, Employee, RevenueForecast, Shift
 from .services import SchedulerService
+
+
+PASSWORD_ITERATIONS = 200_000
+PASSWORD_SALT_BYTES = 16
 
 
 class SQLiteSchedulerRepository:
@@ -194,6 +202,112 @@ class SQLiteSchedulerRepository:
         service.shifts.extend(shifts.values())
         return service
 
+    def user_count(self) -> int:
+        with self._connect() as connection:
+            return int(connection.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+
+    def create_user(self, username: str, password: str, role: UserRole | str, display_name: str = "") -> User:
+        normalized_username = username.strip()
+        if not normalized_username:
+            raise ValueError("Benutzername ist erforderlich.")
+        if len(password) < 8:
+            raise ValueError("Passwort muss mindestens 8 Zeichen lang sein.")
+        user_role = role if isinstance(role, UserRole) else UserRole(str(role))
+        salt, password_hash = self._hash_password(password)
+        user = User(
+            username=normalized_username,
+            display_name=display_name.strip() or normalized_username,
+            role=user_role,
+            password_salt=salt,
+            password_hash=password_hash,
+        )
+        with self._connect() as connection:
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO users(id, username, display_name, role, password_hash, password_salt, is_active, created_at)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        user.id,
+                        user.username,
+                        user.display_name,
+                        user.role.value,
+                        user.password_hash,
+                        user.password_salt,
+                        1 if user.is_active else 0,
+                        user.created_at.isoformat(),
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("Benutzername existiert bereits.") from exc
+        return user
+
+    def authenticate_user(self, username: str, password: str) -> User | None:
+        normalized_username = username.strip()
+        if not normalized_username or not password:
+            return None
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, username, display_name, role, password_hash, password_salt, is_active, created_at
+                FROM users
+                WHERE lower(username) = lower(?)
+                """,
+                (normalized_username,),
+            ).fetchone()
+        if row is None or not bool(row[6]):
+            return None
+        if not self._verify_password(password, row[5], row[4]):
+            return None
+        return User(
+            id=row[0],
+            username=row[1],
+            display_name=row[2] or row[1],
+            role=UserRole(row[3]),
+            password_hash=row[4],
+            password_salt=row[5],
+            is_active=bool(row[6]),
+            created_at=datetime.fromisoformat(row[7]),
+        )
+
+    def list_users(self) -> list[User]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, username, display_name, role, password_hash, password_salt, is_active, created_at
+                FROM users
+                ORDER BY username COLLATE NOCASE
+                """
+            ).fetchall()
+        return [
+            User(
+                id=row[0],
+                username=row[1],
+                display_name=row[2] or row[1],
+                role=UserRole(row[3]),
+                password_hash=row[4],
+                password_salt=row[5],
+                is_active=bool(row[6]),
+                created_at=datetime.fromisoformat(row[7]),
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def _hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
+        password_salt = salt or secrets.token_hex(PASSWORD_SALT_BYTES)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(password_salt), PASSWORD_ITERATIONS)
+        return password_salt, digest.hex()
+
+    @classmethod
+    def _verify_password(cls, password: str, salt: str, expected_hash: str) -> bool:
+        try:
+            _, actual_hash = cls._hash_password(password, salt)
+        except ValueError:
+            return False
+        return hmac.compare_digest(actual_hash, expected_hash)
+
     @staticmethod
     def _assignment_rows(connection: sqlite3.Connection) -> Iterable[tuple[str, str]]:
         return connection.execute("SELECT employee_id, shift_id FROM assignments")
@@ -202,6 +316,16 @@ class SQLiteSchedulerRepository:
         with self._connect() as connection:
             connection.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS users(
+                    id TEXT PRIMARY KEY,
+                    username TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK(length(trim(username)) > 0),
+                    display_name TEXT NOT NULL DEFAULT '',
+                    role TEXT NOT NULL CHECK(role IN ('admin', 'planner', 'viewer')),
+                    password_hash TEXT NOT NULL,
+                    password_salt TEXT NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+                    created_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS employees(
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
