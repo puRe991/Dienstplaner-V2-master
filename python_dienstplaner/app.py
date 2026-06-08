@@ -35,7 +35,10 @@ class SchedulerApp(tk.Tk):
     Python standard library so the application starts on a clean Python install.
     """
 
-    WEEK_START = datetime(2024, 5, 19)
+    GERMAN_WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
+    GERMAN_WEEKDAY_ABBR = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    GERMAN_MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
+    GERMAN_MONTH_ABBR = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
     SIDEBAR_WIDTH = 250
     RIGHT_PANEL_WIDTH = 250
 
@@ -45,7 +48,7 @@ class SchedulerApp(tk.Tk):
         self.repository = repository
         self.status = tk.StringVar(value="Bereit")
         self.selected_shift_id: str | None = None
-        self.week_start = self.WEEK_START
+        self.week_start = self._default_week_start()
         self.employee_rows: dict[str, int] = {}
         self.schedule_cells: dict[tuple[str, int], tk.Label] = {}
         self.sidebar_buttons: dict[str, tk.Button] = {}
@@ -58,6 +61,15 @@ class SchedulerApp(tk.Tk):
         self._configure_styles()
         self._build_ui()
         self._refresh_all()
+
+    @classmethod
+    def _default_week_start(cls) -> datetime:
+        """Start the planner on the current German calendar week (Monday, 00:00)."""
+        return cls._week_start_for_date(datetime.now())
+
+    @staticmethod
+    def _week_start_for_date(value: datetime) -> datetime:
+        return (value - timedelta(days=value.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
 
     def _configure_styles(self) -> None:
         style = ttk.Style(self)
@@ -250,12 +262,16 @@ class SchedulerApp(tk.Tk):
             command()
 
     def _show_dashboard(self) -> None:
+        self.week_start = self._default_week_start()
+        self.selected_shift_id = None
         self._refresh_all()
-        self._set_status("Dashboard aktualisiert.")
+        self._set_status("Dashboard für die aktuelle Woche aktualisiert.")
 
     def _show_schedule(self) -> None:
+        self.week_start = self._default_week_start()
+        self.selected_shift_id = None
         self._refresh_all()
-        self._set_status("Dienstplanansicht geöffnet.")
+        self._set_status("Dienstplanansicht für die aktuelle Woche geöffnet.")
 
     def _open_employee_manager(self) -> None:
         window = self._create_manager_window("Mitarbeiter verwalten", "920x520")
@@ -479,8 +495,14 @@ class SchedulerApp(tk.Tk):
         for item_id in tree.get_children():
             tree.delete(item_id)
 
+    def _format_week_range(self) -> str:
+        week_end = self.week_start + timedelta(days=6)
+        if self.week_start.month == week_end.month and self.week_start.year == week_end.year:
+            return f"{self.week_start.day}. – {week_end.day}. {self._month_name(self.week_start)} {self.week_start.year}"
+        return f"{self._format_date(self.week_start)} – {self._format_date(week_end)}"
+
     def _refresh_all(self) -> None:
-        self.week_label.configure(text=f"📅  {self.week_start.day}. – {(self.week_start + timedelta(days=6)).day}. {self._month_name(self.week_start)} {self.week_start.year}")
+        self.week_label.configure(text=f"📅  {self._format_week_range()}")
         self._refresh_header_state()
         self._refresh_cards()
         self._refresh_schedule_grid()
@@ -499,7 +521,7 @@ class SchedulerApp(tk.Tk):
             self.next_shift_branch_label.configure(text="Standort\n–")
             return
         style = self._style_for_shift(upcoming)
-        self.next_shift_time_label.configure(text=f"{upcoming.start:%d.%m.%Y, %H:%M} – {upcoming.end:%H:%M}")
+        self.next_shift_time_label.configure(text=f"{self._format_datetime(upcoming.start)} – {upcoming.end:%H:%M}")
         self.next_shift_name_label.configure(text=upcoming.name, bg=style.background, fg=style.foreground)
         self.next_shift_branch_label.configure(text=f"Standort\n📍  {upcoming.branch}")
 
@@ -534,7 +556,7 @@ class SchedulerApp(tk.Tk):
 
         headers = ["Mitarbeiter", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
         for column, header in enumerate(headers):
-            text = header if column == 0 else f"{header}\n{(self.week_start + timedelta(days=column - 1)):%d. %b}"
+            text = header if column == 0 else f"{header}\n{self._format_day_month(self.week_start + timedelta(days=column - 1))}"
             tk.Label(self.grid_frame, text=text, bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 9, "bold"), justify="center", height=3).grid(row=0, column=column, sticky="nsew")
 
         filtered_employees = self._filtered_employees()
@@ -574,7 +596,7 @@ class SchedulerApp(tk.Tk):
             child.destroy()
         month_start = self.week_start.replace(day=1)
         tk.Label(self.calendar_frame, text=f"{self._month_name(month_start)} {month_start.year}", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 10, "bold")).grid(row=0, column=0, columnspan=7, sticky="w", padx=16, pady=(12, 8))
-        for column, day in enumerate(["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]):
+        for column, day in enumerate(self.GERMAN_WEEKDAY_ABBR):
             tk.Label(self.calendar_frame, text=day, bg="#FFFFFF", fg="#64748B", font=("Segoe UI", 8)).grid(row=1, column=column, padx=6, pady=4)
         for row_index, week in enumerate(calendar.Calendar(firstweekday=0).monthdayscalendar(month_start.year, month_start.month), start=2):
             for column, day in enumerate(week):
@@ -614,7 +636,7 @@ class SchedulerApp(tk.Tk):
         self.detail_title.configure(text=f"Schichtdetails · {shift.name}")
         self.detail_body.configure(
             text=(
-                f"{shift.start:%A, %d.%m.%Y}\n"
+                f"{self._weekday_name(shift.start)}, {self._format_date(shift.start)}\n"
                 f"{shift.start:%H:%M} – {shift.end:%H:%M} ({shift.duration_hours:.0f} h)\n"
                 f"{shift.department} – {shift.branch}\n"
                 f"Kapazität: {len(shift.employee_ids)}/{shift.required_employees}\n"
@@ -645,8 +667,8 @@ class SchedulerApp(tk.Tk):
         values = {
             "name": tk.StringVar(value=shift.name if shift else "Frühschicht"),
             "department": tk.StringVar(value=shift.department if shift else "Pflege"),
-            "start": tk.StringVar(value=(shift.start if shift else self.week_start.replace(hour=6, minute=0)).strftime("%Y-%m-%d %H:%M")),
-            "end": tk.StringVar(value=(shift.end if shift else self.week_start.replace(hour=14, minute=0)).strftime("%Y-%m-%d %H:%M")),
+            "start": tk.StringVar(value=self._format_datetime(shift.start if shift else self.week_start.replace(hour=6, minute=0))),
+            "end": tk.StringVar(value=self._format_datetime(shift.end if shift else self.week_start.replace(hour=14, minute=0))),
             "capacity": tk.StringVar(value=str(shift.required_employees if shift else 1)),
             "qualification": tk.StringVar(value=shift.required_qualification if shift else "Pflegefachkraft"),
             "branch": tk.StringVar(value=shift.branch if shift else "Zentrale Wache"),
@@ -751,8 +773,8 @@ class SchedulerApp(tk.Tk):
         employee_options = {f"{employee.name} ({employee.department})": employee.id for employee in employees}
         values = {
             "employee": tk.StringVar(value=next(iter(employee_options))),
-            "start": tk.StringVar(value=self.week_start.strftime("%Y-%m-%d 00:00")),
-            "end": tk.StringVar(value=(self.week_start + timedelta(days=1)).strftime("%Y-%m-%d 00:00")),
+            "start": tk.StringVar(value=self._format_datetime(self.week_start)),
+            "end": tk.StringVar(value=self._format_datetime(self.week_start + timedelta(days=1))),
             "reason": tk.StringVar(value="Urlaub"),
         }
         rows = [("employee", "Mitarbeiter"), ("start", "Start"), ("end", "Ende"), ("reason", "Grund")]
@@ -945,21 +967,36 @@ class SchedulerApp(tk.Tk):
     @staticmethod
     def _parse_datetime(value: str) -> datetime:
         value = value.strip()
-        for fmt in ("%Y-%m-%d %H:%M", "%d.%m.%Y %H:%M"):
+        for fmt in ("%d.%m.%Y %H:%M", "%Y-%m-%d %H:%M", "%d.%m.%Y", "%Y-%m-%d"):
             try:
                 return datetime.strptime(value, fmt)
             except ValueError:
                 continue
-        raise ValueError("Datum bitte als 'YYYY-MM-DD HH:MM' oder 'DD.MM.YYYY HH:MM' eingeben.")
+        raise ValueError("Datum bitte im deutschen Format 'TT.MM.JJJJ HH:MM' eingeben, zum Beispiel '01.01.2026 08:00'.")
 
     @staticmethod
     def _avatar(name: str) -> str:
         return "👤" if not name else "●"
 
     @staticmethod
-    def _month_name(date_value: datetime) -> str:
-        names = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
-        return names[date_value.month - 1]
+    def _format_datetime(date_value: datetime) -> str:
+        return date_value.strftime("%d.%m.%Y %H:%M")
+
+    @staticmethod
+    def _format_date(date_value: datetime) -> str:
+        return date_value.strftime("%d.%m.%Y")
+
+    @classmethod
+    def _format_day_month(cls, date_value: datetime) -> str:
+        return f"{date_value.day}. {cls.GERMAN_MONTH_ABBR[date_value.month - 1]}"
+
+    @classmethod
+    def _weekday_name(cls, date_value: datetime) -> str:
+        return cls.GERMAN_WEEKDAYS[date_value.weekday()]
+
+    @classmethod
+    def _month_name(cls, date_value: datetime) -> str:
+        return cls.GERMAN_MONTHS[date_value.month - 1]
 
     def _set_status(self, message: str) -> None:
         self.status.set(message)
