@@ -104,10 +104,10 @@ class SchedulerService:
         self.shifts.append(shift)
         return shift
 
-    def assign(self, employee_id: str, shift_id: str) -> AssignmentResult:
+    def assign(self, employee_id: str, shift_id: str, *, ignore_profile_mismatch: bool = False) -> AssignmentResult:
         employee = self.find_employee(employee_id)
         shift = self.find_shift(shift_id)
-        outcome = self.rules.validate_assignment(employee, shift)
+        outcome = self.rules.validate_assignment(employee, shift, ignore_profile_mismatch=ignore_profile_mismatch)
         if outcome.errors:
             return AssignmentResult(False, outcome.errors, outcome.warnings)
 

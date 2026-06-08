@@ -795,13 +795,23 @@ class SchedulerApp(tk.Tk):
             return None
         selected_shift_label = next((label for label, shift_id in shift_options.items() if shift_id == preselected_shift_id), next(iter(shift_options)))
         values = {"employee": tk.StringVar(value=next(iter(employee_options))), "shift": tk.StringVar(value=selected_shift_label)}
+        ignore_profile_mismatch = tk.BooleanVar(value=False)
         for row, (key, label, options) in enumerate([("employee", "Mitarbeiter", employee_options), ("shift", "Schicht", shift_options)]):
             tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
             ttk.Combobox(dialog, textvariable=values[key], values=list(options), width=46, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+        ttk.Checkbutton(
+            dialog,
+            text="Abteilung, Filiale und Qualifikation für diese Zuweisung ignorieren",
+            variable=ignore_profile_mismatch,
+        ).grid(row=2, column=1, sticky="w", padx=18, pady=(4, 8))
 
         def assign_employee() -> None:
             try:
-                result = self.service.assign(employee_options[values["employee"].get()], shift_options[values["shift"].get()])
+                result = self.service.assign(
+                    employee_options[values["employee"].get()],
+                    shift_options[values["shift"].get()],
+                    ignore_profile_mismatch=ignore_profile_mismatch.get(),
+                )
                 if not result.success:
                     raise ValueError(result.message)
                 dialog.destroy()
@@ -810,7 +820,7 @@ class SchedulerApp(tk.Tk):
             except (KeyError, ValueError) as exc:
                 messagebox.showerror("Zuweisung nicht möglich", str(exc), parent=dialog)
 
-        ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
+        ttk.Button(dialog, text="Zuweisen", style="Primary.TButton", command=assign_employee).grid(row=3, column=1, sticky="e", padx=18, pady=(12, 18))
         return dialog
 
     def _replace_shift(self, old_shift: Shift, new_shift: Shift) -> None:

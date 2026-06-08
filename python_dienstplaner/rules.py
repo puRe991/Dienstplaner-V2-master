@@ -27,7 +27,13 @@ class PlanningRules:
     MIN_REST = timedelta(hours=11)
     MAX_DAILY_HOURS = 10.0
 
-    def validate_assignment(self, employee: Employee | None, shift: Shift | None) -> RuleOutcome:
+    def validate_assignment(
+        self,
+        employee: Employee | None,
+        shift: Shift | None,
+        *,
+        ignore_profile_mismatch: bool = False,
+    ) -> RuleOutcome:
         result = RuleOutcome()
         if employee is None:
             result.errors.append("Es wurde kein Mitarbeiter ausgewählt.")
@@ -44,12 +50,11 @@ class PlanningRules:
             result.errors.append("Die Schicht ist bereits voll.")
         if employee.id in shift.employee_ids:
             result.errors.append("Der Mitarbeiter ist der Schicht bereits zugewiesen.")
-        if employee.department.lower() != shift.department.lower():
-            result.errors.append("Die Abteilung des Mitarbeiters passt nicht zur Schicht.")
-        if employee.branch.lower() != shift.branch.lower():
-            result.errors.append("Die Filiale des Mitarbeiters passt nicht zur Schicht.")
-        if shift.required_qualification and employee.qualification.lower() != shift.required_qualification.lower():
-            result.errors.append("Die Qualifikation des Mitarbeiters passt nicht zur Schicht.")
+        profile_warnings = self._validate_profile_match(employee, shift)
+        if ignore_profile_mismatch:
+            result.warnings.extend(profile_warnings)
+        else:
+            result.errors.extend(profile_warnings)
         if employee.planned_hours + shift.duration_hours > employee.weekly_hours_limit:
             result.errors.append("Wochenstundenlimit überschritten.")
 
@@ -84,3 +89,15 @@ class PlanningRules:
             result.warnings.append("Für Schichten über 6 Stunden sollte eine Pause geplant werden.")
 
         return result
+
+    @staticmethod
+    def _validate_profile_match(employee: Employee, shift: Shift) -> list[str]:
+        """Return department, branch and qualification mismatches as reusable messages."""
+        mismatches: list[str] = []
+        if employee.department.lower() != shift.department.lower():
+            mismatches.append("Die Abteilung des Mitarbeiters passt nicht zur Schicht.")
+        if employee.branch.lower() != shift.branch.lower():
+            mismatches.append("Die Filiale des Mitarbeiters passt nicht zur Schicht.")
+        if shift.required_qualification and employee.qualification.lower() != shift.required_qualification.lower():
+            mismatches.append("Die Qualifikation des Mitarbeiters passt nicht zur Schicht.")
+        return mismatches
