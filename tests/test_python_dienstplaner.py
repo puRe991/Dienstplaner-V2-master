@@ -143,6 +143,24 @@ class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
 
 
 class DashboardStartupTests(unittest.TestCase):
+
+    def test_scheduler_app_defaults_to_current_calendar_week(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        reference = datetime(2026, 6, 10, 15, 30)
+
+        self.assertEqual(datetime(2026, 6, 8), SchedulerApp._week_start_for_date(reference))
+
+    def test_scheduler_app_uses_german_date_format_helpers(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        reference = datetime(2026, 3, 2, 8, 5)
+
+        self.assertEqual("02.03.2026 08:05", SchedulerApp._format_datetime(reference))
+        self.assertEqual("2. Mär", SchedulerApp._format_day_month(reference))
+        self.assertEqual("Montag", SchedulerApp._weekday_name(reference))
+        self.assertEqual(reference, SchedulerApp._parse_datetime("02.03.2026 08:05"))
+
     def test_scheduler_app_no_longer_bootstraps_demo_data(self) -> None:
         from python_dienstplaner.app import SchedulerApp
 
