@@ -7,8 +7,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .auth import Permission, User
-from .auth_ui import authenticate_on_start, user_has_permission, user_label
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
@@ -51,7 +49,7 @@ class SchedulerApp(tk.Tk):
         self,
         service: SchedulerService,
         repository: SQLiteSchedulerRepository,
-        current_user: User | None = None,
+        current_user: object | None = None,
         require_authentication: bool = False,
     ) -> None:
         super().__init__()
@@ -64,7 +62,7 @@ class SchedulerApp(tk.Tk):
         self.schedule_cells: dict[tuple[str, int], tk.Label] = {}
         self.sidebar_buttons: dict[str, tk.Button] = {}
         self.active_view = "Dienstplan"
-        self.current_user: User | None = current_user
+        self.current_user: object | None = current_user
 
         self.title("Dienstplanung Pro")
         self.geometry("1440x840")
@@ -72,6 +70,8 @@ class SchedulerApp(tk.Tk):
         self.configure(bg="#F8FAFC")
         self._configure_styles()
         if require_authentication and self.current_user is None:
+            from .auth_ui import authenticate_on_start
+
             self.current_user = authenticate_on_start(self, self.repository)
         self._build_ui()
         self._refresh_all()
@@ -103,10 +103,15 @@ class SchedulerApp(tk.Tk):
         style.configure("Danger.TButton", background="#FFFFFF", foreground="#DC2626", padding=(12, 9))
 
     @staticmethod
-    def _user_has_permission(user: User | None, permission: Permission) -> bool:
+    def _user_has_permission(user: object | None, permission: object) -> bool:
+        from .auth_ui import user_has_permission
+
         return user_has_permission(user, permission)
 
-    def _require_permission(self, permission: Permission, action: str, parent: tk.Misc | None = None) -> bool:
+    def _require_permission(self, permission_name: str, action: str, parent: tk.Misc | None = None) -> bool:
+        from .auth import Permission
+
+        permission = Permission[permission_name]
         if self._user_has_permission(self.current_user, permission):
             return True
         messagebox.showwarning("Keine Berechtigung", f"Sie haben keine Berechtigung für: {action}", parent=parent or self)
@@ -140,6 +145,8 @@ class SchedulerApp(tk.Tk):
 
         self.notification_label = tk.Label(header, text="Offene Slots: 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
         self.notification_label.grid(row=0, column=3, padx=(12, 24))
+        from .auth_ui import user_label
+
         tk.Label(header, text=user_label(self.current_user), bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
 
     def _build_sidebar(self) -> None:
@@ -306,7 +313,7 @@ class SchedulerApp(tk.Tk):
         self._set_status("Dienstplanansicht für die aktuelle Woche geöffnet.")
 
     def _open_employee_manager(self) -> None:
-        if not self._require_permission(Permission.MANAGE_EMPLOYEES, "Mitarbeiter bearbeiten"):
+        if not self._require_permission("MANAGE_EMPLOYEES", "Mitarbeiter bearbeiten"):
             return
         window = self._create_manager_window("Mitarbeiter verwalten", "1040x540")
         columns = ("name", "department", "qualification", "hours", "break", "branch", "wage", "active")
@@ -412,7 +419,7 @@ class SchedulerApp(tk.Tk):
         refresh()
 
     def _open_absence_manager(self) -> None:
-        if not self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten bearbeiten"):
+        if not self._require_permission("MANAGE_ABSENCES", "Abwesenheiten bearbeiten"):
             return
         window = self._create_manager_window("Abwesenheiten verwalten", "820x500")
         columns = ("employee", "start", "end", "reason")
@@ -888,7 +895,7 @@ class SchedulerApp(tk.Tk):
         )
 
     def _delete_absence(self, absence_id: str) -> None:
-        if not self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten löschen"):
+        if not self._require_permission("MANAGE_ABSENCES", "Abwesenheiten löschen"):
             return
         if not messagebox.askyesno("Abwesenheit löschen", "Soll diese Abwesenheit gelöscht werden?", parent=self):
             return
@@ -1002,7 +1009,7 @@ class SchedulerApp(tk.Tk):
         return dialog
 
     def _open_employee_dialog(self, employee: Employee | None = None) -> tk.Toplevel | None:
-        if not self._require_permission(Permission.MANAGE_EMPLOYEES, "Mitarbeiter bearbeiten"):
+        if not self._require_permission("MANAGE_EMPLOYEES", "Mitarbeiter bearbeiten"):
             return None
         dialog = tk.Toplevel(self)
         dialog.title("Mitarbeiter bearbeiten" if employee else "Mitarbeiter anlegen")
@@ -1076,7 +1083,7 @@ class SchedulerApp(tk.Tk):
         return dialog
 
     def _open_absence_dialog(self) -> tk.Toplevel | None:
-        if not self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten bearbeiten"):
+        if not self._require_permission("MANAGE_ABSENCES", "Abwesenheiten bearbeiten"):
             return None
         if not self.service.employees:
             messagebox.showinfo("Abwesenheit", "Bitte zuerst Mitarbeitende anlegen.", parent=self)
@@ -1203,7 +1210,7 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Speichern fehlgeschlagen", str(exc), parent=self)
 
     def _export_reports_csv(self) -> None:
-        if not self._require_permission(Permission.EXPORT, "Export"):
+        if not self._require_permission("EXPORT", "Export"):
             return
         path = filedialog.asksaveasfilename(
             title="Berichte exportieren",
@@ -1219,7 +1226,7 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
 
     def _export_csv(self) -> None:
-        if not self._require_permission(Permission.EXPORT, "Export"):
+        if not self._require_permission("EXPORT", "Export"):
             return
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
@@ -1249,7 +1256,7 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Forecast-Import fehlgeschlagen", str(exc), parent=self)
 
     def _publish_schedule(self) -> None:
-        if not self._require_permission(Permission.PUBLISH_SCHEDULE, "Dienstplan veröffentlichen"):
+        if not self._require_permission("PUBLISH_SCHEDULE", "Dienstplan veröffentlichen"):
             return
         try:
             published_by = self.current_user.display_name if self.current_user else "Lokaler Benutzer"
