@@ -45,7 +45,13 @@ class SchedulerApp(tk.Tk):
     UNASSIGNED_EMPLOYEE_FG = "#92400E"
     UNASSIGNED_CELL_BG = "#FFFBEB"
 
-    def __init__(self, service: SchedulerService, repository: SQLiteSchedulerRepository) -> None:
+    def __init__(
+        self,
+        service: SchedulerService,
+        repository: SQLiteSchedulerRepository,
+        current_user: User | None = None,
+        require_authentication: bool = False,
+    ) -> None:
         super().__init__()
         self.service = service
         self.repository = repository
@@ -56,14 +62,19 @@ class SchedulerApp(tk.Tk):
         self.schedule_cells: dict[tuple[str, int], tk.Label] = {}
         self.sidebar_buttons: dict[str, tk.Button] = {}
         self.active_view = "Dienstplan"
-        self.current_user: User | None = None
+        self.current_user: User | None = current_user
 
         self.title("Dienstplanung Pro")
         self.geometry("1440x840")
         self.minsize(1180, 720)
         self.configure(bg="#F8FAFC")
         self._configure_styles()
-        self._authenticate_on_start()
+        if require_authentication and self.current_user is None:
+            self._authenticate_on_start()
+        elif self.current_user is None:
+            # Direct construction is used by tests and embedding code. The public
+            # create_app() factory enables the real login flow for normal starts.
+            self.current_user = User("test-admin", UserRole.ADMIN, display_name="Testmodus")
         self._build_ui()
         self._refresh_all()
 
@@ -1465,7 +1476,7 @@ class SchedulerApp(tk.Tk):
 def create_app(database_path: str | Path = "python_dienstplaner/data/dienstplaner.sqlite3") -> SchedulerApp:
     repository = SQLiteSchedulerRepository(database_path)
     service = repository.load()
-    return SchedulerApp(service, repository)
+    return SchedulerApp(service, repository, require_authentication=True)
 
 
 def main() -> None:

@@ -433,6 +433,15 @@ class RolePermissionTests(unittest.TestCase):
         self.assertFalse(SchedulerApp._user_has_permission(planner, Permission.MANAGE_EMPLOYEES))
         self.assertFalse(SchedulerApp._user_has_permission(None, Permission.EXPORT))
 
+    def test_scheduler_app_constructor_does_not_force_modal_login_for_tests(self) -> None:
+        import inspect
+        from python_dienstplaner.app import SchedulerApp
+
+        scheduler_parameters = inspect.signature(SchedulerApp).parameters
+        self.assertIn("current_user", scheduler_parameters)
+        self.assertFalse(scheduler_parameters["require_authentication"].default)
+        self.assertIn("require_authentication=True", Path("python_dienstplaner/app.py").read_text(encoding="utf-8"))
+
 
 class AppIntegrityTests(unittest.TestCase):
     def test_scheduler_app_has_no_duplicate_method_definitions(self) -> None:
