@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .auth import Permission, User, UserRole
+from .auth import Permission, User
+from .auth_ui import authenticate_on_start, user_has_permission, user_label
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
@@ -71,11 +72,7 @@ class SchedulerApp(tk.Tk):
         self.configure(bg="#F8FAFC")
         self._configure_styles()
         if require_authentication and self.current_user is None:
-            self._authenticate_on_start()
-        elif self.current_user is None:
-            # Direct construction is used by tests and embedding code. The public
-            # create_app() factory enables the real login flow for normal starts.
-            self.current_user = User("test-admin", UserRole.ADMIN, display_name="Testmodus")
+            self.current_user = authenticate_on_start(self, self.repository)
         self._build_ui()
         self._refresh_all()
 
@@ -105,84 +102,9 @@ class SchedulerApp(tk.Tk):
         style.configure("Ghost.TButton", background="#FFFFFF", foreground="#334155", padding=(12, 9))
         style.configure("Danger.TButton", background="#FFFFFF", foreground="#DC2626", padding=(12, 9))
 
-    def _authenticate_on_start(self) -> None:
-        if self.repository.user_count() == 0:
-            self.current_user = self._run_initial_setup()
-        while self.current_user is None:
-            self.current_user = self._run_login_dialog()
-            if self.current_user is None:
-                self.destroy()
-                raise SystemExit("Login abgebrochen.")
-
-    def _run_initial_setup(self) -> User | None:
-        dialog = tk.Toplevel(self)
-        dialog.title("Ersten Administrator einrichten")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.configure(bg="#FFFFFF")
-        dialog.protocol("WM_DELETE_WINDOW", lambda: None)
-        result: dict[str, User | None] = {"user": None}
-        values = {
-            "username": tk.StringVar(value="admin"),
-            "display_name": tk.StringVar(value="Administrator"),
-            "password": tk.StringVar(),
-            "repeat": tk.StringVar(),
-        }
-        tk.Label(dialog, text="Initialer Administrator", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 8))
-        tk.Label(dialog, text="Legen Sie den ersten lokalen Admin an. Das Passwort wird mit Salt gehasht gespeichert.", bg="#FFFFFF", fg="#334155", wraplength=360, justify="left").grid(row=1, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 12))
-        for row, (key, label) in enumerate([("username", "Benutzername"), ("display_name", "Anzeigename"), ("password", "Passwort"), ("repeat", "Passwort wiederholen")], start=2):
-            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=6)
-            ttk.Entry(dialog, textvariable=values[key], width=34, show="*" if "password" in key or key == "repeat" else "").grid(row=row, column=1, padx=18, pady=6)
-
-        def create_admin() -> None:
-            if values["password"].get() != values["repeat"].get():
-                messagebox.showerror("Setup fehlgeschlagen", "Die Passwörter stimmen nicht überein.", parent=dialog)
-                return
-            try:
-                result["user"] = self.repository.create_user(values["username"].get(), values["password"].get(), UserRole.ADMIN, values["display_name"].get())
-                dialog.destroy()
-            except ValueError as exc:
-                messagebox.showerror("Setup fehlgeschlagen", str(exc), parent=dialog)
-
-        ttk.Button(dialog, text="Administrator anlegen", style="Primary.TButton", command=create_admin).grid(row=6, column=1, sticky="e", padx=18, pady=(12, 18))
-        self.wait_window(dialog)
-        return result["user"]
-
-    def _run_login_dialog(self) -> User | None:
-        dialog = tk.Toplevel(self)
-        dialog.title("Anmelden")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.configure(bg="#FFFFFF")
-        result: dict[str, User | None] = {"user": None}
-        username = tk.StringVar()
-        password = tk.StringVar()
-        tk.Label(dialog, text="Anmelden", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 10))
-        for row, (label, variable, show) in enumerate([("Benutzername", username, ""), ("Passwort", password, "*")], start=1):
-            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
-            ttk.Entry(dialog, textvariable=variable, width=34, show=show).grid(row=row, column=1, padx=18, pady=7)
-
-        def login() -> None:
-            user = self.repository.authenticate_user(username.get(), password.get())
-            if user is None:
-                messagebox.showerror("Anmeldung fehlgeschlagen", "Benutzername oder Passwort ist falsch.", parent=dialog)
-                return
-            result["user"] = user
-            dialog.destroy()
-
-        ttk.Button(dialog, text="Anmelden", style="Primary.TButton", command=login).grid(row=3, column=1, sticky="e", padx=18, pady=(12, 18))
-        dialog.bind("<Return>", lambda _event: login())
-        self.wait_window(dialog)
-        return result["user"]
-
-    def _current_user_label(self) -> str:
-        if self.current_user is None:
-            return "Nicht angemeldet"
-        return f"{self.current_user.display_name}\nRolle: {self.current_user.role.value}"
-
     @staticmethod
     def _user_has_permission(user: User | None, permission: Permission) -> bool:
-        return user is not None and user.has_permission(permission)
+        return user_has_permission(user, permission)
 
     def _require_permission(self, permission: Permission, action: str, parent: tk.Misc | None = None) -> bool:
         if self._user_has_permission(self.current_user, permission):
@@ -218,7 +140,7 @@ class SchedulerApp(tk.Tk):
 
         self.notification_label = tk.Label(header, text="Offene Slots: 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
         self.notification_label.grid(row=0, column=3, padx=(12, 24))
-        tk.Label(header, text=self._current_user_label(), bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
+        tk.Label(header, text=user_label(self.current_user), bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
