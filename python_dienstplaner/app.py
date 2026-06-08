@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Permission, Shift, User, UserRole
+from .auth import Permission, User, UserRole
+from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 

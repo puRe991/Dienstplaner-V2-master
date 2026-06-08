@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Iterable
 from uuid import uuid4
 
-from .models import Absence, Employee, RevenueForecast, Shift, User, UserRole
+from .auth import User, UserRole
+from .models import Absence, Employee, RevenueForecast, Shift
 from .services import SchedulerService
 
 

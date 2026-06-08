@@ -8,7 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, Permission, User, UserRole
+from python_dienstplaner.auth import Permission, User, UserRole
+from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat
 from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
