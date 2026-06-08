@@ -10,6 +10,10 @@ python start_python_dienstplaner.py
 
 Unter Windows kann die Anwendung alternativ per Doppelklick auf `start_python_dienstplaner.bat` gestartet werden. Die Batch-Datei prüft, ob `py -3` oder `python` verfügbar ist, setzt den Projektordner als Arbeitsverzeichnis und zeigt Fehlermeldungen im Konsolenfenster an.
 
+## Zuweisungen
+
+Im Dialog „Mitarbeitenden zuweisen“ kann optional aktiviert werden, dass Abteilung, Filiale und Qualifikation für die konkrete Zuweisung ignoriert werden. Andere harte Regeln wie Kapazität, aktive Mitarbeitende, Arbeitszeit, Ruhezeit, Abwesenheit und Zeitkonflikte bleiben aktiv.
+
 ## Datenhaltung
 
 Die Anwendung nutzt nur die Python-Standardbibliothek (`tkinter`, `sqlite3`, `csv`). Persistente Daten landen standardmäßig in `python_dienstplaner/data/dienstplaner.sqlite3`.

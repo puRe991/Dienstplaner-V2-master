@@ -37,6 +37,48 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("Die Schicht ist bereits voll.", result.errors)
 
+    def test_blocks_profile_mismatch_by_default(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", branch="Zentrale")
+        shift = service.add_shift(
+            "Wareneingang",
+            "Lager",
+            datetime(2026, 1, 1, 8),
+            datetime(2026, 1, 1, 16),
+            1,
+            "Staplerschein",
+            branch="Filiale Nord",
+        )
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertFalse(result.success)
+        self.assertIn("Die Abteilung des Mitarbeiters passt nicht zur Schicht.", result.errors)
+        self.assertIn("Die Filiale des Mitarbeiters passt nicht zur Schicht.", result.errors)
+        self.assertIn("Die Qualifikation des Mitarbeiters passt nicht zur Schicht.", result.errors)
+
+    def test_can_assign_employee_while_ignoring_department_branch_and_qualification(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", branch="Zentrale")
+        shift = service.add_shift(
+            "Wareneingang",
+            "Lager",
+            datetime(2026, 1, 1, 8),
+            datetime(2026, 1, 1, 16),
+            1,
+            "Staplerschein",
+            branch="Filiale Nord",
+        )
+
+        result = service.assign(employee.id, shift.id, ignore_profile_mismatch=True)
+
+        self.assertTrue(result.success)
+        self.assertEqual([employee.id], shift.employee_ids)
+        self.assertEqual([shift], employee.shifts)
+        self.assertIn("Die Abteilung des Mitarbeiters passt nicht zur Schicht.", result.warnings)
+        self.assertIn("Die Filiale des Mitarbeiters passt nicht zur Schicht.", result.warnings)
+        self.assertIn("Die Qualifikation des Mitarbeiters passt nicht zur Schicht.", result.warnings)
+
     def test_blocks_overlapping_absence(self) -> None:
         service = SchedulerService()
         employee = service.add_employee("Eva Retail", "Kasse", "Kasse")

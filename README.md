@@ -6,7 +6,7 @@ Python-Desktop-Anwendung zur Erstellung, Prüfung und Auswertung von Dienstplän
 
 ## Funktionsumfang
 
-- **Mitarbeiter- und Schichtplanung:** Mitarbeitende und Schichten anlegen, bearbeiten, löschen und zuweisen.
+- **Mitarbeiter- und Schichtplanung:** Mitarbeitende und Schichten anlegen, bearbeiten, löschen und zuweisen; bei Bedarf kann eine Zuweisung Abteilung, Filiale und Qualifikation bewusst ignorieren.
 - **Regelbasierte Validierung:** Prüfung von Kapazität, Qualifikation, Arbeitszeit, Ruhezeit, Pausen, Verfügbarkeit, Abwesenheit und Zeitkonflikten.
 - **Wochenansicht:** Dienstplan als Desktop-Oberfläche mit Kalender, Mitarbeiterliste, Schichtübersicht und Statusmeldungen.
 - **Abwesenheiten:** Abwesenheiten erfassen und Überschneidungen mit bestehenden Schichten verhindern.
