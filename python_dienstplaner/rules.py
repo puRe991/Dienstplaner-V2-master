@@ -55,10 +55,11 @@ class PlanningRules:
             result.warnings.extend(profile_warnings)
         else:
             result.errors.extend(profile_warnings)
-        if employee.planned_hours + shift.duration_hours > employee.weekly_hours_limit:
+        shift_net_hours = employee.net_hours_for_shift(shift)
+        if employee.planned_hours + shift_net_hours > employee.weekly_hours_limit:
             result.errors.append("Wochenstundenlimit überschritten.")
 
-        daily_hours = sum(s.duration_hours for s in employee.shifts if s.start.date() == shift.start.date()) + shift.duration_hours
+        daily_hours = sum(employee.net_hours_for_shift(s) for s in employee.shifts if s.start.date() == shift.start.date()) + shift_net_hours
         if daily_hours > self.MAX_DAILY_HOURS:
             result.errors.append("Tageshöchstarbeitszeit überschritten.")
 
@@ -83,12 +84,23 @@ class PlanningRules:
         if employee.availabilities and not any(a.covers(shift) for a in employee.availabilities):
             result.warnings.append("Für den Mitarbeiter ist keine passende Verfügbarkeit hinterlegt.")
 
-        if shift.duration_hours > 9:
-            result.warnings.append("Für Schichten über 9 Stunden sollte eine ausreichende Pause geplant werden.")
-        elif shift.duration_hours > 6:
-            result.warnings.append("Für Schichten über 6 Stunden sollte eine Pause geplant werden.")
+        required_break_minutes = self.required_break_minutes(shift)
+        if employee.break_minutes_per_shift < required_break_minutes:
+            result.warnings.append(
+                f"Pausenzeit prüfen: Für diese Schicht sind mindestens {required_break_minutes} Minuten Pause empfohlen. "
+                f"Beim Mitarbeiter sind {employee.break_minutes_per_shift} Minuten hinterlegt."
+            )
 
         return result
+
+    @staticmethod
+    def required_break_minutes(shift: Shift) -> int:
+        """Return the minimum break recommendation for a shift duration."""
+        if shift.duration_hours > 9:
+            return 45
+        if shift.duration_hours > 6:
+            return 30
+        return 0
 
     @staticmethod
     def _validate_profile_match(employee: Employee, shift: Shift) -> list[str]:

@@ -69,6 +69,7 @@ class SchedulerService:
         branch: str = "Zentrale",
         hourly_wage: float = 15.0,
         is_active: bool = True,
+        break_minutes_per_shift: int = 0,
     ) -> Employee:
         employee = Employee(
             name=name,
@@ -78,6 +79,7 @@ class SchedulerService:
             branch=branch,
             hourly_wage=hourly_wage,
             is_active=is_active,
+            break_minutes_per_shift=break_minutes_per_shift,
         )
         self.employees.append(employee)
         self._remember_department(employee.department)
@@ -93,6 +95,7 @@ class SchedulerService:
         branch: str = "Zentrale",
         hourly_wage: float = 15.0,
         is_active: bool = True,
+        break_minutes_per_shift: int | None = None,
     ) -> Employee:
         employee = self.find_employee(employee_id)
         if employee is None:
@@ -106,6 +109,7 @@ class SchedulerService:
             branch=branch,
             hourly_wage=hourly_wage,
             is_active=is_active,
+            break_minutes_per_shift=employee.break_minutes_per_shift if break_minutes_per_shift is None else break_minutes_per_shift,
             shifts=list(employee.shifts),
             absences=list(employee.absences),
             availabilities=list(employee.availabilities),
@@ -258,7 +262,7 @@ class SchedulerService:
     def create_reports(self) -> List[ReportMetric]:
         active_employees = [employee for employee in self.employees if employee.is_active]
         personnel_costs = sum(
-            sum(shift.duration_hours * employee.hourly_wage for shift in employee.shifts)
+            sum(employee.net_hours_for_shift(shift) * employee.hourly_wage for shift in employee.shifts)
             for employee in self.employees
         )
         occupancy = (sum(shift.occupancy_rate for shift in self.shifts) / len(self.shifts) * 100) if self.shifts else 0.0
