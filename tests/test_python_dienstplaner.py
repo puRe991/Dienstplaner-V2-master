@@ -421,27 +421,27 @@ class RolePermissionTests(unittest.TestCase):
         self.assertFalse(viewer.has_permission(Permission.EXPORT))
 
     def test_app_permission_helper_blocks_locked_actions_for_viewer(self) -> None:
-        from python_dienstplaner.app import SchedulerApp
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
 
         viewer = User("viewer", UserRole.VIEWER)
         planner = User("planer", UserRole.PLANNER)
 
-        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.EXPORT))
-        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.PUBLISH_SCHEDULE))
-        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.MANAGE_ABSENCES))
-        self.assertFalse(SchedulerApp._user_has_permission(viewer, Permission.MANAGE_EMPLOYEES))
-        self.assertTrue(SchedulerApp._user_has_permission(planner, Permission.EXPORT))
-        self.assertFalse(SchedulerApp._user_has_permission(planner, Permission.MANAGE_EMPLOYEES))
-        self.assertFalse(SchedulerApp._user_has_permission(None, Permission.EXPORT))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.EXPORT))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.PUBLISH_SCHEDULE))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_ABSENCES))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_EMPLOYEES))
+        self.assertTrue(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.EXPORT))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.MANAGE_EMPLOYEES))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(None, Permission.EXPORT))
 
     def test_scheduler_app_constructor_does_not_force_modal_login_for_tests(self) -> None:
         import inspect
-        from python_dienstplaner.app import SchedulerApp
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
 
-        scheduler_parameters = inspect.signature(SchedulerApp).parameters
+        scheduler_parameters = inspect.signature(AuthenticatedSchedulerApp).parameters
         self.assertIn("current_user", scheduler_parameters)
-        self.assertFalse(scheduler_parameters["require_authentication"].default)
-        self.assertIn("require_authentication=True", Path("python_dienstplaner/app.py").read_text(encoding="utf-8"))
+        self.assertNotIn("require_authentication", scheduler_parameters)
+        self.assertIn("AuthenticatedSchedulerApp", Path("python_dienstplaner/secure_app.py").read_text(encoding="utf-8"))
 
 
 class AppIntegrityTests(unittest.TestCase):

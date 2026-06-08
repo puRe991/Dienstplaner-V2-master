@@ -45,13 +45,7 @@ class SchedulerApp(tk.Tk):
     UNASSIGNED_EMPLOYEE_FG = "#92400E"
     UNASSIGNED_CELL_BG = "#FFFBEB"
 
-    def __init__(
-        self,
-        service: SchedulerService,
-        repository: SQLiteSchedulerRepository,
-        current_user: object | None = None,
-        require_authentication: bool = False,
-    ) -> None:
+    def __init__(self, service: SchedulerService, repository: SQLiteSchedulerRepository) -> None:
         super().__init__()
         self.service = service
         self.repository = repository
@@ -62,17 +56,12 @@ class SchedulerApp(tk.Tk):
         self.schedule_cells: dict[tuple[str, int], tk.Label] = {}
         self.sidebar_buttons: dict[str, tk.Button] = {}
         self.active_view = "Dienstplan"
-        self.current_user: object | None = current_user
 
         self.title("Dienstplanung Pro")
         self.geometry("1440x840")
         self.minsize(1180, 720)
         self.configure(bg="#F8FAFC")
         self._configure_styles()
-        if require_authentication and self.current_user is None:
-            from .auth_ui import authenticate_on_start
-
-            self.current_user = authenticate_on_start(self, self.repository)
         self._build_ui()
         self._refresh_all()
 
@@ -102,22 +91,6 @@ class SchedulerApp(tk.Tk):
         style.configure("Ghost.TButton", background="#FFFFFF", foreground="#334155", padding=(12, 9))
         style.configure("Danger.TButton", background="#FFFFFF", foreground="#DC2626", padding=(12, 9))
 
-    @staticmethod
-    def _user_has_permission(user: object | None, permission: object) -> bool:
-        from .auth_ui import user_has_permission
-
-        return user_has_permission(user, permission)
-
-    def _require_permission(self, permission_name: str, action: str, parent: tk.Misc | None = None) -> bool:
-        from .auth import Permission
-
-        permission = Permission[permission_name]
-        if self._user_has_permission(self.current_user, permission):
-            return True
-        messagebox.showwarning("Keine Berechtigung", f"Sie haben keine Berechtigung für: {action}", parent=parent or self)
-        self._set_status(f"Aktion gesperrt: {action}")
-        return False
-
     def _build_ui(self) -> None:
         self.columnconfigure(1, weight=1)
         self.rowconfigure(1, weight=1)
@@ -145,9 +118,7 @@ class SchedulerApp(tk.Tk):
 
         self.notification_label = tk.Label(header, text="Offene Slots: 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
         self.notification_label.grid(row=0, column=3, padx=(12, 24))
-        from .auth_ui import user_label
-
-        tk.Label(header, text=user_label(self.current_user), bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
+        tk.Label(header, text="Lokaler Modus\nOhne Rollenprüfung", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10)).grid(row=0, column=4, padx=(0, 24))
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
@@ -313,8 +284,6 @@ class SchedulerApp(tk.Tk):
         self._set_status("Dienstplanansicht für die aktuelle Woche geöffnet.")
 
     def _open_employee_manager(self) -> None:
-        if not self._require_permission("MANAGE_EMPLOYEES", "Mitarbeiter bearbeiten"):
-            return
         window = self._create_manager_window("Mitarbeiter verwalten", "1040x540")
         columns = ("name", "department", "qualification", "hours", "break", "branch", "wage", "active")
         tree = self._create_tree(window, columns, {
@@ -419,8 +388,6 @@ class SchedulerApp(tk.Tk):
         refresh()
 
     def _open_absence_manager(self) -> None:
-        if not self._require_permission("MANAGE_ABSENCES", "Abwesenheiten bearbeiten"):
-            return
         window = self._create_manager_window("Abwesenheiten verwalten", "820x500")
         columns = ("employee", "start", "end", "reason")
         tree = self._create_tree(window, columns, {"employee": "Mitarbeiter", "start": "Start", "end": "Ende", "reason": "Grund"})
@@ -560,7 +527,7 @@ class SchedulerApp(tk.Tk):
         text = tk.Text(window, height=8, bg="#FFFFFF", fg="#0F172A", relief="flat", wrap="word")
         text.pack(fill="both", expand=True, padx=16, pady=16)
         text.insert("end", f"SQLite-Datenbank:\n{self.repository.database_path}\n\n")
-        text.insert("end", "Systeminfo:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen, Abwesenheiten, Forecasts und Veröffentlichungsstatus dauerhaft.\n• Export erzeugt Dienstplan-CSV/Textdateien oder Report-CSV.\n• Forecast importiert Umsatzprognosen und ergänzt daraus Personalbedarfs-Hinweise in Berichten.\n\nHinweis: Lokale Benutzer- und Rollenprüfung ist aktiv.")
+        text.insert("end", "Systeminfo:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen, Abwesenheiten, Forecasts und Veröffentlichungsstatus dauerhaft.\n• Export erzeugt Dienstplan-CSV/Textdateien oder Report-CSV.\n• Forecast importiert Umsatzprognosen und ergänzt daraus Personalbedarfs-Hinweise in Berichten.\n\nHinweis: Die App läuft im lokalen Modus ohne Benutzer-/Rollenprüfung.")
         text.configure(state="disabled")
         self._add_manager_buttons(window, [("Jetzt speichern", self._save), ("Dienstplan CSV Export", self._export_csv)])
 
@@ -895,8 +862,6 @@ class SchedulerApp(tk.Tk):
         )
 
     def _delete_absence(self, absence_id: str) -> None:
-        if not self._require_permission("MANAGE_ABSENCES", "Abwesenheiten löschen"):
-            return
         if not messagebox.askyesno("Abwesenheit löschen", "Soll diese Abwesenheit gelöscht werden?", parent=self):
             return
         if self.service.delete_absence(absence_id):
@@ -1008,9 +973,7 @@ class SchedulerApp(tk.Tk):
         ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_shift).grid(row=7, column=1, sticky="e", padx=18, pady=(12, 18))
         return dialog
 
-    def _open_employee_dialog(self, employee: Employee | None = None) -> tk.Toplevel | None:
-        if not self._require_permission("MANAGE_EMPLOYEES", "Mitarbeiter bearbeiten"):
-            return None
+    def _open_employee_dialog(self, employee: Employee | None = None) -> tk.Toplevel:
         dialog = tk.Toplevel(self)
         dialog.title("Mitarbeiter bearbeiten" if employee else "Mitarbeiter anlegen")
         dialog.transient(self)
@@ -1083,8 +1046,6 @@ class SchedulerApp(tk.Tk):
         return dialog
 
     def _open_absence_dialog(self) -> tk.Toplevel | None:
-        if not self._require_permission("MANAGE_ABSENCES", "Abwesenheiten bearbeiten"):
-            return None
         if not self.service.employees:
             messagebox.showinfo("Abwesenheit", "Bitte zuerst Mitarbeitende anlegen.", parent=self)
             return None
@@ -1210,8 +1171,6 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Speichern fehlgeschlagen", str(exc), parent=self)
 
     def _export_reports_csv(self) -> None:
-        if not self._require_permission("EXPORT", "Export"):
-            return
         path = filedialog.asksaveasfilename(
             title="Berichte exportieren",
             defaultextension=".csv",
@@ -1226,8 +1185,6 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
 
     def _export_csv(self) -> None:
-        if not self._require_permission("EXPORT", "Export"):
-            return
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
             defaultextension=".csv",
@@ -1256,11 +1213,8 @@ class SchedulerApp(tk.Tk):
             messagebox.showerror("Forecast-Import fehlgeschlagen", str(exc), parent=self)
 
     def _publish_schedule(self) -> None:
-        if not self._require_permission("PUBLISH_SCHEDULE", "Dienstplan veröffentlichen"):
-            return
         try:
-            published_by = self.current_user.display_name if self.current_user else "Lokaler Benutzer"
-            count = self.service.publish_week(self.week_start, published_by)
+            count = self.service.publish_week(self.week_start)
             self.repository.save(self.service)
             self._refresh_all()
             self._set_status(f"Dienstplan veröffentlicht: {count} Schichten gespeichert.")
@@ -1406,7 +1360,7 @@ class SchedulerApp(tk.Tk):
 def create_app(database_path: str | Path = "python_dienstplaner/data/dienstplaner.sqlite3") -> SchedulerApp:
     repository = SQLiteSchedulerRepository(database_path)
     service = repository.load()
-    return SchedulerApp(service, repository, require_authentication=True)
+    return SchedulerApp(service, repository)
 
 
 def main() -> None:
