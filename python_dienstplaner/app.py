@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .models import Absence, Employee, ExportFormat, Shift
 from .repository import SQLiteSchedulerRepository
-from .services import ForecastImportService, SchedulerService
+from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
 
 @dataclass(frozen=True)
@@ -128,6 +128,7 @@ class SchedulerApp(tk.Tk):
             ("Dashboard", "⌂  Dashboard", self._show_dashboard),
             ("Dienstplan", "▣  Dienstplan", self._show_schedule),
             ("Mitarbeiter", "👥  Mitarbeiter", self._open_employee_manager),
+            ("Abteilungen", "▦  Abteilungen", self._open_department_manager),
             ("Abwesenheiten", "☂  Abwesenheiten", self._open_absence_manager),
             ("Schichten", "◷  Schichten", self._open_shift_manager),
             ("Berichte", "▥  Berichte", self._open_reports_window),
@@ -213,8 +214,9 @@ class SchedulerApp(tk.Tk):
         self.detail_body = tk.Label(details, text="Bitte eine Schicht auswählen.", bg="#FFFFFF", fg="#334155", justify="left")
         self.detail_body.grid(row=1, column=0, sticky="w", padx=18, pady=(0, 16))
         ttk.Button(details, text="Bearbeiten", style="Ghost.TButton", command=self._open_shift_dialog_for_selected).grid(row=1, column=2, padx=4, pady=14)
-        ttk.Button(details, text="Zuweisen", style="Ghost.TButton", command=self._open_assignment_dialog).grid(row=1, column=3, padx=4, pady=14)
-        ttk.Button(details, text="Löschen", style="Danger.TButton", command=self._delete_selected_shift).grid(row=1, column=4, padx=(4, 18), pady=14)
+        ttk.Button(details, text="Kopieren", style="Ghost.TButton", command=self._open_copy_shift_dialog_for_selected).grid(row=1, column=3, padx=4, pady=14)
+        ttk.Button(details, text="Zuweisen", style="Ghost.TButton", command=self._open_assignment_dialog).grid(row=1, column=4, padx=4, pady=14)
+        ttk.Button(details, text="Löschen", style="Danger.TButton", command=self._delete_selected_shift).grid(row=1, column=5, padx=(4, 18), pady=14)
 
     def _build_right_panel(self, parent: ttk.Frame) -> None:
         right = ttk.Frame(parent)
@@ -229,6 +231,7 @@ class SchedulerApp(tk.Tk):
         tk.Label(actions, text="Schnellaktionen", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=16, pady=(14, 8))
         for text, command in [
             ("👥 Mitarbeiter anlegen", self._open_employee_dialog),
+            ("▦  Abteilung anlegen", self._open_department_dialog),
             ("☂ Abwesenheit erfassen", self._open_absence_dialog),
             ("➕ Mitarbeitenden zuweisen", self._open_assignment_dialog),
             ("▤  Schicht anlegen", self._open_shift_dialog),
@@ -324,6 +327,47 @@ class SchedulerApp(tk.Tk):
         tree.bind("<Double-Button-1>", lambda _event: edit())
         refresh()
 
+    def _open_department_manager(self) -> None:
+        window = self._create_manager_window("Abteilungen verwalten", "620x480")
+        columns = ("name", "employees", "shifts", "source")
+        tree = self._create_tree(window, columns, {
+            "name": "Abteilung",
+            "employees": "Mitarbeitende",
+            "shifts": "Schichten",
+            "source": "Typ",
+        })
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            default_names = {department.lower() for department in DEFAULT_RETAIL_DEPARTMENTS}
+            for department in self.service.department_options():
+                employee_count = sum(1 for employee in self.service.employees if employee.department.lower() == department.lower())
+                shift_count = sum(1 for shift in self.service.shifts if shift.department.lower() == department.lower())
+                source = "Standard" if department.lower() in default_names else "Eigene"
+                tree.insert("", "end", iid=department, values=(department, employee_count, shift_count, source))
+
+        def add() -> None:
+            self._open_department_dialog(parent=window, refresh_callback=refresh)
+
+        def delete() -> None:
+            selection = tree.selection()
+            if not selection:
+                self._set_status("Bitte eine Abteilung auswählen.")
+                return
+            department = selection[0]
+            if not messagebox.askyesno("Abteilung löschen", f"Soll '{department}' wirklich gelöscht werden?", parent=window):
+                return
+            try:
+                if self.service.delete_department(department):
+                    self._refresh_all()
+                    refresh()
+                    self._set_status("Abteilung gelöscht.")
+            except ValueError as exc:
+                messagebox.showerror("Abteilung kann nicht gelöscht werden", str(exc), parent=window)
+
+        self._add_manager_buttons(window, [("Neu", add), ("Löschen", delete), ("Aktualisieren", refresh)])
+        refresh()
+
     def _open_absence_manager(self) -> None:
         window = self._create_manager_window("Abwesenheiten verwalten", "820x500")
         columns = ("employee", "start", "end", "reason")
@@ -412,6 +456,17 @@ class SchedulerApp(tk.Tk):
                 window.wait_window(dialog)
             refresh()
 
+        def copy() -> None:
+            shift = selected_shift()
+            if shift is None:
+                self._set_status("Bitte eine Schicht auswählen.")
+                return
+            self.selected_shift_id = shift.id
+            dialog = self._open_copy_shift_dialog(shift)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
         def unassign() -> None:
             shift = selected_shift()
             if shift is None or not shift.employee_ids:
@@ -431,7 +486,7 @@ class SchedulerApp(tk.Tk):
             self.selected_shift_id = shift.id
             self._delete_selected_shift(parent=window, refresh_callback=refresh)
 
-        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Zuweisen", assign), ("Zuweisung entfernen", unassign), ("Löschen", delete), ("Aktualisieren", refresh)])
+        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Kopieren", copy), ("Zuweisen", assign), ("Zuweisung entfernen", unassign), ("Löschen", delete), ("Aktualisieren", refresh)])
         tree.bind("<Double-Button-1>", lambda _event: edit())
         refresh()
 
@@ -484,6 +539,38 @@ class SchedulerApp(tk.Tk):
     def _clear_tree(tree: ttk.Treeview) -> None:
         for item_id in tree.get_children():
             tree.delete(item_id)
+
+    def _open_department_dialog(self, parent: tk.Misc | None = None, refresh_callback: object | None = None) -> tk.Toplevel:
+        dialog = tk.Toplevel(self)
+        dialog.title("Abteilung hinzufügen")
+        dialog.transient(parent or self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        value = tk.StringVar()
+        tk.Label(dialog, text="Name", bg="#FFFFFF", fg="#334155").grid(row=0, column=0, sticky="w", padx=18, pady=12)
+        entry = ttk.Entry(dialog, textvariable=value, width=36)
+        entry.grid(row=0, column=1, padx=18, pady=12)
+        entry.focus_set()
+
+        def save_department() -> None:
+            try:
+                created = self.service.add_department(value.get())
+                dialog.destroy()
+                self._refresh_all()
+                if callable(refresh_callback):
+                    refresh_callback()
+                self._set_status(f"Abteilung '{created}' hinzugefügt.")
+            except ValueError as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        entry.bind("<Return>", lambda _event: save_department())
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_department).grid(row=1, column=1, sticky="e", padx=18, pady=(0, 18))
+        return dialog
+
+    def _department_combobox(self, parent: tk.Misc, variable: tk.StringVar, row: int) -> ttk.Combobox:
+        combobox = ttk.Combobox(parent, textvariable=variable, values=self.service.department_options(), width=32)
+        combobox.grid(row=row, column=1, padx=18, pady=7)
+        return combobox
 
     def _format_week_range(self) -> str:
         week_end = self.week_start + timedelta(days=6)
@@ -746,6 +833,48 @@ class SchedulerApp(tk.Tk):
         shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id else None
         self._open_shift_dialog(shift)
 
+    def _open_copy_shift_dialog_for_selected(self) -> None:
+        shift = self.service.find_shift(self.selected_shift_id) if self.selected_shift_id else None
+        if shift is None:
+            self._set_status("Keine Schicht ausgewählt.")
+            return
+        self._open_copy_shift_dialog(shift)
+
+    def _open_copy_shift_dialog(self, shift: Shift) -> tk.Toplevel:
+        dialog = tk.Toplevel(self)
+        dialog.title("Schicht kopieren")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        default_start = shift.start + timedelta(days=1)
+        default_end = shift.end + timedelta(days=1)
+        values = {
+            "source": tk.StringVar(value=f"{shift.name} · {shift.department} · {self._format_datetime(shift.start)}"),
+            "start": tk.StringVar(value=self._format_datetime(default_start)),
+            "end": tk.StringVar(value=self._format_datetime(default_end)),
+        }
+        for row, (key, label) in enumerate([("source", "Vorlage"), ("start", "Neuer Start"), ("end", "Neues Ende")]):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            entry = ttk.Entry(dialog, textvariable=values[key], width=42)
+            entry.grid(row=row, column=1, padx=18, pady=7)
+            if key == "source":
+                entry.configure(state="readonly")
+
+        def copy_shift() -> None:
+            try:
+                start = self._parse_datetime(values["start"].get())
+                end = self._parse_datetime(values["end"].get())
+                copied = self.service.copy_shift(shift.id, start, end)
+                self.selected_shift_id = copied.id
+                dialog.destroy()
+                self._refresh_all()
+                self._set_status("Schicht kopiert. Mitarbeitende werden bewusst nicht übernommen.")
+            except ValueError as exc:
+                messagebox.showerror("Schicht kann nicht kopiert werden", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Kopieren", style="Primary.TButton", command=copy_shift).grid(row=3, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
+
     def _open_shift_dialog(self, shift: Shift | None = None) -> tk.Toplevel:
         dialog = tk.Toplevel(self)
         dialog.title("Schicht bearbeiten" if shift else "Schicht hinzufügen")
@@ -754,16 +883,19 @@ class SchedulerApp(tk.Tk):
         dialog.configure(bg="#FFFFFF")
         values = {
             "name": tk.StringVar(value=shift.name if shift else "Frühschicht"),
-            "department": tk.StringVar(value=shift.department if shift else "Pflege"),
+            "department": tk.StringVar(value=shift.department if shift else "Kasse"),
             "start": tk.StringVar(value=self._format_datetime(shift.start if shift else self.week_start.replace(hour=6, minute=0))),
             "end": tk.StringVar(value=self._format_datetime(shift.end if shift else self.week_start.replace(hour=14, minute=0))),
             "capacity": tk.StringVar(value=str(shift.required_employees if shift else 1)),
-            "qualification": tk.StringVar(value=shift.required_qualification if shift else "Pflegefachkraft"),
-            "branch": tk.StringVar(value=shift.branch if shift else "Zentrale Wache"),
+            "qualification": tk.StringVar(value=shift.required_qualification if shift else ""),
+            "branch": tk.StringVar(value=shift.branch if shift else "Hauptfiliale"),
         }
         for row, (key, label) in enumerate([("name", "Name"), ("department", "Abteilung"), ("start", "Start"), ("end", "Ende"), ("capacity", "Kapazität"), ("qualification", "Qualifikation"), ("branch", "Standort")]):
             tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
-            ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+            if key == "department":
+                self._department_combobox(dialog, values[key], row)
+            else:
+                ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
 
         def save_shift() -> None:
             try:
@@ -808,7 +940,7 @@ class SchedulerApp(tk.Tk):
         dialog.configure(bg="#FFFFFF")
         values = {
             "name": tk.StringVar(value=employee.name if employee else ""),
-            "department": tk.StringVar(value=employee.department if employee else ""),
+            "department": tk.StringVar(value=employee.department if employee else "Kasse"),
             "qualification": tk.StringVar(value=employee.qualification if employee else ""),
             "hours": tk.StringVar(value=str(employee.weekly_hours_limit if employee else 40)),
             "branch": tk.StringVar(value=employee.branch if employee else "Zentrale"),
@@ -818,7 +950,10 @@ class SchedulerApp(tk.Tk):
         fields = [("name", "Name"), ("department", "Abteilung"), ("qualification", "Qualifikation"), ("hours", "Wochenstunden"), ("branch", "Filiale"), ("wage", "Stundenlohn")]
         for row, (key, label) in enumerate(fields):
             tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
-            ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+            if key == "department":
+                self._department_combobox(dialog, values[key], row)
+            else:
+                ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
         ttk.Checkbutton(dialog, text="Aktiv", variable=values["active"]).grid(row=len(fields), column=1, sticky="w", padx=18, pady=7)
 
         def save_employee() -> None:
