@@ -267,13 +267,14 @@ class SchedulerApp(tk.Tk):
         self._set_status("Dienstplanansicht für die aktuelle Woche geöffnet.")
 
     def _open_employee_manager(self) -> None:
-        window = self._create_manager_window("Mitarbeiter verwalten", "920x520")
-        columns = ("name", "department", "qualification", "hours", "branch", "wage", "active")
+        window = self._create_manager_window("Mitarbeiter verwalten", "1040x540")
+        columns = ("name", "department", "qualification", "hours", "break", "branch", "wage", "active")
         tree = self._create_tree(window, columns, {
             "name": "Name",
             "department": "Abteilung",
             "qualification": "Qualifikation",
             "hours": "Wochenstunden",
+            "break": "Pause/Schicht",
             "branch": "Filiale",
             "wage": "Stundenlohn",
             "active": "Status",
@@ -287,6 +288,7 @@ class SchedulerApp(tk.Tk):
                     employee.department,
                     employee.qualification or "-",
                     employee.weekly_hours_limit,
+                    f"{employee.break_minutes_per_shift} Min",
                     employee.branch,
                     f"{employee.hourly_wage:.2f}",
                     "Aktiv" if employee.is_active else "Inaktiv",
@@ -666,7 +668,7 @@ class SchedulerApp(tk.Tk):
         unassigned_count = self._unassigned_employee_count()
         open_shifts = sum(max(0, shift.required_employees - len(shift.employee_ids)) for shift in self._week_shifts())
         absences = sum(1 for employee in self.service.employees for absence in employee.absences if self._range_in_week(absence.start, absence.end))
-        hours = sum(shift.duration_hours * len(shift.employee_ids) for shift in self._week_shifts())
+        hours = self._planned_week_hours()
         avg_hours = hours / max(1, len(self.service.employees))
         employee_note = (
             f"{unassigned_count} ohne Schicht"
@@ -753,7 +755,7 @@ class SchedulerApp(tk.Tk):
         style = self._style_for_shift(shift)
         label = tk.Label(
             self.grid_frame,
-            text=f"{shift.name}\n{shift.start:%H:%M} – {shift.end:%H:%M}",
+            text=f"{shift.name}\n{shift.start:%H:%M} – {shift.end:%H:%M}\nNetto {employee.net_hours_for_shift(shift):.1f} h · Pause {employee.break_minutes_per_shift} Min",
             bg=style.background,
             fg=style.foreground,
             font=("Segoe UI", 8, "bold"),
@@ -945,9 +947,10 @@ class SchedulerApp(tk.Tk):
             "hours": tk.StringVar(value=str(employee.weekly_hours_limit if employee else 40)),
             "branch": tk.StringVar(value=employee.branch if employee else "Zentrale"),
             "wage": tk.StringVar(value=str(employee.hourly_wage if employee else 15.0)),
+            "break": tk.StringVar(value=str(employee.break_minutes_per_shift if employee else 30)),
             "active": tk.BooleanVar(value=employee.is_active if employee else True),
         }
-        fields = [("name", "Name"), ("department", "Abteilung"), ("qualification", "Qualifikation"), ("hours", "Wochenstunden"), ("branch", "Filiale"), ("wage", "Stundenlohn")]
+        fields = [("name", "Name"), ("department", "Abteilung"), ("qualification", "Qualifikation"), ("hours", "Wochenstunden"), ("break", "Pause pro Schicht (Minuten)"), ("branch", "Filiale"), ("wage", "Stundenlohn")]
         for row, (key, label) in enumerate(fields):
             tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
             if key == "department":
@@ -960,10 +963,30 @@ class SchedulerApp(tk.Tk):
             try:
                 hours = int(values["hours"].get())
                 wage = float(values["wage"].get().replace(",", "."))
+                break_minutes = int(values["break"].get())
                 if employee is None:
-                    self.service.add_employee(values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                    self.service.add_employee(
+                        values["name"].get(),
+                        values["department"].get(),
+                        values["qualification"].get(),
+                        hours,
+                        values["branch"].get(),
+                        wage,
+                        values["active"].get(),
+                        break_minutes,
+                    )
                 else:
-                    self.service.update_employee(employee.id, values["name"].get(), values["department"].get(), values["qualification"].get(), hours, values["branch"].get(), wage, values["active"].get())
+                    self.service.update_employee(
+                        employee.id,
+                        values["name"].get(),
+                        values["department"].get(),
+                        values["qualification"].get(),
+                        hours,
+                        values["branch"].get(),
+                        wage,
+                        values["active"].get(),
+                        break_minutes,
+                    )
                 dialog.destroy()
                 self._refresh_all()
                 self._set_status("Mitarbeiter gespeichert.")
@@ -1187,6 +1210,15 @@ class SchedulerApp(tk.Tk):
 
     def _unassigned_employee_count(self) -> int:
         return sum(1 for employee in self.service.employees if self._is_unassigned_for_week(employee, self.week_start))
+
+    def _planned_week_hours(self) -> float:
+        week_shift_ids = {shift.id for shift in self._week_shifts()}
+        return sum(
+            employee.net_hours_for_shift(shift)
+            for employee in self.service.employees
+            for shift in employee.shifts
+            if shift.id in week_shift_ids
+        )
 
     @staticmethod
     def _employee_week_shifts(employee: Employee, week_start: datetime) -> list[Shift]:

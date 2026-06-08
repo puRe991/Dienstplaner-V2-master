@@ -35,8 +35,11 @@ class SQLiteSchedulerRepository:
             )
             connection.executemany(
                 """
-                INSERT INTO employees(id, name, department, qualification, weekly_hours_limit, branch, hourly_wage, is_active)
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO employees(
+                    id, name, department, qualification, weekly_hours_limit, branch,
+                    hourly_wage, is_active, break_minutes_per_shift
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -48,6 +51,7 @@ class SQLiteSchedulerRepository:
                         employee.branch,
                         employee.hourly_wage,
                         1 if employee.is_active else 0,
+                        employee.break_minutes_per_shift,
                     )
                     for employee in service.employees
                 ],
@@ -125,9 +129,15 @@ class SQLiteSchedulerRepository:
                     branch=row[5],
                     hourly_wage=row[6],
                     is_active=bool(row[7]),
+                    break_minutes_per_shift=row[8],
                 )
                 for row in connection.execute(
-                    "SELECT id, name, department, qualification, weekly_hours_limit, branch, hourly_wage, is_active FROM employees ORDER BY name"
+                    """
+                    SELECT id, name, department, qualification, weekly_hours_limit, branch,
+                           hourly_wage, is_active, break_minutes_per_shift
+                    FROM employees
+                    ORDER BY name
+                    """
                 )
             }
             shifts = {
@@ -200,7 +210,8 @@ class SQLiteSchedulerRepository:
                     weekly_hours_limit INTEGER NOT NULL CHECK(weekly_hours_limit > 0),
                     branch TEXT NOT NULL,
                     hourly_wage REAL NOT NULL CHECK(hourly_wage >= 0),
-                    is_active INTEGER NOT NULL CHECK(is_active IN (0, 1))
+                    is_active INTEGER NOT NULL CHECK(is_active IN (0, 1)),
+                    break_minutes_per_shift INTEGER NOT NULL DEFAULT 0 CHECK(break_minutes_per_shift >= 0)
                 );
                 CREATE TABLE IF NOT EXISTS departments(
                     name TEXT PRIMARY KEY CHECK(length(trim(name)) > 0)
@@ -239,6 +250,7 @@ class SQLiteSchedulerRepository:
                 );
                 """
             )
+            self._ensure_column(connection, "employees", "break_minutes_per_shift", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "absences", "id", "TEXT")
             for rowid, in connection.execute("SELECT rowid FROM absences WHERE id IS NULL OR id = ''"):
                 connection.execute("UPDATE absences SET id = ? WHERE rowid = ?", (str(uuid4()), rowid))

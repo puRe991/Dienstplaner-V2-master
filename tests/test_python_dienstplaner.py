@@ -142,6 +142,30 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertEqual([], shift.employee_ids)
         self.assertEqual([], shift.employee_names)
 
+
+    def test_employee_break_reduces_planned_hours_and_allows_weekly_limit_fit(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee(
+            "Eva Retail",
+            "Kasse",
+            "Kasse",
+            weekly_hours_limit=7,
+            branch="Zentrale",
+            break_minutes_per_shift=60,
+        )
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertTrue(result.success)
+        self.assertEqual(7.0, employee.planned_hours)
+
+    def test_employee_break_must_not_be_negative(self) -> None:
+        service = SchedulerService()
+
+        with self.assertRaises(ValueError):
+            service.add_employee("Eva Retail", "Kasse", break_minutes_per_shift=-1)
+
     def test_exports_schedule_as_csv(self) -> None:
         service = SchedulerService()
         employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
@@ -161,7 +185,7 @@ class RepositoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
             service = SchedulerService()
-            employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse", break_minutes_per_shift=30)
             employee.absences.append(Absence(datetime(2026, 1, 2, 8), datetime(2026, 1, 2, 16), "Urlaub"))
             shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
             service.add_department("Non-Food")
@@ -177,6 +201,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual("Urlaub", loaded.employees[0].absences[0].reason)
         self.assertIsNotNone(loaded.shifts[0].published_at)
         self.assertEqual("Repository-Test", loaded.shifts[0].published_by)
+        self.assertEqual(30, loaded.employees[0].break_minutes_per_shift)
         self.assertIn("Non-Food", loaded.department_options())
 
 

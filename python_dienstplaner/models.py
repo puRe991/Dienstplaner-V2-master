@@ -107,6 +107,7 @@ class Employee:
     branch: str = "Zentrale"
     hourly_wage: float = 15.0
     is_active: bool = True
+    break_minutes_per_shift: int = 0
     id: str = field(default_factory=lambda: str(uuid4()))
     shifts: List[Shift] = field(default_factory=list)
     absences: List[Absence] = field(default_factory=list)
@@ -125,10 +126,21 @@ class Employee:
             raise ValueError("Wochenstundenlimit muss größer als 0 sein.")
         if self.hourly_wage < 0:
             raise ValueError("Stundenlohn darf nicht negativ sein.")
+        if self.break_minutes_per_shift < 0:
+            raise ValueError("Pausenzeit darf nicht negativ sein.")
+
+    def net_hours_for_shift(self, shift: Shift) -> float:
+        """Return paid/planned working hours for a shift after this employee's break.
+
+        Breaks are capped at the shift duration so invalid combinations never create
+        negative planned hours in reports or limit checks.
+        """
+        break_hours = self.break_minutes_per_shift / 60
+        return max(0.0, shift.duration_hours - break_hours)
 
     @property
     def planned_hours(self) -> float:
-        return sum(shift.duration_hours for shift in self.shifts)
+        return sum(self.net_hours_for_shift(shift) for shift in self.shifts)
 
     @property
     def overtime(self) -> float:
