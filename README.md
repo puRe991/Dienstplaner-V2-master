@@ -9,7 +9,7 @@ Python-Desktop-Anwendung zur Erstellung, Prüfung und Auswertung von Dienstplän
 - **Mitarbeiter- und Schichtplanung:** Mitarbeitende und Schichten anlegen, bearbeiten, löschen und zuweisen; bei Bedarf kann eine Zuweisung Abteilung, Filiale und Qualifikation bewusst ignorieren.
 - **Regelbasierte Validierung:** Prüfung von Kapazität, Qualifikation, Arbeitszeit, Ruhezeit, Pausen, Verfügbarkeit, Abwesenheit und Zeitkonflikten.
 - **Wochenansicht:** Dienstplan als Desktop-Oberfläche mit Kalender, Mitarbeiterliste, Schichtübersicht und Statusmeldungen.
-- **Abwesenheiten:** Abwesenheiten erfassen und Überschneidungen mit bestehenden Schichten verhindern.
+- **Abwesenheiten:** Urlaub, freie Tage, Krankheit, Fortbildung, Seminar und weitere Abwesenheitsarten erfassen; Überschneidungen mit bestehenden Schichten werden verhindert.
 - **Forecast-Import:** Umsatz- und Kundenfrequenzdaten aus CSV-Dateien importieren.
 - **Export:** Dienstpläne lokal als CSV, Excel-kompatibles HTML oder einfache PDF-Datei ausgeben.
 - **Persistenz:** Lokale SQLite-Datenbank für Mitarbeitende, Schichten, Zuweisungen und Abwesenheiten.

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .models import Absence, Employee, ExportFormat, Shift
+from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -1005,6 +1005,8 @@ class SchedulerApp(tk.Tk):
             tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
             if key == "employee":
                 ttk.Combobox(dialog, textvariable=values[key], values=list(employee_options), width=32, state="readonly").grid(row=row, column=1, padx=18, pady=7)
+            elif key == "reason":
+                ttk.Combobox(dialog, textvariable=values[key], values=DEFAULT_ABSENCE_REASONS, width=32, state="normal").grid(row=row, column=1, padx=18, pady=7)
             else:
                 ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
 

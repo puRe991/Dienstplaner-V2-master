@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from python_dienstplaner.models import Absence, ExportFormat
+from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat
 from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -114,6 +114,21 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("Der Mitarbeiter ist im Schichtzeitraum abwesend (Urlaub).", result.errors)
 
+    def test_default_absence_reasons_include_common_unavailability_types(self) -> None:
+        self.assertIn("Urlaub", DEFAULT_ABSENCE_REASONS)
+        self.assertIn("Freier Tag", DEFAULT_ABSENCE_REASONS)
+        self.assertIn("Krank", DEFAULT_ABSENCE_REASONS)
+        self.assertIn("Fortbildung", DEFAULT_ABSENCE_REASONS)
+        self.assertIn("Seminar", DEFAULT_ABSENCE_REASONS)
+
+    def test_add_absence_accepts_predefined_non_vacation_reason(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+
+        absence = service.add_absence(employee.id, datetime(2026, 1, 2), datetime(2026, 1, 3), "Freier Tag")
+
+        self.assertEqual("Freier Tag", absence.reason)
+        self.assertEqual([absence], employee.absences)
 
     def test_unassign_removes_employee_and_shift_links(self) -> None:
         service = SchedulerService()

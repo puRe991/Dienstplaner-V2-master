@@ -13,6 +13,22 @@ class ExportFormat(str, Enum):
     PDF_TEXT = "pdf"
 
 
+DEFAULT_ABSENCE_REASONS: tuple[str, ...] = (
+    "Urlaub",
+    "Freier Tag",
+    "Krank",
+    "Fortbildung",
+    "Seminar",
+    "Berufsschule",
+    "Sonderurlaub",
+    "Unbezahlt frei",
+    "Elternzeit",
+    "Pflegezeit",
+    "Behördengang",
+    "Sonstige Abwesenheit",
+)
+
+
 @dataclass
 class Absence:
     start: datetime
