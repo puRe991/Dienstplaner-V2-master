@@ -9,12 +9,56 @@ from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMet
 from .rules import PlanningRules
 
 
+DEFAULT_RETAIL_DEPARTMENTS: tuple[str, ...] = (
+    "Kasse",
+    "Verkauf / Fläche",
+    "Obst & Gemüse",
+    "Frische / Kühlung",
+    "Backshop",
+    "Getränke",
+    "Drogerie",
+    "Lager / Wareneingang",
+    "Service / Information",
+    "Marktleitung",
+    "Reinigung",
+    "Sicherheit",
+)
+
+
 class SchedulerService:
     def __init__(self, rules: PlanningRules | None = None) -> None:
         self.rules = rules or PlanningRules()
         self.employees: list[Employee] = []
         self.shifts: list[Shift] = []
         self.forecasts: list[RevenueForecast] = []
+        self.departments: list[str] = list(DEFAULT_RETAIL_DEPARTMENTS)
+
+    def add_department(self, name: str) -> str:
+        department = name.strip()
+        if not department:
+            raise ValueError("Abteilungsname ist erforderlich.")
+        if any(existing.lower() == department.lower() for existing in self.departments):
+            raise ValueError("Diese Abteilung existiert bereits.")
+        self.departments.append(department)
+        self.departments.sort(key=str.casefold)
+        return department
+
+    def delete_department(self, name: str) -> bool:
+        department = name.strip()
+        if not department:
+            return False
+        in_use = any(item.department.lower() == department.lower() for item in [*self.employees, *self.shifts])
+        if in_use:
+            raise ValueError("Abteilung ist Mitarbeitenden oder Schichten zugewiesen und kann nicht gelöscht werden.")
+        before = len(self.departments)
+        self.departments = [item for item in self.departments if item.lower() != department.lower()]
+        return len(self.departments) != before
+
+    def department_options(self) -> list[str]:
+        options = {department.strip() for department in self.departments if department.strip()}
+        options.update(employee.department for employee in self.employees if employee.department.strip())
+        options.update(shift.department for shift in self.shifts if shift.department.strip())
+        return sorted(options, key=str.casefold)
 
     def add_employee(
         self,
@@ -36,6 +80,7 @@ class SchedulerService:
             is_active=is_active,
         )
         self.employees.append(employee)
+        self._remember_department(employee.department)
         return employee
 
     def update_employee(
@@ -67,6 +112,7 @@ class SchedulerService:
         )
         index = self.employees.index(employee)
         self.employees[index] = updated
+        self._remember_department(updated.department)
         for shift in self.shifts:
             for pos, assigned_id in enumerate(shift.employee_ids):
                 if assigned_id == updated.id and pos < len(shift.employee_names):
@@ -102,7 +148,26 @@ class SchedulerService:
             branch=branch,
         )
         self.shifts.append(shift)
+        self._remember_department(shift.department)
         return shift
+
+    def copy_shift(self, shift_id: str, start: datetime | None = None, end: datetime | None = None) -> Shift:
+        source = self.find_shift(shift_id)
+        if source is None:
+            raise ValueError("Schicht wurde nicht gefunden.")
+        duration = source.end - source.start
+        copy_start = start or source.start
+        copy_end = end or (copy_start + duration)
+        copied = self.add_shift(
+            source.name,
+            source.department,
+            copy_start,
+            copy_end,
+            source.required_employees,
+            source.required_qualification,
+            source.branch,
+        )
+        return copied
 
     def assign(self, employee_id: str, shift_id: str, *, ignore_profile_mismatch: bool = False) -> AssignmentResult:
         employee = self.find_employee(employee_id)
@@ -262,6 +327,12 @@ class SchedulerService:
             kept_names.append(shift.employee_names[index] if index < len(shift.employee_names) else "")
         shift.employee_ids = kept_ids
         shift.employee_names = kept_names
+
+    def _remember_department(self, department: str) -> None:
+        normalized = department.strip()
+        if normalized and not any(existing.lower() == normalized.lower() for existing in self.departments):
+            self.departments.append(normalized)
+            self.departments.sort(key=str.casefold)
 
 
 class ForecastImportService:

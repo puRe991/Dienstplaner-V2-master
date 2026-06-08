@@ -26,8 +26,13 @@ class SQLiteSchedulerRepository:
             connection.execute("DELETE FROM assignments")
             connection.execute("DELETE FROM absences")
             connection.execute("DELETE FROM forecasts")
+            connection.execute("DELETE FROM departments")
             connection.execute("DELETE FROM shifts")
             connection.execute("DELETE FROM employees")
+            connection.executemany(
+                "INSERT OR IGNORE INTO departments(name) VALUES(?)",
+                [(department,) for department in service.department_options()],
+            )
             connection.executemany(
                 """
                 INSERT INTO employees(id, name, department, qualification, weekly_hours_limit, branch, hourly_wage, is_active)
@@ -107,6 +112,9 @@ class SQLiteSchedulerRepository:
     def load(self) -> SchedulerService:
         service = SchedulerService()
         with self._connect() as connection:
+            departments = [row[0] for row in connection.execute("SELECT name FROM departments ORDER BY name COLLATE NOCASE")]
+            if departments:
+                service.departments = departments
             employees = {
                 row[0]: Employee(
                     id=row[0],
@@ -193,6 +201,9 @@ class SQLiteSchedulerRepository:
                     branch TEXT NOT NULL,
                     hourly_wage REAL NOT NULL CHECK(hourly_wage >= 0),
                     is_active INTEGER NOT NULL CHECK(is_active IN (0, 1))
+                );
+                CREATE TABLE IF NOT EXISTS departments(
+                    name TEXT PRIMARY KEY CHECK(length(trim(name)) > 0)
                 );
                 CREATE TABLE IF NOT EXISTS shifts(
                     id TEXT PRIMARY KEY,

@@ -10,10 +10,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.models import Absence, ExportFormat
 from python_dienstplaner.repository import SQLiteSchedulerRepository
-from python_dienstplaner.services import ForecastImportService, SchedulerService
+from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
 
 class SchedulerServiceTests(unittest.TestCase):
+    def test_service_exposes_default_retail_departments_and_custom_options(self) -> None:
+        service = SchedulerService()
+
+        service.add_department("Non-Food")
+
+        self.assertIn("Kasse", service.department_options())
+        self.assertIn("Lager / Wareneingang", service.department_options())
+        self.assertIn("Non-Food", service.department_options())
+        self.assertGreaterEqual(len(service.department_options()), len(DEFAULT_RETAIL_DEPARTMENTS))
+
+    def test_copy_shift_reuses_shift_data_without_assignments(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        self.assertTrue(service.assign(employee.id, shift.id).success)
+
+        copied = service.copy_shift(shift.id, datetime(2026, 1, 2, 8), datetime(2026, 1, 2, 16))
+
+        self.assertNotEqual(shift.id, copied.id)
+        self.assertEqual("Früh", copied.name)
+        self.assertEqual("Kasse", copied.department)
+        self.assertEqual([], copied.employee_ids)
+        self.assertEqual([], copied.employee_names)
+
     def test_assigns_employee_when_rules_are_satisfied(self) -> None:
         service = SchedulerService()
         employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
@@ -125,6 +149,7 @@ class RepositoryTests(unittest.TestCase):
             employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
             employee.absences.append(Absence(datetime(2026, 1, 2, 8), datetime(2026, 1, 2, 16), "Urlaub"))
             shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+            service.add_department("Non-Food")
             service.assign(employee.id, shift.id)
             service.publish_week(datetime(2025, 12, 29), "Repository-Test")
             repository.save(service)
@@ -137,6 +162,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual("Urlaub", loaded.employees[0].absences[0].reason)
         self.assertIsNotNone(loaded.shifts[0].published_at)
         self.assertEqual("Repository-Test", loaded.shifts[0].published_by)
+        self.assertIn("Non-Food", loaded.department_options())
 
 
 class ForecastImportTests(unittest.TestCase):
