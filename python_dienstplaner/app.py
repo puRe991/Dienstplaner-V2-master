@@ -196,8 +196,25 @@ class SchedulerApp(tk.Tk):
         self._build_right_panel(content)
 
     def _build_schedule_grid(self, parent: ttk.Frame) -> None:
-        self.grid_frame = tk.Frame(parent, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
-        self.grid_frame.grid(row=0, column=0, sticky="nsew")
+        self.grid_container = tk.Frame(parent, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1)
+        self.grid_container.grid(row=0, column=0, sticky="nsew")
+        self.grid_container.rowconfigure(0, weight=1)
+        self.grid_container.columnconfigure(0, weight=1)
+
+        self.grid_canvas = tk.Canvas(self.grid_container, bg="#FFFFFF", highlightthickness=0)
+        horizontal_scrollbar = ttk.Scrollbar(self.grid_container, orient="horizontal", command=self.grid_canvas.xview)
+        vertical_scrollbar = ttk.Scrollbar(self.grid_container, orient="vertical", command=self.grid_canvas.yview)
+        self.grid_canvas.configure(xscrollcommand=horizontal_scrollbar.set, yscrollcommand=vertical_scrollbar.set)
+        self.grid_canvas.grid(row=0, column=0, sticky="nsew")
+        vertical_scrollbar.grid(row=0, column=1, sticky="ns")
+        horizontal_scrollbar.grid(row=1, column=0, sticky="ew")
+
+        self.grid_frame = tk.Frame(self.grid_canvas, bg="#FFFFFF")
+        self.grid_canvas_window = self.grid_canvas.create_window((0, 0), window=self.grid_frame, anchor="nw")
+        self.grid_frame.bind("<Configure>", self._update_schedule_scroll_region)
+        self.grid_canvas.bind("<Configure>", self._resize_schedule_canvas_window)
+        self.grid_canvas.bind("<Shift-MouseWheel>", self._scroll_schedule_horizontally)
+
         self.grid_frame.columnconfigure(0, minsize=160)
         for column in range(1, 8):
             self.grid_frame.columnconfigure(column, weight=1, minsize=115)
@@ -636,6 +653,23 @@ class SchedulerApp(tk.Tk):
             return "24h"
         return f"{shift.start:%H:%M} – {shift.end:%H:%M}"
 
+    def _update_schedule_scroll_region(self, _event: tk.Event | None = None) -> None:
+        """Keep the planner canvas scrollable when the week grid is wider than the window."""
+        self.grid_canvas.configure(scrollregion=self.grid_canvas.bbox("all"))
+
+    def _resize_schedule_canvas_window(self, event: tk.Event) -> None:
+        """Let the grid fill available space while preserving horizontal scrolling for narrow windows."""
+        requested_width = self.grid_frame.winfo_reqwidth()
+        self.grid_canvas.itemconfigure(self.grid_canvas_window, width=max(event.width, requested_width))
+        self._update_schedule_scroll_region()
+
+    def _scroll_schedule_horizontally(self, event: tk.Event) -> None:
+        """Support Shift + mouse wheel for the horizontally scrollable weekly planner."""
+        if event.delta == 0:
+            return
+        direction = -1 if event.delta > 0 else 1
+        self.grid_canvas.xview_scroll(direction, "units")
+
     def _refresh_all(self) -> None:
         self.week_label.configure(text=f"📅  {self._format_week_range()}")
         self._refresh_header_state()
@@ -705,6 +739,8 @@ class SchedulerApp(tk.Tk):
         if not filtered_employees:
             message = "Keine Mitarbeitenden vorhanden. Bitte über Schnellaktionen anlegen." if not self.service.employees else "Keine Mitarbeitenden passend zur Suche."
             tk.Label(self.grid_frame, text=message, bg="#FFFFFF", fg="#64748B", pady=28).grid(row=1, column=0, columnspan=8, sticky="nsew")
+            self.grid_frame.update_idletasks()
+            self._update_schedule_scroll_region()
             return
         for row_index, employee in enumerate(filtered_employees, start=1):
             self.employee_rows[employee.id] = row_index
@@ -732,6 +768,9 @@ class SchedulerApp(tk.Tk):
                 cell = self._make_schedule_cell(employee, day_index, is_unassigned)
                 cell.grid(row=row_index, column=day_index + 1, sticky="nsew", padx=4, pady=5)
                 self.schedule_cells[(employee.id, day_index)] = cell
+
+        self.grid_frame.update_idletasks()
+        self._update_schedule_scroll_region()
 
     def _make_schedule_cell(self, employee: Employee, day_index: int, is_unassigned: bool = False) -> tk.Label:
         day = self.week_start.date() + timedelta(days=day_index)
