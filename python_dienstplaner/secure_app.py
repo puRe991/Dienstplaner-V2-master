@@ -86,9 +86,9 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         try:
             published_by = self.current_user.display_name if self.current_user else "Lokaler Benutzer"
             count = self.service.publish_week(self.week_start, published_by)
-            self.repository.save(self.service)
+            if not self._persist_changes(f"Dienstplan veröffentlicht: {count} Schichten gespeichert."):
+                return
             self._refresh_all()
-            self._set_status(f"Dienstplan veröffentlicht: {count} Schichten gespeichert.")
         except ValueError as exc:
             messagebox.showwarning("Dienstplan prüfen", str(exc), parent=self)
         except OSError as exc:

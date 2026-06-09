@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import sqlite3
 import tkinter as tk
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -353,9 +354,9 @@ class SchedulerApp(tk.Tk):
                 return
             if messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=window):
                 self.service.delete_employee(employee.id)
+                self._persist_changes("Mitarbeiter gelöscht.", window)
                 self._refresh_all()
                 refresh()
-                self._set_status("Mitarbeiter gelöscht.")
 
         self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Löschen", delete), ("Aktualisieren", refresh)])
         tree.bind("<Double-Button-1>", lambda _event: edit())
@@ -393,9 +394,9 @@ class SchedulerApp(tk.Tk):
                 return
             try:
                 if self.service.delete_department(department):
+                    self._persist_changes("Abteilung gelöscht.", window)
                     self._refresh_all()
                     refresh()
-                    self._set_status("Abteilung gelöscht.")
             except ValueError as exc:
                 messagebox.showerror("Abteilung kann nicht gelöscht werden", str(exc), parent=window)
 
@@ -426,9 +427,9 @@ class SchedulerApp(tk.Tk):
                 return
             if messagebox.askyesno("Abwesenheit löschen", "Soll die Abwesenheit gelöscht werden?", parent=window):
                 self.service.delete_absence(selection[0])
+                self._persist_changes("Abwesenheit gelöscht.", window)
                 self._refresh_all()
                 refresh()
-                self._set_status("Abwesenheit gelöscht.")
 
         self._add_manager_buttons(window, [("Neu", add), ("Löschen", delete), ("Aktualisieren", refresh)])
         tree.bind("<Double-Button-1>", lambda _event: delete())
@@ -508,9 +509,9 @@ class SchedulerApp(tk.Tk):
                 return
             employee_id = shift.employee_ids[-1]
             self.service.unassign(employee_id, shift.id)
+            self._persist_changes("Letzte Zuweisung entfernt.", window)
             self._refresh_all()
             refresh()
-            self._set_status("Letzte Zuweisung entfernt.")
 
         def delete() -> None:
             shift = selected_shift()
@@ -589,11 +590,12 @@ class SchedulerApp(tk.Tk):
         def save_department() -> None:
             try:
                 created = self.service.add_department(value.get())
+                if not self._persist_changes(f"Abteilung '{created}' hinzugefügt.", dialog):
+                    return
                 dialog.destroy()
                 self._refresh_all()
                 if callable(refresh_callback):
                     refresh_callback()
-                self._set_status(f"Abteilung '{created}' hinzugefügt.")
             except ValueError as exc:
                 messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
 
@@ -922,9 +924,10 @@ class SchedulerApp(tk.Tk):
                 end = self._parse_datetime(values["end"].get())
                 copied = self.service.copy_shift(shift.id, start, end)
                 self.selected_shift_id = copied.id
+                if not self._persist_changes("Schicht kopiert. Mitarbeitende werden bewusst nicht übernommen.", dialog):
+                    return
                 dialog.destroy()
                 self._refresh_all()
-                self._set_status("Schicht kopiert. Mitarbeitende werden bewusst nicht übernommen.")
             except ValueError as exc:
                 messagebox.showerror("Schicht kann nicht kopiert werden", str(exc), parent=dialog)
 
@@ -979,9 +982,10 @@ class SchedulerApp(tk.Tk):
                         published_by=shift.published_by,
                     )
                     self._replace_shift(shift, updated)
+                if not self._persist_changes("Schicht gespeichert.", dialog):
+                    return
                 dialog.destroy()
                 self._refresh_all()
-                self._set_status("Schicht gespeichert.")
             except ValueError as exc:
                 messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
 
@@ -1041,9 +1045,10 @@ class SchedulerApp(tk.Tk):
                         values["active"].get(),
                         break_minutes,
                     )
+                if not self._persist_changes("Mitarbeiter gespeichert.", dialog):
+                    return
                 dialog.destroy()
                 self._refresh_all()
-                self._set_status("Mitarbeiter gespeichert.")
             except ValueError as exc:
                 messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
 
@@ -1052,9 +1057,10 @@ class SchedulerApp(tk.Tk):
                 if not messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=dialog):
                     return
                 self.service.delete_employee(employee.id)
+                if not self._persist_changes("Mitarbeiter gelöscht.", dialog):
+                    return
                 dialog.destroy()
                 self._refresh_all()
-                self._set_status("Mitarbeiter gelöscht.")
 
             ttk.Button(dialog, text="Löschen", style="Danger.TButton", command=delete_employee).grid(row=len(fields) + 1, column=0, sticky="w", padx=18, pady=(12, 18))
         ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_employee).grid(row=len(fields) + 1, column=1, sticky="e", padx=18, pady=(12, 18))
@@ -1091,9 +1097,10 @@ class SchedulerApp(tk.Tk):
             try:
                 employee_id = employee_options[values["employee"].get()]
                 self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get())
+                if not self._persist_changes("Abwesenheit gespeichert.", dialog):
+                    return
                 dialog.destroy()
                 self._refresh_all()
-                self._set_status("Abwesenheit gespeichert.")
             except (KeyError, ValueError) as exc:
                 messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
 
@@ -1138,9 +1145,10 @@ class SchedulerApp(tk.Tk):
                 )
                 if not result.success:
                     raise ValueError(result.message)
+                if not self._persist_changes(result.message, dialog):
+                    return
                 dialog.destroy()
                 self._refresh_all()
-                self._set_status(result.message)
             except (KeyError, ValueError) as exc:
                 messagebox.showerror("Zuweisung nicht möglich", str(exc), parent=dialog)
 
@@ -1164,10 +1172,10 @@ class SchedulerApp(tk.Tk):
         for employee in self.service.employees:
             employee.shifts = [item for item in employee.shifts if item.id != shift.id]
         self.selected_shift_id = None
+        self._persist_changes("Schicht gelöscht.", parent or self)
         self._refresh_all()
         if callable(refresh_callback):
             refresh_callback()
-        self._set_status("Schicht gelöscht.")
 
     def _select_shift(self, shift_id: str) -> None:
         self.selected_shift_id = shift_id
@@ -1178,12 +1186,24 @@ class SchedulerApp(tk.Tk):
         self.selected_shift_id = None
         self._refresh_all()
 
-    def _save(self) -> None:
+    def _persist_changes(self, success_message: str, parent: tk.Misc | None = None) -> bool:
+        """Persist the current service state immediately after a successful edit.
+
+        Dialog actions used to update only the in-memory service and showed
+        "gespeichert" in the status bar. Persisting centrally keeps all mutation
+        paths consistent and gives the user a clear error when SQLite cannot write.
+        """
         try:
             self.repository.save(self.service)
-            self._set_status("Dienstplan gespeichert.")
-        except OSError as exc:
-            messagebox.showerror("Speichern fehlgeschlagen", str(exc), parent=self)
+        except (OSError, sqlite3.Error) as exc:
+            self._set_status("Speichern fehlgeschlagen – Änderungen sind nur bis zum Beenden im Speicher.")
+            messagebox.showerror("Speichern fehlgeschlagen", str(exc), parent=parent or self)
+            return False
+        self._set_status(success_message)
+        return True
+
+    def _save(self) -> None:
+        self._persist_changes("Dienstplan gespeichert.")
 
     def _export_reports_csv(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -1221,18 +1241,18 @@ class SchedulerApp(tk.Tk):
         try:
             forecasts = ForecastImportService().import_csv(path)
             added = self.service.add_forecasts(forecasts)
-            self.repository.save(self.service)
+            if not self._persist_changes(f"{len(forecasts)} Forecast-Zeilen importiert, {added} neu gespeichert."):
+                return
             self._refresh_all()
-            self._set_status(f"{len(forecasts)} Forecast-Zeilen importiert, {added} neu gespeichert.")
         except (OSError, ValueError) as exc:
             messagebox.showerror("Forecast-Import fehlgeschlagen", str(exc), parent=self)
 
     def _publish_schedule(self) -> None:
         try:
             count = self.service.publish_week(self.week_start)
-            self.repository.save(self.service)
+            if not self._persist_changes(f"Dienstplan veröffentlicht: {count} Schichten gespeichert."):
+                return
             self._refresh_all()
-            self._set_status(f"Dienstplan veröffentlicht: {count} Schichten gespeichert.")
         except ValueError as exc:
             messagebox.showwarning("Dienstplan prüfen", str(exc), parent=self)
         except OSError as exc:

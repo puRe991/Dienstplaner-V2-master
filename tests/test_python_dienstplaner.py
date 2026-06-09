@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sqlite3
 import sys
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -423,6 +425,50 @@ class DashboardStartupTests(unittest.TestCase):
         self.assertFalse(SchedulerApp._is_unassigned_for_week(employee, week_start))
         self.assertEqual([shift], SchedulerApp._employee_week_shifts(employee, week_start))
         self.assertEqual("Früh Mo 08:00", SchedulerApp._employee_week_assignment_text([shift]))
+
+
+class SchedulerAppPersistenceTests(unittest.TestCase):
+    def test_persist_changes_saves_service_and_updates_status(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        class RepositoryStub:
+            def __init__(self) -> None:
+                self.saved_service = None
+
+            def save(self, service: SchedulerService) -> None:
+                self.saved_service = service
+
+        service = SchedulerService()
+        repository = RepositoryStub()
+        app = SchedulerApp.__new__(SchedulerApp)
+        app.service = service
+        app.repository = repository
+        statuses: list[str] = []
+        app._set_status = statuses.append
+
+        self.assertTrue(app._persist_changes("Automatisch gespeichert."))
+
+        self.assertIs(repository.saved_service, service)
+        self.assertEqual(["Automatisch gespeichert."], statuses)
+
+    def test_persist_changes_reports_sqlite_write_errors(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        class FailingRepositoryStub:
+            def save(self, service: SchedulerService) -> None:
+                raise sqlite3.OperationalError("database is locked")
+
+        app = SchedulerApp.__new__(SchedulerApp)
+        app.service = SchedulerService()
+        app.repository = FailingRepositoryStub()
+        statuses: list[str] = []
+        app._set_status = statuses.append
+
+        with patch("python_dienstplaner.app.messagebox.showerror") as showerror:
+            self.assertFalse(app._persist_changes("Automatisch gespeichert."))
+
+        self.assertEqual(["Speichern fehlgeschlagen – Änderungen sind nur bis zum Beenden im Speicher."], statuses)
+        showerror.assert_called_once()
 
 
 class PublishingAndForecastTests(unittest.TestCase):
