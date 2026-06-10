@@ -50,6 +50,9 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         self._set_status(f"Aktion gesperrt: {action}")
         return False
 
+    def _current_user_id(self) -> str:
+        return self.current_user.id if self.current_user else "local"
+
     def _open_employee_manager(self) -> None:
         if self._require_permission(Permission.MANAGE_EMPLOYEES, "Mitarbeiter bearbeiten"):
             super()._open_employee_manager()
@@ -72,6 +75,10 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         if self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten löschen"):
             super()._delete_absence(absence_id)
 
+    def _open_audit_log_window(self) -> None:
+        if self._require_permission(Permission.VIEW_AUDIT_LOG, "Änderungsverlauf anzeigen"):
+            super()._open_audit_log_window()
+
     def _export_reports_csv(self) -> None:
         if self._require_permission(Permission.EXPORT, "Export"):
             super()._export_reports_csv()
@@ -85,7 +92,7 @@ class AuthenticatedSchedulerApp(SchedulerApp):
             return
         try:
             published_by = self.current_user.display_name if self.current_user else "Lokaler Benutzer"
-            count = self.service.publish_week(self.week_start, published_by)
+            count = self.service.publish_week(self.week_start, published_by, user_id=self._current_user_id())
             if not self._persist_changes(f"Dienstplan veröffentlicht: {count} Schichten gespeichert."):
                 return
             self._refresh_all()

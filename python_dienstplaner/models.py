@@ -167,6 +167,29 @@ class Employee:
         return max(0.0, self.planned_hours - self.weekly_hours_limit)
 
 
+
+@dataclass(frozen=True)
+class AuditEvent:
+    timestamp: datetime
+    user_id: str
+    action: str
+    entity_type: str
+    entity_id: str
+    before: str = ""
+    after: str = ""
+    id: str = field(default_factory=lambda: str(uuid4()))
+
+    def __post_init__(self) -> None:
+        if not self.action.strip():
+            raise ValueError("Audit-Aktion ist erforderlich.")
+        if not self.entity_type.strip():
+            raise ValueError("Audit-Entitätstyp ist erforderlich.")
+        object.__setattr__(self, "user_id", self.user_id.strip() or "system")
+        object.__setattr__(self, "action", self.action.strip())
+        object.__setattr__(self, "entity_type", self.entity_type.strip())
+        object.__setattr__(self, "entity_id", self.entity_id.strip())
+
+
 @dataclass(frozen=True)
 class AssignmentResult:
     success: bool

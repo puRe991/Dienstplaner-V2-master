@@ -148,6 +148,7 @@ class SchedulerApp(tk.Tk):
             ("Abwesenheiten", "☂  Abwesenheiten", self._open_absence_manager),
             ("Schichten", "◷  Schichten", self._open_shift_manager),
             ("Berichte", "▥  Berichte", self._open_reports_window),
+            ("Änderungsverlauf", "⏱  Änderungsverlauf", self._open_audit_log_window),
             ("Einstellungen", "⚙  Einstellungen", self._open_settings_window),
         ]
         for index, (key, text, command) in enumerate(navigation):
@@ -353,7 +354,7 @@ class SchedulerApp(tk.Tk):
                 self._set_status("Bitte einen Mitarbeiter auswählen.")
                 return
             if messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=window):
-                self.service.delete_employee(employee.id)
+                self.service.delete_employee(employee.id, user_id=self._current_user_id())
                 self._persist_changes("Mitarbeiter gelöscht.", window)
                 self._refresh_all()
                 refresh()
@@ -361,6 +362,71 @@ class SchedulerApp(tk.Tk):
         self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Löschen", delete), ("Aktualisieren", refresh)])
         tree.bind("<Double-Button-1>", lambda _event: edit())
         refresh()
+
+
+    def _open_audit_log_window(self) -> None:
+        window = self._create_manager_window("Änderungsverlauf", "1180x560")
+        columns = ("timestamp", "user", "action", "entity", "entity_id", "before", "after")
+        tree = self._create_tree(window, columns, {
+            "timestamp": "Zeitpunkt",
+            "user": "Benutzer",
+            "action": "Aktion",
+            "entity": "Objekt",
+            "entity_id": "Objekt-ID",
+            "before": "Vorher",
+            "after": "Nachher",
+        })
+        tree.column("before", width=230)
+        tree.column("after", width=230)
+
+        def compact(value: str) -> str:
+            normalized = " ".join(value.split())
+            return normalized[:117] + "..." if len(normalized) > 120 else normalized
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            events = self.repository.list_audit_events(500)
+            if not events:
+                events = self.service.audit_trail(500)
+            for event in events:
+                tree.insert("", "end", iid=event.id, values=(
+                    event.timestamp.strftime("%d.%m.%Y %H:%M:%S"),
+                    event.user_id,
+                    event.action,
+                    event.entity_type,
+                    event.entity_id,
+                    compact(event.before),
+                    compact(event.after),
+                ))
+            self._set_status(f"Änderungsverlauf geladen: {len(events)} Einträge.")
+
+        def show_details() -> None:
+            selection = tree.selection()
+            if not selection:
+                self._set_status("Bitte einen Audit-Eintrag auswählen.")
+                return
+            event_id = selection[0]
+            event = next((item for item in self.repository.list_audit_events(1000) if item.id == event_id), None)
+            if event is None:
+                event = next((item for item in self.service.audit_events if item.id == event_id), None)
+            if event is None:
+                self._set_status("Audit-Eintrag wurde nicht gefunden.")
+                return
+            detail = tk.Toplevel(window)
+            detail.title("Audit-Eintrag")
+            detail.transient(window)
+            detail.configure(bg="#FFFFFF")
+            text = tk.Text(detail, width=120, height=28, wrap="word")
+            text.pack(fill="both", expand=True, padx=12, pady=12)
+            text.insert("end", f"Zeitpunkt: {event.timestamp.isoformat()}\nBenutzer: {event.user_id}\nAktion: {event.action}\nObjekt: {event.entity_type} {event.entity_id}\n\nVorher:\n{event.before or '-'}\n\nNachher:\n{event.after or '-'}")
+            text.configure(state="disabled")
+
+        self._add_manager_buttons(window, [("Details", show_details), ("Aktualisieren", refresh)])
+        tree.bind("<Double-Button-1>", lambda _event: show_details())
+        refresh()
+
+    def _current_user_id(self) -> str:
+        return "local"
 
     def _open_department_manager(self) -> None:
         window = self._create_manager_window("Abteilungen verwalten", "620x480")
@@ -881,9 +947,10 @@ class SchedulerApp(tk.Tk):
     def _delete_absence(self, absence_id: str) -> None:
         if not messagebox.askyesno("Abwesenheit löschen", "Soll diese Abwesenheit gelöscht werden?", parent=self):
             return
-        if self.service.delete_absence(absence_id):
+        if self.service.delete_absence(absence_id, user_id=self._current_user_id()):
+            if not self._persist_changes("Abwesenheit gelöscht."):
+                return
             self._refresh_all()
-            self._set_status("Abwesenheit gelöscht.")
         else:
             self._set_status("Abwesenheit wurde nicht gefunden.")
 
@@ -922,7 +989,7 @@ class SchedulerApp(tk.Tk):
             try:
                 start = self._parse_datetime(values["start"].get())
                 end = self._parse_datetime(values["end"].get())
-                copied = self.service.copy_shift(shift.id, start, end)
+                copied = self.service.copy_shift(shift.id, start, end, user_id=self._current_user_id())
                 self.selected_shift_id = copied.id
                 if not self._persist_changes("Schicht kopiert. Mitarbeitende werden bewusst nicht übernommen.", dialog):
                     return
@@ -962,15 +1029,13 @@ class SchedulerApp(tk.Tk):
                 end = self._parse_datetime(values["end"].get())
                 capacity = int(values["capacity"].get())
                 if shift is None:
-                    created = self.service.add_shift(values["name"].get(), values["department"].get(), start, end, capacity, values["qualification"].get(), values["branch"].get())
+                    created = self.service.add_shift(values["name"].get(), values["department"].get(), start, end, capacity, values["qualification"].get(), values["branch"].get(), user_id=self._current_user_id())
                     self.selected_shift_id = created.id
                 else:
                     if capacity < len(shift.employee_ids):
                         raise ValueError("Kapazität darf nicht kleiner als die aktuelle Besetzung sein.")
-                    updated = Shift(
-                        id=shift.id,
-                        employee_ids=list(shift.employee_ids),
-                        employee_names=list(shift.employee_names),
+                    self.service.update_shift(
+                        shift.id,
                         name=values["name"].get(),
                         department=values["department"].get(),
                         start=start,
@@ -978,10 +1043,8 @@ class SchedulerApp(tk.Tk):
                         required_employees=capacity,
                         required_qualification=values["qualification"].get(),
                         branch=values["branch"].get(),
-                        published_at=shift.published_at,
-                        published_by=shift.published_by,
+                        user_id=self._current_user_id(),
                     )
-                    self._replace_shift(shift, updated)
                 if not self._persist_changes("Schicht gespeichert.", dialog):
                     return
                 dialog.destroy()
@@ -1032,6 +1095,7 @@ class SchedulerApp(tk.Tk):
                         wage,
                         values["active"].get(),
                         break_minutes,
+                        user_id=self._current_user_id(),
                     )
                 else:
                     self.service.update_employee(
@@ -1044,6 +1108,7 @@ class SchedulerApp(tk.Tk):
                         wage,
                         values["active"].get(),
                         break_minutes,
+                        user_id=self._current_user_id(),
                     )
                 if not self._persist_changes("Mitarbeiter gespeichert.", dialog):
                     return
@@ -1056,7 +1121,7 @@ class SchedulerApp(tk.Tk):
             def delete_employee() -> None:
                 if not messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=dialog):
                     return
-                self.service.delete_employee(employee.id)
+                self.service.delete_employee(employee.id, user_id=self._current_user_id())
                 if not self._persist_changes("Mitarbeiter gelöscht.", dialog):
                     return
                 dialog.destroy()
@@ -1096,7 +1161,7 @@ class SchedulerApp(tk.Tk):
         def save_absence() -> None:
             try:
                 employee_id = employee_options[values["employee"].get()]
-                self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get())
+                self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get(), user_id=self._current_user_id())
                 if not self._persist_changes("Abwesenheit gespeichert.", dialog):
                     return
                 dialog.destroy()
@@ -1142,6 +1207,7 @@ class SchedulerApp(tk.Tk):
                     employee_options[values["employee"].get()],
                     shift_options[values["shift"].get()],
                     ignore_profile_mismatch=ignore_profile_mismatch.get(),
+                    user_id=self._current_user_id(),
                 )
                 if not result.success:
                     raise ValueError(result.message)
@@ -1168,9 +1234,7 @@ class SchedulerApp(tk.Tk):
             return
         if not messagebox.askyesno("Schicht löschen", f"Soll '{shift.name}' wirklich gelöscht werden?", parent=parent or self):
             return
-        self.service.shifts = [item for item in self.service.shifts if item.id != shift.id]
-        for employee in self.service.employees:
-            employee.shifts = [item for item in employee.shifts if item.id != shift.id]
+        self.service.delete_shift(shift.id, user_id=self._current_user_id())
         self.selected_shift_id = None
         self._persist_changes("Schicht gelöscht.", parent or self)
         self._refresh_all()
@@ -1214,8 +1278,8 @@ class SchedulerApp(tk.Tk):
         if not path:
             return
         try:
-            output = self.service.export_reports(path)
-            self._set_status(f"Berichte exportiert: {output}")
+            output = self.service.export_reports(path, user_id=self._current_user_id())
+            self._persist_changes(f"Berichte exportiert: {output}")
         except OSError as exc:
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
 
@@ -1229,8 +1293,8 @@ class SchedulerApp(tk.Tk):
             return
         export_format = ExportFormat.PDF_TEXT if Path(path).suffix.lower() == ".txt" else ExportFormat.CSV
         try:
-            output = self.service.export_schedule(path, export_format)
-            self._set_status(f"Exportiert: {output}")
+            output = self.service.export_schedule(path, export_format, user_id=self._current_user_id())
+            self._persist_changes(f"Exportiert: {output}")
         except OSError as exc:
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
 
@@ -1249,7 +1313,7 @@ class SchedulerApp(tk.Tk):
 
     def _publish_schedule(self) -> None:
         try:
-            count = self.service.publish_week(self.week_start)
+            count = self.service.publish_week(self.week_start, user_id=self._current_user_id())
             if not self._persist_changes(f"Dienstplan veröffentlicht: {count} Schichten gespeichert."):
                 return
             self._refresh_all()

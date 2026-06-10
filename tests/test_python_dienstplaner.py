@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import sys
 import tempfile
@@ -225,6 +226,61 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual("Repository-Test", loaded.shifts[0].published_by)
         self.assertEqual(30, loaded.employees[0].break_minutes_per_shift)
         self.assertIn("Non-Food", loaded.department_options())
+
+    def test_persists_employee_change_audit_event(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse", user_id="admin-1")
+            service.update_employee(employee.id, "Eva Neu", "Kasse", "Kasse", 40, "Zentrale", 16.0, True, user_id="admin-1")
+
+            repository.save(service)
+            events = repository.list_audit_events()
+
+        update_event = next(event for event in events if event.action == "employee.updated")
+        self.assertEqual("admin-1", update_event.user_id)
+        self.assertEqual("employee", update_event.entity_type)
+        self.assertEqual(employee.id, update_event.entity_id)
+        self.assertEqual("Eva Retail", json.loads(update_event.before)["name"])
+        self.assertEqual("Eva Neu", json.loads(update_event.after)["name"])
+
+    def test_persists_assignment_audit_event(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+            result = service.assign(employee.id, shift.id, user_id="planner-1")
+            repository.save(service)
+            events = repository.list_audit_events()
+
+        self.assertTrue(result.success)
+        assignment_event = next(event for event in events if event.action == "assignment.created")
+        self.assertEqual("planner-1", assignment_event.user_id)
+        self.assertEqual("assignment", assignment_event.entity_type)
+        self.assertEqual(f"{employee.id}:{shift.id}", assignment_event.entity_id)
+        self.assertFalse(json.loads(assignment_event.before)["assigned"])
+        self.assertTrue(json.loads(assignment_event.after)["assigned"])
+
+    def test_persists_publication_audit_event(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+            service.assign(employee.id, shift.id)
+
+            count = service.publish_week(datetime(2025, 12, 29), "Planerin", user_id="planner-1")
+            repository.save(service)
+            events = repository.list_audit_events()
+
+        publication_event = next(event for event in events if event.action == "schedule.published")
+        self.assertEqual(1, count)
+        self.assertEqual("week", publication_event.entity_type)
+        self.assertEqual("2025-12-29", publication_event.entity_id)
+        self.assertIsNone(json.loads(publication_event.before)[0]["published_at"])
+        self.assertIsNotNone(json.loads(publication_event.after)[0]["published_at"])
 
 
 class ForecastImportTests(unittest.TestCase):

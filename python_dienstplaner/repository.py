@@ -10,7 +10,7 @@ from typing import Iterable
 from uuid import uuid4
 
 from .auth import User, UserRole
-from .models import Absence, Employee, RevenueForecast, Shift
+from .models import Absence, AuditEvent, Employee, RevenueForecast, Shift
 from .services import SchedulerService
 
 
@@ -98,6 +98,28 @@ class SQLiteSchedulerRepository:
                     (absence.id, employee.id, absence.start.isoformat(), absence.end.isoformat(), absence.reason)
                     for employee in service.employees
                     for absence in employee.absences
+                ],
+            )
+
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO audit_events(
+                    id, timestamp, user_id, action, entity_type, entity_id, before, after
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        event.id,
+                        event.timestamp.isoformat(),
+                        event.user_id,
+                        event.action,
+                        event.entity_type,
+                        event.entity_id,
+                        event.before,
+                        event.after,
+                    )
+                    for event in service.audit_events
                 ],
             )
             connection.executemany(
@@ -198,9 +220,55 @@ class SQLiteSchedulerRepository:
                 )
             )
 
+            service.audit_events.extend(
+                AuditEvent(
+                    id=row[0],
+                    timestamp=datetime.fromisoformat(row[1]),
+                    user_id=row[2],
+                    action=row[3],
+                    entity_type=row[4],
+                    entity_id=row[5],
+                    before=row[6] or "",
+                    after=row[7] or "",
+                )
+                for row in connection.execute(
+                    """
+                    SELECT id, timestamp, user_id, action, entity_type, entity_id, before, after
+                    FROM audit_events
+                    ORDER BY timestamp DESC, rowid DESC
+                    """
+                )
+            )
+
         service.employees.extend(employees.values())
         service.shifts.extend(shifts.values())
         return service
+
+    def list_audit_events(self, limit: int = 200) -> list[AuditEvent]:
+        safe_limit = max(1, min(limit, 1000))
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, timestamp, user_id, action, entity_type, entity_id, before, after
+                FROM audit_events
+                ORDER BY timestamp DESC, rowid DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+        return [
+            AuditEvent(
+                id=row[0],
+                timestamp=datetime.fromisoformat(row[1]),
+                user_id=row[2],
+                action=row[3],
+                entity_type=row[4],
+                entity_id=row[5],
+                before=row[6] or "",
+                after=row[7] or "",
+            )
+            for row in rows
+        ]
 
     def user_count(self) -> int:
         with self._connect() as connection:
@@ -372,6 +440,19 @@ class SQLiteSchedulerRepository:
                     expected_customers INTEGER NOT NULL CHECK(expected_customers >= 0),
                     PRIMARY KEY(branch_id, date)
                 );
+
+                CREATE TABLE IF NOT EXISTS audit_events(
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    action TEXT NOT NULL CHECK(length(trim(action)) > 0),
+                    entity_type TEXT NOT NULL CHECK(length(trim(entity_type)) > 0),
+                    entity_id TEXT NOT NULL,
+                    before TEXT NOT NULL DEFAULT '',
+                    after TEXT NOT NULL DEFAULT ''
+                );
+                CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp ON audit_events(timestamp DESC);
+                CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id);
                 """
             )
             self._ensure_column(connection, "employees", "break_minutes_per_shift", "INTEGER NOT NULL DEFAULT 0")
