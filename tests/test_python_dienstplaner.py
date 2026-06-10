@@ -136,6 +136,33 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("Der Mitarbeiter ist im Schichtzeitraum abwesend (Urlaub).", result.errors)
 
+    def test_soft_rest_warning_still_checks_later_overlapping_shift(self) -> None:
+        service = SchedulerService(
+            rule_profiles=[
+                RuleProfile(
+                    name="Flexible Ruhezeit",
+                    min_rest_hours=11,
+                    max_daily_hours=24,
+                    rest_time_is_hard=False,
+                    break_after_six_hours_minutes=0,
+                    break_after_nine_hours_minutes=0,
+                )
+            ]
+        )
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        early_shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 0), datetime(2026, 1, 1, 7), 1, "Kasse")
+        overlapping_shift = service.add_shift("Mitte", "Kasse", datetime(2026, 1, 1, 10), datetime(2026, 1, 1, 14), 1, "Kasse")
+        candidate_shift = service.add_shift("Spät", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 12), 1, "Kasse")
+        self.assertTrue(service.assign(employee.id, early_shift.id).success)
+        self.assertTrue(service.assign(employee.id, overlapping_shift.id).success)
+
+        result = service.assign(employee.id, candidate_shift.id)
+
+        self.assertFalse(result.success)
+        self.assertIn("Ruhezeit unterschritten.", result.warnings)
+        self.assertIn("Der Mitarbeiter hat in diesem Zeitraum bereits eine Schicht.", result.errors)
+        self.assertNotIn(employee.id, candidate_shift.employee_ids)
+
     def test_default_absence_reasons_include_common_unavailability_types(self) -> None:
         self.assertIn("Urlaub", DEFAULT_ABSENCE_REASONS)
         self.assertIn("Freier Tag", DEFAULT_ABSENCE_REASONS)

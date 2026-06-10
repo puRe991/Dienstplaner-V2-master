@@ -67,17 +67,24 @@ class PlanningRules:
             self._add_configured(result, ["Tageshöchstarbeitszeit überschritten."], self.profile.daily_hours_limit_is_hard)
 
         min_rest = timedelta(hours=self.profile.min_rest_hours)
+        rest_time_reported = False
         for existing in employee.shifts:
             if shift.start < existing.end and shift.end > existing.start:
                 result.errors.append("Der Mitarbeiter hat in diesem Zeitraum bereits eine Schicht.")
                 break
 
-            if existing.end <= shift.start and shift.start - existing.end < min_rest:
-                self._add_configured(result, ["Ruhezeit unterschritten."], self.profile.rest_time_is_hard)
-                break
-            if shift.end <= existing.start and existing.start - shift.end < min_rest:
-                self._add_configured(result, ["Ruhezeit unterschritten."], self.profile.rest_time_is_hard)
-                break
+            rest_time_violated = (
+                existing.end <= shift.start
+                and shift.start - existing.end < min_rest
+                or shift.end <= existing.start
+                and existing.start - shift.end < min_rest
+            )
+            if rest_time_violated:
+                if not rest_time_reported:
+                    self._add_configured(result, ["Ruhezeit unterschritten."], self.profile.rest_time_is_hard)
+                    rest_time_reported = True
+                if self.profile.rest_time_is_hard:
+                    break
 
         for absence in employee.absences:
             if absence.overlaps(shift.start, shift.end):
