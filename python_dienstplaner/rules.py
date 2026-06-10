@@ -67,24 +67,20 @@ class PlanningRules:
             self._add_configured(result, ["Tageshöchstarbeitszeit überschritten."], self.profile.daily_hours_limit_is_hard)
 
         min_rest = timedelta(hours=self.profile.min_rest_hours)
+        overlap_reported = False
         rest_time_reported = False
+        # Always scan every assigned shift: rest violations can be warnings,
+        # but overlaps must remain hard blockers.
         for existing in employee.shifts:
-            if shift.start < existing.end and shift.end > existing.start:
-                result.errors.append("Der Mitarbeiter hat in diesem Zeitraum bereits eine Schicht.")
-                break
+            if self._shifts_overlap(existing, shift):
+                if not overlap_reported:
+                    result.errors.append("Der Mitarbeiter hat in diesem Zeitraum bereits eine Schicht.")
+                    overlap_reported = True
+                continue
 
-            rest_time_violated = (
-                existing.end <= shift.start
-                and shift.start - existing.end < min_rest
-                or shift.end <= existing.start
-                and existing.start - shift.end < min_rest
-            )
-            if rest_time_violated:
-                if not rest_time_reported:
-                    self._add_configured(result, ["Ruhezeit unterschritten."], self.profile.rest_time_is_hard)
-                    rest_time_reported = True
-                if self.profile.rest_time_is_hard:
-                    break
+            if not rest_time_reported and self._violates_min_rest(existing, shift, min_rest):
+                self._add_configured(result, ["Ruhezeit unterschritten."], self.profile.rest_time_is_hard)
+                rest_time_reported = True
 
         for absence in employee.absences:
             if absence.overlaps(shift.start, shift.end):
@@ -115,6 +111,20 @@ class PlanningRules:
     def required_break_minutes(self, shift: Shift) -> int:
         """Return the minimum break recommendation for a shift duration."""
         return self.profile.required_break_minutes_for_hours(shift.duration_hours)
+
+    @staticmethod
+    def _shifts_overlap(existing: Shift, candidate: Shift) -> bool:
+        return candidate.start < existing.end and candidate.end > existing.start
+
+    @staticmethod
+    def _violates_min_rest(existing: Shift, candidate: Shift, min_rest: timedelta) -> bool:
+        candidate_after_existing = (
+            existing.end <= candidate.start and candidate.start - existing.end < min_rest
+        )
+        candidate_before_existing = (
+            candidate.end <= existing.start and existing.start - candidate.end < min_rest
+        )
+        return candidate_after_existing or candidate_before_existing
 
     @staticmethod
     def _add_configured(result: RuleOutcome, messages: list[str], is_hard: bool) -> None:
