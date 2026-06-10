@@ -167,6 +167,50 @@ class Employee:
         return max(0.0, self.planned_hours - self.weekly_hours_limit)
 
 
+@dataclass
+class RuleProfile:
+    """Configurable planning limits for a company or branch policy.
+
+    Values are deliberately stored as primitive types so profiles can be
+    persisted in SQLite without a migration framework. Hard violations block an
+    assignment; warning-only rules are returned in AssignmentResult.warnings.
+    """
+
+    name: str = "Standardprofil"
+    min_rest_hours: float = 11.0
+    max_daily_hours: float = 10.0
+    break_after_six_hours_minutes: int = 30
+    break_after_nine_hours_minutes: int = 45
+    weekly_hours_limit_is_hard: bool = True
+    daily_hours_limit_is_hard: bool = True
+    rest_time_is_hard: bool = True
+    profile_mismatch_is_hard: bool = True
+    missing_availability_is_hard: bool = False
+    insufficient_break_is_hard: bool = False
+    is_active: bool = True
+    id: str = field(default_factory=lambda: str(uuid4()))
+
+    def __post_init__(self) -> None:
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("Profilname ist erforderlich.")
+        if self.min_rest_hours < 0:
+            raise ValueError("Mindestruhezeit darf nicht negativ sein.")
+        if self.max_daily_hours <= 0:
+            raise ValueError("Tageshöchstarbeitszeit muss größer als 0 sein.")
+        if self.break_after_six_hours_minutes < 0 or self.break_after_nine_hours_minutes < 0:
+            raise ValueError("Pausenwerte dürfen nicht negativ sein.")
+        if self.break_after_nine_hours_minutes < self.break_after_six_hours_minutes:
+            raise ValueError("Pause nach neun Stunden darf nicht kleiner als Pause nach sechs Stunden sein.")
+
+    def required_break_minutes_for_hours(self, duration_hours: float) -> int:
+        if duration_hours > 9:
+            return self.break_after_nine_hours_minutes
+        if duration_hours > 6:
+            return self.break_after_six_hours_minutes
+        return 0
+
+
 @dataclass(frozen=True)
 class AssignmentResult:
     success: bool

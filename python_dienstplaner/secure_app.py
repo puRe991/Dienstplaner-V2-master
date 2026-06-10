@@ -63,6 +63,10 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         if self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten bearbeiten"):
             super()._open_absence_manager()
 
+    def _open_settings_window(self) -> None:
+        if self._require_permission(Permission.MANAGE_RULE_PROFILES, "Regelprofile verwalten"):
+            super()._open_settings_window()
+
     def _open_absence_dialog(self):
         if not self._require_permission(Permission.MANAGE_ABSENCES, "Abwesenheiten bearbeiten"):
             return None

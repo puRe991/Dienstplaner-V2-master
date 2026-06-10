@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import List
 
-from .models import Employee, Shift
+from .models import Employee, RuleProfile, Shift
 
 
 @dataclass
@@ -21,11 +21,12 @@ class PlanningRules:
     """Central rule engine for shift assignments.
 
     Hard errors block an assignment. Warnings are shown but do not block it.
-    The implementation deliberately keeps the rules deterministic and side-effect free.
+    The active RuleProfile defines legal/company-specific thresholds and whether
+    selected checks are blocking or advisory.
     """
 
-    MIN_REST = timedelta(hours=11)
-    MAX_DAILY_HOURS = 10.0
+    def __init__(self, profile: RuleProfile | None = None) -> None:
+        self.profile = profile or RuleProfile()
 
     def validate_assignment(
         self,
@@ -50,29 +51,32 @@ class PlanningRules:
             result.errors.append("Die Schicht ist bereits voll.")
         if employee.id in shift.employee_ids:
             result.errors.append("Der Mitarbeiter ist der Schicht bereits zugewiesen.")
-        profile_warnings = self._validate_profile_match(employee, shift)
+
+        profile_mismatches = self._validate_profile_match(employee, shift)
         if ignore_profile_mismatch:
-            result.warnings.extend(profile_warnings)
+            result.warnings.extend(profile_mismatches)
         else:
-            result.errors.extend(profile_warnings)
+            self._add_configured(result, profile_mismatches, self.profile.profile_mismatch_is_hard)
+
         shift_net_hours = employee.net_hours_for_shift(shift)
         if employee.planned_hours + shift_net_hours > employee.weekly_hours_limit:
-            result.errors.append("Wochenstundenlimit überschritten.")
+            self._add_configured(result, ["Wochenstundenlimit überschritten."], self.profile.weekly_hours_limit_is_hard)
 
         daily_hours = sum(employee.net_hours_for_shift(s) for s in employee.shifts if s.start.date() == shift.start.date()) + shift_net_hours
-        if daily_hours > self.MAX_DAILY_HOURS:
-            result.errors.append("Tageshöchstarbeitszeit überschritten.")
+        if daily_hours > self.profile.max_daily_hours:
+            self._add_configured(result, ["Tageshöchstarbeitszeit überschritten."], self.profile.daily_hours_limit_is_hard)
 
+        min_rest = timedelta(hours=self.profile.min_rest_hours)
         for existing in employee.shifts:
             if shift.start < existing.end and shift.end > existing.start:
                 result.errors.append("Der Mitarbeiter hat in diesem Zeitraum bereits eine Schicht.")
                 break
 
-            if existing.end <= shift.start and shift.start - existing.end < self.MIN_REST:
-                result.errors.append("Ruhezeit unterschritten.")
+            if existing.end <= shift.start and shift.start - existing.end < min_rest:
+                self._add_configured(result, ["Ruhezeit unterschritten."], self.profile.rest_time_is_hard)
                 break
-            if shift.end <= existing.start and existing.start - shift.end < self.MIN_REST:
-                result.errors.append("Ruhezeit unterschritten.")
+            if shift.end <= existing.start and existing.start - shift.end < min_rest:
+                self._add_configured(result, ["Ruhezeit unterschritten."], self.profile.rest_time_is_hard)
                 break
 
         for absence in employee.absences:
@@ -82,25 +86,35 @@ class PlanningRules:
                 break
 
         if employee.availabilities and not any(a.covers(shift) for a in employee.availabilities):
-            result.warnings.append("Für den Mitarbeiter ist keine passende Verfügbarkeit hinterlegt.")
+            self._add_configured(
+                result,
+                ["Für den Mitarbeiter ist keine passende Verfügbarkeit hinterlegt."],
+                self.profile.missing_availability_is_hard,
+            )
 
         required_break_minutes = self.required_break_minutes(shift)
         if employee.break_minutes_per_shift < required_break_minutes:
-            result.warnings.append(
-                f"Pausenzeit prüfen: Für diese Schicht sind mindestens {required_break_minutes} Minuten Pause empfohlen. "
-                f"Beim Mitarbeiter sind {employee.break_minutes_per_shift} Minuten hinterlegt."
+            self._add_configured(
+                result,
+                [
+                    f"Pausenzeit prüfen: Für diese Schicht sind mindestens {required_break_minutes} Minuten Pause empfohlen. "
+                    f"Beim Mitarbeiter sind {employee.break_minutes_per_shift} Minuten hinterlegt."
+                ],
+                self.profile.insufficient_break_is_hard,
             )
 
         return result
 
-    @staticmethod
-    def required_break_minutes(shift: Shift) -> int:
+    def required_break_minutes(self, shift: Shift) -> int:
         """Return the minimum break recommendation for a shift duration."""
-        if shift.duration_hours > 9:
-            return 45
-        if shift.duration_hours > 6:
-            return 30
-        return 0
+        return self.profile.required_break_minutes_for_hours(shift.duration_hours)
+
+    @staticmethod
+    def _add_configured(result: RuleOutcome, messages: list[str], is_hard: bool) -> None:
+        if is_hard:
+            result.errors.extend(messages)
+        else:
+            result.warnings.extend(messages)
 
     @staticmethod
     def _validate_profile_match(employee: Employee, shift: Shift) -> list[str]:

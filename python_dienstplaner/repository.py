@@ -10,7 +10,7 @@ from typing import Iterable
 from uuid import uuid4
 
 from .auth import User, UserRole
-from .models import Absence, Employee, RevenueForecast, Shift
+from .models import Absence, Employee, RevenueForecast, RuleProfile, Shift
 from .services import SchedulerService
 
 
@@ -37,6 +37,36 @@ class SQLiteSchedulerRepository:
             connection.execute("DELETE FROM departments")
             connection.execute("DELETE FROM shifts")
             connection.execute("DELETE FROM employees")
+            connection.execute("DELETE FROM rule_profiles")
+            connection.executemany(
+                """
+                INSERT INTO rule_profiles(
+                    id, name, min_rest_hours, max_daily_hours, break_after_six_hours_minutes,
+                    break_after_nine_hours_minutes, weekly_hours_limit_is_hard, daily_hours_limit_is_hard,
+                    rest_time_is_hard, profile_mismatch_is_hard, missing_availability_is_hard,
+                    insufficient_break_is_hard, is_active
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        profile.id,
+                        profile.name,
+                        profile.min_rest_hours,
+                        profile.max_daily_hours,
+                        profile.break_after_six_hours_minutes,
+                        profile.break_after_nine_hours_minutes,
+                        1 if profile.weekly_hours_limit_is_hard else 0,
+                        1 if profile.daily_hours_limit_is_hard else 0,
+                        1 if profile.rest_time_is_hard else 0,
+                        1 if profile.profile_mismatch_is_hard else 0,
+                        1 if profile.missing_availability_is_hard else 0,
+                        1 if profile.insufficient_break_is_hard else 0,
+                        1 if profile.is_active else 0,
+                    )
+                    for profile in service.rule_profiles
+                ],
+            )
             connection.executemany(
                 "INSERT OR IGNORE INTO departments(name) VALUES(?)",
                 [(department,) for department in service.department_options()],
@@ -124,6 +154,37 @@ class SQLiteSchedulerRepository:
     def load(self) -> SchedulerService:
         service = SchedulerService()
         with self._connect() as connection:
+            rule_profiles = [
+                RuleProfile(
+                    id=row[0],
+                    name=row[1],
+                    min_rest_hours=row[2],
+                    max_daily_hours=row[3],
+                    break_after_six_hours_minutes=row[4],
+                    break_after_nine_hours_minutes=row[5],
+                    weekly_hours_limit_is_hard=bool(row[6]),
+                    daily_hours_limit_is_hard=bool(row[7]),
+                    rest_time_is_hard=bool(row[8]),
+                    profile_mismatch_is_hard=bool(row[9]),
+                    missing_availability_is_hard=bool(row[10]),
+                    insufficient_break_is_hard=bool(row[11]),
+                    is_active=bool(row[12]),
+                )
+                for row in connection.execute(
+                    """
+                    SELECT id, name, min_rest_hours, max_daily_hours, break_after_six_hours_minutes,
+                           break_after_nine_hours_minutes, weekly_hours_limit_is_hard, daily_hours_limit_is_hard,
+                           rest_time_is_hard, profile_mismatch_is_hard, missing_availability_is_hard,
+                           insufficient_break_is_hard, is_active
+                    FROM rule_profiles
+                    ORDER BY is_active DESC, name COLLATE NOCASE
+                    """
+                )
+            ]
+            if rule_profiles:
+                service.rule_profiles = rule_profiles
+                service._ensure_single_active_rule_profile()
+                service.rules.profile = service.active_rule_profile
             departments = [row[0] for row in connection.execute("SELECT name FROM departments ORDER BY name COLLATE NOCASE")]
             if departments:
                 service.departments = departments
@@ -326,6 +387,21 @@ class SQLiteSchedulerRepository:
                     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS rule_profiles(
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK(length(trim(name)) > 0),
+                    min_rest_hours REAL NOT NULL CHECK(min_rest_hours >= 0),
+                    max_daily_hours REAL NOT NULL CHECK(max_daily_hours > 0),
+                    break_after_six_hours_minutes INTEGER NOT NULL CHECK(break_after_six_hours_minutes >= 0),
+                    break_after_nine_hours_minutes INTEGER NOT NULL CHECK(break_after_nine_hours_minutes >= break_after_six_hours_minutes),
+                    weekly_hours_limit_is_hard INTEGER NOT NULL CHECK(weekly_hours_limit_is_hard IN (0, 1)),
+                    daily_hours_limit_is_hard INTEGER NOT NULL CHECK(daily_hours_limit_is_hard IN (0, 1)),
+                    rest_time_is_hard INTEGER NOT NULL CHECK(rest_time_is_hard IN (0, 1)),
+                    profile_mismatch_is_hard INTEGER NOT NULL CHECK(profile_mismatch_is_hard IN (0, 1)),
+                    missing_availability_is_hard INTEGER NOT NULL CHECK(missing_availability_is_hard IN (0, 1)),
+                    insufficient_break_is_hard INTEGER NOT NULL CHECK(insufficient_break_is_hard IN (0, 1)),
+                    is_active INTEGER NOT NULL CHECK(is_active IN (0, 1))
+                );
                 CREATE TABLE IF NOT EXISTS employees(
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -374,6 +450,7 @@ class SQLiteSchedulerRepository:
                 );
                 """
             )
+            self._ensure_default_rule_profile(connection)
             self._ensure_column(connection, "employees", "break_minutes_per_shift", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "absences", "id", "TEXT")
             for rowid, in connection.execute("SELECT rowid FROM absences WHERE id IS NULL OR id = ''"):
@@ -381,6 +458,39 @@ class SQLiteSchedulerRepository:
             connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_absences_id ON absences(id)")
             self._ensure_column(connection, "shifts", "published_at", "TEXT")
             self._ensure_column(connection, "shifts", "published_by", "TEXT NOT NULL DEFAULT ''")
+
+    @staticmethod
+    def _ensure_default_rule_profile(connection: sqlite3.Connection) -> None:
+        count = int(connection.execute("SELECT COUNT(*) FROM rule_profiles").fetchone()[0])
+        if count:
+            return
+        profile = RuleProfile()
+        connection.execute(
+            """
+            INSERT INTO rule_profiles(
+                id, name, min_rest_hours, max_daily_hours, break_after_six_hours_minutes,
+                break_after_nine_hours_minutes, weekly_hours_limit_is_hard, daily_hours_limit_is_hard,
+                rest_time_is_hard, profile_mismatch_is_hard, missing_availability_is_hard,
+                insufficient_break_is_hard, is_active
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                profile.id,
+                profile.name,
+                profile.min_rest_hours,
+                profile.max_daily_hours,
+                profile.break_after_six_hours_minutes,
+                profile.break_after_nine_hours_minutes,
+                1 if profile.weekly_hours_limit_is_hard else 0,
+                1 if profile.daily_hours_limit_is_hard else 0,
+                1 if profile.rest_time_is_hard else 0,
+                1 if profile.profile_mismatch_is_hard else 0,
+                1 if profile.missing_availability_is_hard else 0,
+                1 if profile.insufficient_break_is_hard else 0,
+                1,
+            ),
+        )
 
     @staticmethod
     def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:

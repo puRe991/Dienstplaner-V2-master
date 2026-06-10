@@ -11,7 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.auth import Permission, User, UserRole
-from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat
+from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile
 from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -182,6 +182,38 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(7.0, employee.planned_hours)
 
+
+    def test_rule_profile_can_turn_daily_limit_into_warning(self) -> None:
+        service = SchedulerService(rule_profiles=[RuleProfile(name="Startup", max_daily_hours=6, daily_hours_limit_is_hard=False)])
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Lang", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertTrue(result.success)
+        self.assertIn("Tageshöchstarbeitszeit überschritten.", result.warnings)
+        self.assertEqual([], result.errors)
+
+    def test_rule_profile_can_keep_daily_limit_hard_for_strict_company(self) -> None:
+        service = SchedulerService(rule_profiles=[RuleProfile(name="Tarifbetrieb", max_daily_hours=6, daily_hours_limit_is_hard=True)])
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Lang", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertFalse(result.success)
+        self.assertIn("Tageshöchstarbeitszeit überschritten.", result.errors)
+
+    def test_rule_profile_controls_break_warning_threshold(self) -> None:
+        service = SchedulerService(rule_profiles=[RuleProfile(name="Kurzpause", break_after_six_hours_minutes=15, break_after_nine_hours_minutes=30)])
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", break_minutes_per_shift=15)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertTrue(result.success)
+        self.assertNotIn("Pausenzeit prüfen", result.message)
+
     def test_employee_break_must_not_be_negative(self) -> None:
         service = SchedulerService()
 
@@ -225,6 +257,20 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual("Repository-Test", loaded.shifts[0].published_by)
         self.assertEqual(30, loaded.employees[0].break_minutes_per_shift)
         self.assertIn("Non-Food", loaded.department_options())
+
+    def test_saves_and_loads_rule_profiles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "profiles.sqlite3")
+            service = SchedulerService()
+            service.add_rule_profile(RuleProfile(name="Gastro", min_rest_hours=10, max_daily_hours=9, daily_hours_limit_is_hard=False, is_active=True))
+
+            repository.save(service)
+            loaded = repository.load()
+
+        self.assertEqual("Gastro", loaded.active_rule_profile.name)
+        self.assertEqual(10, loaded.active_rule_profile.min_rest_hours)
+        self.assertFalse(loaded.active_rule_profile.daily_hours_limit_is_hard)
+        self.assertEqual("Gastro", loaded.rules.profile.name)
 
 
 class ForecastImportTests(unittest.TestCase):

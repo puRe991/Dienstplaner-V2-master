@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
 
-from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, Shift
+from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, RuleProfile, Shift
 from .rules import PlanningRules
 
 
@@ -26,12 +26,83 @@ DEFAULT_RETAIL_DEPARTMENTS: tuple[str, ...] = (
 
 
 class SchedulerService:
-    def __init__(self, rules: PlanningRules | None = None) -> None:
-        self.rules = rules or PlanningRules()
+    def __init__(self, rules: PlanningRules | None = None, rule_profiles: list[RuleProfile] | None = None) -> None:
+        self.rule_profiles: list[RuleProfile] = rule_profiles or [RuleProfile()]
+        self._ensure_single_active_rule_profile()
+        self.rules = rules or PlanningRules(self.active_rule_profile)
+        self.rules.profile = self.active_rule_profile
         self.employees: list[Employee] = []
         self.shifts: list[Shift] = []
         self.forecasts: list[RevenueForecast] = []
         self.departments: list[str] = list(DEFAULT_RETAIL_DEPARTMENTS)
+
+    @property
+    def active_rule_profile(self) -> RuleProfile:
+        self._ensure_single_active_rule_profile()
+        return next(profile for profile in self.rule_profiles if profile.is_active)
+
+    def set_active_rule_profile(self, profile_id: str) -> RuleProfile:
+        profile = self.find_rule_profile(profile_id)
+        if profile is None:
+            raise ValueError("Regelprofil wurde nicht gefunden.")
+        for item in self.rule_profiles:
+            item.is_active = item.id == profile.id
+        self.rules.profile = profile
+        return profile
+
+    def add_rule_profile(self, profile: RuleProfile) -> RuleProfile:
+        if any(item.name.lower() == profile.name.lower() for item in self.rule_profiles):
+            raise ValueError("Ein Regelprofil mit diesem Namen existiert bereits.")
+        if profile.is_active:
+            for item in self.rule_profiles:
+                item.is_active = False
+        self.rule_profiles.append(profile)
+        self._ensure_single_active_rule_profile()
+        self.rules.profile = self.active_rule_profile
+        return profile
+
+    def update_rule_profile(self, profile_id: str, updated: RuleProfile) -> RuleProfile:
+        existing = self.find_rule_profile(profile_id)
+        if existing is None:
+            raise ValueError("Regelprofil wurde nicht gefunden.")
+        if any(item.id != profile_id and item.name.lower() == updated.name.lower() for item in self.rule_profiles):
+            raise ValueError("Ein Regelprofil mit diesem Namen existiert bereits.")
+        updated.id = profile_id
+        index = self.rule_profiles.index(existing)
+        self.rule_profiles[index] = updated
+        if updated.is_active:
+            for item in self.rule_profiles:
+                item.is_active = item.id == profile_id
+        self._ensure_single_active_rule_profile()
+        self.rules.profile = self.active_rule_profile
+        return updated
+
+    def delete_rule_profile(self, profile_id: str) -> bool:
+        if len(self.rule_profiles) <= 1:
+            raise ValueError("Das letzte Regelprofil kann nicht gelöscht werden.")
+        profile = self.find_rule_profile(profile_id)
+        if profile is None:
+            return False
+        was_active = profile.is_active
+        self.rule_profiles = [item for item in self.rule_profiles if item.id != profile_id]
+        if was_active:
+            self.rule_profiles[0].is_active = True
+        self._ensure_single_active_rule_profile()
+        self.rules.profile = self.active_rule_profile
+        return True
+
+    def find_rule_profile(self, profile_id: str) -> RuleProfile | None:
+        return next((profile for profile in self.rule_profiles if profile.id == profile_id), None)
+
+    def _ensure_single_active_rule_profile(self) -> None:
+        if not self.rule_profiles:
+            self.rule_profiles.append(RuleProfile())
+        active_profiles = [profile for profile in self.rule_profiles if profile.is_active]
+        if not active_profiles:
+            self.rule_profiles[0].is_active = True
+            active_profiles = [self.rule_profiles[0]]
+        for profile in self.rule_profiles:
+            profile.is_active = profile.id == active_profiles[0].id
 
     def add_department(self, name: str) -> str:
         department = name.strip()
