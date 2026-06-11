@@ -9,7 +9,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from .licensing import LicenseCheckResult, LicenseManager
-from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, Shift
+from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -539,13 +539,157 @@ class SchedulerApp(tk.Tk):
         refresh()
 
     def _open_settings_window(self) -> None:
-        window = self._create_manager_window("Einstellungen", "640x300")
-        text = tk.Text(window, height=8, bg="#FFFFFF", fg="#0F172A", relief="flat", wrap="word")
-        text.pack(fill="both", expand=True, padx=16, pady=16)
-        text.insert("end", f"SQLite-Datenbank:\n{self.repository.database_path}\n\n")
-        text.insert("end", "Systeminfo:\n• Speichern schreibt Mitarbeitende, Schichten, Zuweisungen, Abwesenheiten, Forecasts und Veröffentlichungsstatus dauerhaft.\n• Export erzeugt Dienstplan-CSV/Textdateien oder Report-CSV.\n• Forecast importiert Umsatzprognosen und ergänzt daraus Personalbedarfs-Hinweise in Berichten.\n\nHinweis: Die App läuft im lokalen Modus ohne Benutzer-/Rollenprüfung.")
-        text.configure(state="disabled")
-        self._add_manager_buttons(window, [("Jetzt speichern", self._save), ("Dienstplan CSV Export", self._export_csv)])
+        window = self._create_manager_window("Einstellungen · Regelprofile", "980x520")
+        info = tk.Label(
+            window,
+            text=f"SQLite-Datenbank: {self.repository.database_path}\nRegelprofile steuern harte Verstöße und Warnungen für Zuweisungen.",
+            bg="#F8FAFC",
+            fg="#334155",
+            justify="left",
+        )
+        info.pack(fill="x", padx=16, pady=(14, 6))
+        columns = ("active", "name", "rest", "daily", "breaks", "hard", "warnings")
+        tree = self._create_tree(window, columns, {
+            "active": "Aktiv",
+            "name": "Profil",
+            "rest": "Ruhezeit",
+            "daily": "Tag max.",
+            "breaks": "Pausen",
+            "hard": "Harte Regeln",
+            "warnings": "Warnungen",
+        })
+
+        def profile_policy_text(profile: RuleProfile, hard: bool) -> str:
+            labels = [
+                ("Woche", profile.weekly_hours_limit_is_hard),
+                ("Tag", profile.daily_hours_limit_is_hard),
+                ("Ruhe", profile.rest_time_is_hard),
+                ("Profil", profile.profile_mismatch_is_hard),
+                ("Verfügbarkeit", profile.missing_availability_is_hard),
+                ("Pause", profile.insufficient_break_is_hard),
+            ]
+            selected = [label for label, is_hard in labels if is_hard is hard]
+            return ", ".join(selected) or "-"
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            for profile in sorted(self.service.rule_profiles, key=lambda item: (not item.is_active, item.name.casefold())):
+                tree.insert("", "end", iid=profile.id, values=(
+                    "Ja" if profile.is_active else "Nein",
+                    profile.name,
+                    f"{profile.min_rest_hours:g} h",
+                    f"{profile.max_daily_hours:g} h",
+                    f">6h {profile.break_after_six_hours_minutes} Min / >9h {profile.break_after_nine_hours_minutes} Min",
+                    profile_policy_text(profile, True),
+                    profile_policy_text(profile, False),
+                ))
+
+        def selected_profile() -> RuleProfile | None:
+            selection = tree.selection()
+            return self.service.find_rule_profile(selection[0]) if selection else None
+
+        def add() -> None:
+            dialog = self._open_rule_profile_dialog(parent=window)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def edit() -> None:
+            profile = selected_profile()
+            if profile is None:
+                self._set_status("Bitte ein Regelprofil auswählen.")
+                return
+            dialog = self._open_rule_profile_dialog(profile, window)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def activate() -> None:
+            profile = selected_profile()
+            if profile is None:
+                self._set_status("Bitte ein Regelprofil auswählen.")
+                return
+            self.service.set_active_rule_profile(profile.id)
+            if self._persist_changes(f"Regelprofil '{profile.name}' aktiviert.", window):
+                refresh()
+
+        def delete() -> None:
+            profile = selected_profile()
+            if profile is None:
+                self._set_status("Bitte ein Regelprofil auswählen.")
+                return
+            if not messagebox.askyesno("Regelprofil löschen", f"Soll '{profile.name}' gelöscht werden?", parent=window):
+                return
+            try:
+                self.service.delete_rule_profile(profile.id)
+                if self._persist_changes("Regelprofil gelöscht.", window):
+                    refresh()
+            except ValueError as exc:
+                messagebox.showerror("Regelprofil kann nicht gelöscht werden", str(exc), parent=window)
+
+        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Aktivieren", activate), ("Löschen", delete), ("Jetzt speichern", self._save), ("Dienstplan CSV Export", self._export_csv)])
+        tree.bind("<Double-Button-1>", lambda _event: edit())
+        refresh()
+
+    def _open_rule_profile_dialog(self, profile: RuleProfile | None = None, parent: tk.Misc | None = None) -> tk.Toplevel:
+        dialog = tk.Toplevel(self)
+        dialog.title("Regelprofil bearbeiten" if profile else "Regelprofil anlegen")
+        dialog.transient(parent or self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        source = profile or self.service.active_rule_profile
+        values = {
+            "name": tk.StringVar(value=(profile.name if profile else f"{source.name} Kopie")),
+            "rest": tk.StringVar(value=f"{source.min_rest_hours:g}"),
+            "daily": tk.StringVar(value=f"{source.max_daily_hours:g}"),
+            "break6": tk.StringVar(value=str(source.break_after_six_hours_minutes)),
+            "break9": tk.StringVar(value=str(source.break_after_nine_hours_minutes)),
+            "active": tk.BooleanVar(value=source.is_active if profile else False),
+            "weekly_hard": tk.BooleanVar(value=source.weekly_hours_limit_is_hard),
+            "daily_hard": tk.BooleanVar(value=source.daily_hours_limit_is_hard),
+            "rest_hard": tk.BooleanVar(value=source.rest_time_is_hard),
+            "profile_hard": tk.BooleanVar(value=source.profile_mismatch_is_hard),
+            "availability_hard": tk.BooleanVar(value=source.missing_availability_is_hard),
+            "break_hard": tk.BooleanVar(value=source.insufficient_break_is_hard),
+        }
+        fields = [("name", "Name"), ("rest", "Mindestruhezeit (Stunden)"), ("daily", "Max. Tagesarbeitszeit (Stunden)"), ("break6", "Pause bei > 6h (Minuten)"), ("break9", "Pause bei > 9h (Minuten)")]
+        for row, (key, label) in enumerate(fields):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+        ttk.Checkbutton(dialog, text="Als aktives Profil verwenden", variable=values["active"]).grid(row=5, column=1, sticky="w", padx=18, pady=(4, 8))
+        tk.Label(dialog, text="Harte Regelverstöße", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 10, "bold")).grid(row=6, column=0, sticky="w", padx=18, pady=(8, 4))
+        checks = [("weekly_hard", "Wochenstundenlimit"), ("daily_hard", "Tageshöchstarbeitszeit"), ("rest_hard", "Ruhezeit"), ("profile_hard", "Abteilung/Filiale/Qualifikation"), ("availability_hard", "Fehlende Verfügbarkeit"), ("break_hard", "Unzureichende Pause")]
+        for offset, (key, label) in enumerate(checks, start=7):
+            ttk.Checkbutton(dialog, text=label, variable=values[key]).grid(row=offset, column=1, sticky="w", padx=18, pady=2)
+
+        def save_profile() -> None:
+            try:
+                updated = RuleProfile(
+                    name=values["name"].get(),
+                    min_rest_hours=float(values["rest"].get().replace(",", ".")),
+                    max_daily_hours=float(values["daily"].get().replace(",", ".")),
+                    break_after_six_hours_minutes=int(values["break6"].get()),
+                    break_after_nine_hours_minutes=int(values["break9"].get()),
+                    weekly_hours_limit_is_hard=values["weekly_hard"].get(),
+                    daily_hours_limit_is_hard=values["daily_hard"].get(),
+                    rest_time_is_hard=values["rest_hard"].get(),
+                    profile_mismatch_is_hard=values["profile_hard"].get(),
+                    missing_availability_is_hard=values["availability_hard"].get(),
+                    insufficient_break_is_hard=values["break_hard"].get(),
+                    is_active=values["active"].get(),
+                )
+                if profile is None:
+                    self.service.add_rule_profile(updated)
+                else:
+                    self.service.update_rule_profile(profile.id, updated)
+                if not self._persist_changes("Regelprofil gespeichert.", dialog):
+                    return
+                dialog.destroy()
+            except ValueError as exc:
+                messagebox.showerror("Ungültiges Regelprofil", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_profile).grid(row=13, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
 
     def _create_manager_window(self, title: str, geometry: str) -> tk.Toplevel:
         window = tk.Toplevel(self)

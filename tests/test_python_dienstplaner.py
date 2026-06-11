@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.auth import Permission, User, UserRole
 from python_dienstplaner.exporters import ExportHeader, ExportOptions
-from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat
+from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile
 from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -137,6 +137,74 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("Der Mitarbeiter ist im Schichtzeitraum abwesend (Urlaub).", result.errors)
 
+    def test_soft_rest_warning_still_checks_later_overlapping_shift(self) -> None:
+        service = SchedulerService(
+            rule_profiles=[
+                RuleProfile(
+                    name="Flexible Ruhezeit",
+                    min_rest_hours=11,
+                    max_daily_hours=24,
+                    rest_time_is_hard=False,
+                    break_after_six_hours_minutes=0,
+                    break_after_nine_hours_minutes=0,
+                )
+            ]
+        )
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        early_shift = service.add_shift(
+            "Früh", "Kasse", datetime(2026, 1, 1, 0), datetime(2026, 1, 1, 7), 1, "Kasse"
+        )
+        overlapping_shift = service.add_shift(
+            "Mitte", "Kasse", datetime(2026, 1, 1, 10), datetime(2026, 1, 1, 14), 1, "Kasse"
+        )
+        candidate_shift = service.add_shift(
+            "Spät", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 12), 1, "Kasse"
+        )
+        self.assertTrue(service.assign(employee.id, early_shift.id).success)
+        self.assertTrue(service.assign(employee.id, overlapping_shift.id).success)
+
+        result = service.assign(employee.id, candidate_shift.id)
+
+        self.assertFalse(result.success)
+        self.assertIn("Ruhezeit unterschritten.", result.warnings)
+        self.assertIn("Der Mitarbeiter hat in diesem Zeitraum bereits eine Schicht.", result.errors)
+        self.assertNotIn(employee.id, candidate_shift.employee_ids)
+
+    def test_hard_rest_error_still_reports_later_overlapping_shift(self) -> None:
+        service = SchedulerService(
+            rule_profiles=[
+                RuleProfile(
+                    name="Strenge Ruhezeit",
+                    min_rest_hours=11,
+                    max_daily_hours=24,
+                    rest_time_is_hard=True,
+                    break_after_six_hours_minutes=0,
+                    break_after_nine_hours_minutes=0,
+                )
+            ]
+        )
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        employee.shifts.extend(
+            [
+                service.add_shift(
+                    "Früh", "Kasse", datetime(2026, 1, 1, 0), datetime(2026, 1, 1, 7), 1, "Kasse"
+                ),
+                service.add_shift(
+                    "Mitte", "Kasse", datetime(2026, 1, 1, 10), datetime(2026, 1, 1, 14), 1, "Kasse"
+                ),
+            ]
+        )
+        candidate_shift = service.add_shift(
+            "Spät", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 12), 1, "Kasse"
+        )
+
+        result = service.assign(employee.id, candidate_shift.id)
+
+        self.assertFalse(result.success)
+        self.assertIn("Ruhezeit unterschritten.", result.errors)
+        self.assertIn("Der Mitarbeiter hat in diesem Zeitraum bereits eine Schicht.", result.errors)
+        self.assertNotIn(employee.id, candidate_shift.employee_ids)
+
     def test_default_absence_reasons_include_common_unavailability_types(self) -> None:
         self.assertIn("Urlaub", DEFAULT_ABSENCE_REASONS)
         self.assertIn("Freier Tag", DEFAULT_ABSENCE_REASONS)
@@ -182,6 +250,38 @@ class SchedulerServiceTests(unittest.TestCase):
 
         self.assertTrue(result.success)
         self.assertEqual(7.0, employee.planned_hours)
+
+
+    def test_rule_profile_can_turn_daily_limit_into_warning(self) -> None:
+        service = SchedulerService(rule_profiles=[RuleProfile(name="Startup", max_daily_hours=6, daily_hours_limit_is_hard=False)])
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Lang", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertTrue(result.success)
+        self.assertIn("Tageshöchstarbeitszeit überschritten.", result.warnings)
+        self.assertEqual([], result.errors)
+
+    def test_rule_profile_can_keep_daily_limit_hard_for_strict_company(self) -> None:
+        service = SchedulerService(rule_profiles=[RuleProfile(name="Tarifbetrieb", max_daily_hours=6, daily_hours_limit_is_hard=True)])
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Lang", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertFalse(result.success)
+        self.assertIn("Tageshöchstarbeitszeit überschritten.", result.errors)
+
+    def test_rule_profile_controls_break_warning_threshold(self) -> None:
+        service = SchedulerService(rule_profiles=[RuleProfile(name="Kurzpause", break_after_six_hours_minutes=15, break_after_nine_hours_minutes=30)])
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", break_minutes_per_shift=15)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+
+        result = service.assign(employee.id, shift.id)
+
+        self.assertTrue(result.success)
+        self.assertNotIn("Pausenzeit prüfen", result.message)
 
     def test_employee_break_must_not_be_negative(self) -> None:
         service = SchedulerService()
@@ -307,6 +407,59 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual("Repository-Test", loaded.shifts[0].published_by)
         self.assertEqual(30, loaded.employees[0].break_minutes_per_shift)
         self.assertIn("Non-Food", loaded.department_options())
+
+    def test_saves_and_loads_rule_profiles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "profiles.sqlite3")
+            service = SchedulerService()
+            service.add_rule_profile(RuleProfile(name="Gastro", min_rest_hours=10, max_daily_hours=9, daily_hours_limit_is_hard=False, is_active=True))
+
+            repository.save(service)
+            loaded = repository.load()
+
+        self.assertEqual("Gastro", loaded.active_rule_profile.name)
+        self.assertEqual(10, loaded.active_rule_profile.min_rest_hours)
+        self.assertFalse(loaded.active_rule_profile.daily_hours_limit_is_hard)
+        self.assertEqual("Gastro", loaded.rules.profile.name)
+
+    def test_migrates_legacy_rule_profile_table(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "legacy_profiles.sqlite3"
+            with sqlite3.connect(database_path) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE rule_profiles(
+                        id TEXT,
+                        name TEXT,
+                        min_rest_hours REAL,
+                        max_daily_hours REAL,
+                        daily_hours_limit_is_hard INTEGER,
+                        is_active INTEGER
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO rule_profiles(
+                        id, name, min_rest_hours, max_daily_hours,
+                        daily_hours_limit_is_hard, is_active
+                    )
+                    VALUES(?, ?, ?, ?, ?, ?)
+                    """,
+                    ("legacy-strict", "Altprofil", 10, 9, 0, 1),
+                )
+
+            repository = SQLiteSchedulerRepository(database_path)
+            loaded = repository.load()
+            repository.save(loaded)
+            reloaded = repository.load()
+
+        self.assertEqual("Altprofil", reloaded.active_rule_profile.name)
+        self.assertEqual(10, reloaded.active_rule_profile.min_rest_hours)
+        self.assertEqual(9, reloaded.active_rule_profile.max_daily_hours)
+        self.assertFalse(reloaded.active_rule_profile.daily_hours_limit_is_hard)
+        self.assertTrue(reloaded.active_rule_profile.rest_time_is_hard)
+        self.assertEqual(30, reloaded.active_rule_profile.break_after_six_hours_minutes)
 
 
 class ForecastImportTests(unittest.TestCase):
