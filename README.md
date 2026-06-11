@@ -13,6 +13,7 @@ Python-Desktop-Anwendung zur Erstellung, Prüfung und Auswertung von Dienstplän
 - **Forecast-Import:** Umsatz- und Kundenfrequenzdaten aus CSV-Dateien importieren.
 - **Export:** Dienstpläne lokal als CSV, Excel-kompatibles HTML oder einfache PDF-Datei ausgeben.
 - **Persistenz:** Lokale SQLite-Datenbank für Mitarbeitende, Schichten, Zuweisungen und Abwesenheiten.
+- **Lokale Anmeldung:** Beim ersten Start wird ein Admin angelegt. Ein einmaliger Admin-Wiederherstellungscode ermöglicht das Anlegen eines neuen Admins, falls Benutzername oder Passwort vergessen wurden.
 
 ## Technologie
 
@@ -83,6 +84,12 @@ python_dienstplaner/data/dienstplaner.sqlite3
 ```
 
 Der Ordner `python_dienstplaner/data/` wird bei Bedarf automatisch angelegt und ist nicht für Quellcode gedacht. Prüfe vor produktiver Nutzung, ob lokale SQLite-Datenhaltung, Backup-Konzept und Zugriffsschutz zu deiner Einsatzumgebung passen.
+
+## Admin-Zugang wiederherstellen
+
+Beim Einrichten des ersten Administrators zeigt die Anwendung einen Admin-Wiederherstellungscode an. Bewahre diesen Code getrennt vom Gerät und sicher auf. Wer diesen Code besitzt, kann über **Admin-Zugang wiederherstellen** im Anmeldefenster einen neuen lokalen Administrator anlegen. Nach erfolgreicher Wiederherstellung entwertet die Anwendung den alten Code und zeigt einen neuen Code an.
+
+Ohne gespeicherten Wiederherstellungscode kann die Anwendung ein vergessenes Admin-Passwort nicht entschlüsseln, weil Passwörter nur gehasht gespeichert werden. In diesem Fall bleibt nur die Wiederherstellung aus einem Backup oder ein administrativer Datenbankeingriff.
 
 ## Forecast-CSV
 

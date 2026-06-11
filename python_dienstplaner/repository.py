@@ -16,6 +16,8 @@ from .services import SchedulerService
 
 PASSWORD_ITERATIONS = 200_000
 PASSWORD_SALT_BYTES = 16
+ADMIN_RECOVERY_SECRET_ID = "admin_recovery"
+ADMIN_RECOVERY_CODE_BYTES = 24
 
 RULE_PROFILE_COLUMNS: tuple[str, ...] = (
     "id",
@@ -367,6 +369,57 @@ class SQLiteSchedulerRepository:
             created_at=datetime.fromisoformat(row[7]),
         )
 
+    def has_admin_recovery_code(self) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM auth_recovery WHERE id = ?",
+                (ADMIN_RECOVERY_SECRET_ID,),
+            ).fetchone()
+        return row is not None
+
+    def create_admin_recovery_code(self, *, force: bool = False) -> str:
+        if self.has_admin_recovery_code() and not force:
+            raise ValueError("Ein Wiederherstellungscode existiert bereits.")
+        recovery_code = secrets.token_urlsafe(ADMIN_RECOVERY_CODE_BYTES)
+        salt, code_hash = self._hash_password(recovery_code)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO auth_recovery(id, code_hash, code_salt, updated_at)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    code_hash = excluded.code_hash,
+                    code_salt = excluded.code_salt,
+                    updated_at = excluded.updated_at
+                """,
+                (ADMIN_RECOVERY_SECRET_ID, code_hash, salt, datetime.now().isoformat()),
+            )
+        return recovery_code
+
+    def reset_admin_with_recovery_code(
+        self,
+        recovery_code: str,
+        username: str,
+        password: str,
+        display_name: str = "",
+    ) -> tuple[User, str]:
+        normalized_code = recovery_code.strip()
+        if not normalized_code:
+            raise ValueError("Wiederherstellungscode ist erforderlich.")
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT code_hash, code_salt FROM auth_recovery WHERE id = ?",
+                (ADMIN_RECOVERY_SECRET_ID,),
+            ).fetchone()
+        if row is None:
+            raise ValueError("Für diese Datenbank ist kein Admin-Wiederherstellungscode eingerichtet.")
+        if not self._verify_password(normalized_code, row[1], row[0]):
+            raise ValueError("Wiederherstellungscode ist ungültig.")
+
+        user = self.create_user(username, password, UserRole.ADMIN, display_name)
+        next_recovery_code = self.create_admin_recovery_code(force=True)
+        return user, next_recovery_code
+
     def list_users(self) -> list[User]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -421,6 +474,12 @@ class SQLiteSchedulerRepository:
                     password_salt TEXT NOT NULL,
                     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
                     created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS auth_recovery(
+                    id TEXT PRIMARY KEY,
+                    code_hash TEXT NOT NULL,
+                    code_salt TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 );
                 {RULE_PROFILE_TABLE_SQL}
                 CREATE TABLE IF NOT EXISTS employees(
