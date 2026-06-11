@@ -282,8 +282,8 @@ def install_service_audit(service_cls: type[Any]) -> None:
         self.record_audit_event("schedule.published", "week", week_start.date().isoformat(), before, after, user_id=user_id)
         return count
 
-    def export_schedule(self, path, export_format=ExportFormat.CSV, *, user_id="system"):
-        output = original_export_schedule(self, path, export_format)
+    def export_schedule(self, path, export_format=ExportFormat.CSV, *, user_id="system", **kwargs):
+        output = original_export_schedule(self, path, export_format, **kwargs)
         self.record_audit_event("schedule.exported", "export", str(output), None, {"path": str(output), "format": export_format.value, "shift_count": len(self.shifts)}, user_id=user_id)
         return output
 

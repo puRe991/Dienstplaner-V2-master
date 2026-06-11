@@ -784,6 +784,50 @@ class UserAuthenticationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 repository.create_user("viewer", "kurz", UserRole.VIEWER)
 
+    def test_admin_recovery_code_creates_new_admin_and_rotates_code(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "auth.sqlite3"
+            repository = SQLiteSchedulerRepository(database_path)
+            repository.create_user("admin", "sicheres-passwort", UserRole.ADMIN)
+
+            recovery_code = repository.create_admin_recovery_code()
+            self.assertTrue(repository.has_admin_recovery_code())
+
+            with sqlite3.connect(database_path) as connection:
+                stored_hash, stored_salt = connection.execute(
+                    "SELECT code_hash, code_salt FROM auth_recovery WHERE id = 'admin_recovery'"
+                ).fetchone()
+            self.assertNotEqual(recovery_code, stored_hash)
+            self.assertRegex(stored_salt, r"^[0-9a-f]{32}$")
+            self.assertRegex(stored_hash, r"^[0-9a-f]{64}$")
+
+            recovered_admin, next_recovery_code = repository.reset_admin_with_recovery_code(
+                recovery_code,
+                "admin-neu",
+                "neues-sicheres-passwort",
+                "Neuer Admin",
+            )
+
+            self.assertEqual(UserRole.ADMIN, recovered_admin.role)
+            self.assertEqual(recovered_admin.id, repository.authenticate_user("admin-neu", "neues-sicheres-passwort").id)
+            self.assertNotEqual(recovery_code, next_recovery_code)
+            with self.assertRaises(ValueError):
+                repository.reset_admin_with_recovery_code(recovery_code, "admin-alt", "anderes-passwort")
+
+    def test_admin_recovery_requires_existing_valid_code(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            repository.create_user("admin", "sicheres-passwort", UserRole.ADMIN)
+
+            with self.assertRaises(ValueError):
+                repository.reset_admin_with_recovery_code("irgendein-code", "admin-neu", "neues-passwort")
+
+            recovery_code = repository.create_admin_recovery_code()
+            with self.assertRaises(ValueError):
+                repository.reset_admin_with_recovery_code("falscher-code", "admin-neu", "neues-passwort")
+            self.assertIsNone(repository.authenticate_user("admin-neu", "neues-passwort"))
+            self.assertTrue(recovery_code)
+
 
 class RolePermissionTests(unittest.TestCase):
     def test_role_permissions_match_locked_actions(self) -> None:
