@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import csv
-import json
-from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
 
-from .audit import AuditEvent
 from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, Shift
 from .rules import PlanningRules
 
@@ -34,7 +31,6 @@ class SchedulerService:
         self.employees: list[Employee] = []
         self.shifts: list[Shift] = []
         self.forecasts: list[RevenueForecast] = []
-        self.audit_events: list[AuditEvent] = []
         self.departments: list[str] = list(DEFAULT_RETAIL_DEPARTMENTS)
 
     def add_department(self, name: str) -> str:
@@ -74,8 +70,6 @@ class SchedulerService:
         hourly_wage: float = 15.0,
         is_active: bool = True,
         break_minutes_per_shift: int = 0,
-        *,
-        user_id: str = "system",
     ) -> Employee:
         employee = Employee(
             name=name,
@@ -89,7 +83,6 @@ class SchedulerService:
         )
         self.employees.append(employee)
         self._remember_department(employee.department)
-        self.record_audit_event("employee.created", "employee", employee.id, None, self._employee_snapshot(employee), user_id=user_id)
         return employee
 
     def update_employee(
@@ -103,13 +96,10 @@ class SchedulerService:
         hourly_wage: float = 15.0,
         is_active: bool = True,
         break_minutes_per_shift: int | None = None,
-        *,
-        user_id: str = "system",
     ) -> Employee:
         employee = self.find_employee(employee_id)
         if employee is None:
             raise ValueError("Mitarbeiter wurde nicht gefunden.")
-        before = self._employee_snapshot(employee)
         updated = Employee(
             id=employee.id,
             name=name,
@@ -131,31 +121,15 @@ class SchedulerService:
             for pos, assigned_id in enumerate(shift.employee_ids):
                 if assigned_id == updated.id and pos < len(shift.employee_names):
                     shift.employee_names[pos] = updated.name
-        self.record_audit_event("employee.updated", "employee", updated.id, before, self._employee_snapshot(updated), user_id=user_id)
         return updated
 
-    def delete_employee(self, employee_id: str, *, user_id: str = "system") -> bool:
+    def delete_employee(self, employee_id: str) -> bool:
         employee = self.find_employee(employee_id)
         if employee is None:
             return False
-        before = self._employee_snapshot(employee)
-        assignment_snapshots = [
-            (shift, self._assignment_snapshot(employee, shift))
-            for shift in self.shifts
-            if employee_id in shift.employee_ids
-        ]
         self.employees = [item for item in self.employees if item.id != employee_id]
-        for shift, assignment_before in assignment_snapshots:
+        for shift in self.shifts:
             self._remove_assignment_from_shift(shift, employee_id)
-            self.record_audit_event(
-                "assignment.deleted",
-                "assignment",
-                f"{employee_id}:{shift.id}",
-                assignment_before,
-                self._assignment_snapshot(employee, shift),
-                user_id=user_id,
-            )
-        self.record_audit_event("employee.deleted", "employee", employee_id, before, None, user_id=user_id)
         return True
 
     def add_shift(
@@ -167,8 +141,6 @@ class SchedulerService:
         required_employees: int,
         required_qualification: str = "",
         branch: str = "Zentrale",
-        *,
-        user_id: str = "system",
     ) -> Shift:
         shift = Shift(
             name=name,
@@ -181,10 +153,9 @@ class SchedulerService:
         )
         self.shifts.append(shift)
         self._remember_department(shift.department)
-        self.record_audit_event("shift.created", "shift", shift.id, None, self._shift_snapshot(shift), user_id=user_id)
         return shift
 
-    def copy_shift(self, shift_id: str, start: datetime | None = None, end: datetime | None = None, *, user_id: str = "system") -> Shift:
+    def copy_shift(self, shift_id: str, start: datetime | None = None, end: datetime | None = None) -> Shift:
         source = self.find_shift(shift_id)
         if source is None:
             raise ValueError("Schicht wurde nicht gefunden.")
@@ -199,76 +170,10 @@ class SchedulerService:
             source.required_employees,
             source.required_qualification,
             source.branch,
-            user_id=user_id,
         )
         return copied
 
-    def update_shift(
-        self,
-        shift_id: str,
-        name: str,
-        department: str,
-        start: datetime,
-        end: datetime,
-        required_employees: int,
-        required_qualification: str = "",
-        branch: str = "Zentrale",
-        *,
-        user_id: str = "system",
-    ) -> Shift:
-        shift = self.find_shift(shift_id)
-        if shift is None:
-            raise ValueError("Schicht wurde nicht gefunden.")
-        before = self._shift_snapshot(shift)
-        updated = Shift(
-            id=shift.id,
-            employee_ids=list(shift.employee_ids),
-            employee_names=list(shift.employee_names),
-            name=name,
-            department=department,
-            start=start,
-            end=end,
-            required_employees=required_employees,
-            required_qualification=required_qualification,
-            branch=branch,
-            published_at=shift.published_at,
-            published_by=shift.published_by,
-        )
-        if updated.required_employees < len(updated.employee_ids):
-            raise ValueError("Kapazität darf nicht kleiner als die aktuelle Besetzung sein.")
-        index = self.shifts.index(shift)
-        self.shifts[index] = updated
-        for employee in self.employees:
-            employee.shifts = [updated if item.id == shift.id else item for item in employee.shifts]
-        self._remember_department(updated.department)
-        self.record_audit_event("shift.updated", "shift", updated.id, before, self._shift_snapshot(updated), user_id=user_id)
-        return updated
-
-    def delete_shift(self, shift_id: str, *, user_id: str = "system") -> bool:
-        shift = self.find_shift(shift_id)
-        if shift is None:
-            return False
-        before = self._shift_snapshot(shift)
-        assignment_snapshots = [
-            (employee, self._assignment_snapshot(employee, shift))
-            for employee in self.employees
-            if any(item.id == shift.id for item in employee.shifts)
-        ]
-        self.shifts = [item for item in self.shifts if item.id != shift.id]
-        for employee, assignment_before in assignment_snapshots:
-            employee.shifts = [item for item in employee.shifts if item.id != shift.id]
-            self.record_audit_event(
-                "assignment.deleted",
-                "assignment",
-                f"{employee.id}:{shift.id}",
-                assignment_before,
-                self._assignment_snapshot(employee, shift),
-                user_id=user_id,
-            )
-        self.record_audit_event("shift.deleted", "shift", shift.id, before, None, user_id=user_id)
-        return True
-
-    def assign(self, employee_id: str, shift_id: str, *, ignore_profile_mismatch: bool = False, user_id: str = "system") -> AssignmentResult:
+    def assign(self, employee_id: str, shift_id: str, *, ignore_profile_mismatch: bool = False) -> AssignmentResult:
         employee = self.find_employee(employee_id)
         shift = self.find_shift(shift_id)
         outcome = self.rules.validate_assignment(employee, shift, ignore_profile_mismatch=ignore_profile_mismatch)
@@ -276,25 +181,21 @@ class SchedulerService:
             return AssignmentResult(False, outcome.errors, outcome.warnings)
 
         assert employee is not None and shift is not None
-        before = self._assignment_snapshot(employee, shift)
         employee.shifts.append(shift)
         shift.employee_ids.append(employee.id)
         shift.employee_names.append(employee.name)
-        self.record_audit_event("assignment.created", "assignment", f"{employee.id}:{shift.id}", before, self._assignment_snapshot(employee, shift), user_id=user_id)
         return AssignmentResult(True, [], outcome.warnings)
 
-    def unassign(self, employee_id: str, shift_id: str, *, user_id: str = "system") -> bool:
+    def unassign(self, employee_id: str, shift_id: str) -> bool:
         employee = self.find_employee(employee_id)
         shift = self.find_shift(shift_id)
         if employee is None or shift is None or employee_id not in shift.employee_ids:
             return False
-        before = self._assignment_snapshot(employee, shift)
         employee.shifts = [item for item in employee.shifts if item.id != shift_id]
         self._remove_assignment_from_shift(shift, employee_id)
-        self.record_audit_event("assignment.deleted", "assignment", f"{employee_id}:{shift_id}", before, self._assignment_snapshot(employee, shift), user_id=user_id)
         return True
 
-    def add_absence(self, employee_id: str, start: datetime, end: datetime, reason: str = "", *, user_id: str = "system") -> Absence:
+    def add_absence(self, employee_id: str, start: datetime, end: datetime, reason: str = "") -> Absence:
         employee = self.find_employee(employee_id)
         if employee is None:
             raise ValueError("Mitarbeiter wurde nicht gefunden.")
@@ -304,18 +205,14 @@ class SchedulerService:
             names = ", ".join(f"{shift.name} {shift.start:%d.%m. %H:%M}" for shift in conflicts[:3])
             raise ValueError(f"Abwesenheit überschneidet sich mit bestehenden Schichten: {names}")
         employee.absences.append(absence)
-        self.record_audit_event("absence.created", "absence", absence.id, None, self._absence_snapshot(absence, employee.id), user_id=user_id)
         return absence
 
-    def delete_absence(self, absence_id: str, *, user_id: str = "system") -> bool:
+    def delete_absence(self, absence_id: str) -> bool:
         for employee in self.employees:
-            absence = next((item for item in employee.absences if item.id == absence_id), None)
-            if absence is None:
-                continue
-            before = self._absence_snapshot(absence, employee.id)
+            before = len(employee.absences)
             employee.absences = [item for item in employee.absences if item.id != absence_id]
-            self.record_audit_event("absence.deleted", "absence", absence_id, before, None, user_id=user_id)
-            return True
+            if len(employee.absences) != before:
+                return True
         return False
 
     def find_employee(self, employee_id: str) -> Employee | None:
@@ -324,7 +221,7 @@ class SchedulerService:
     def find_shift(self, shift_id: str) -> Shift | None:
         return next((shift for shift in self.shifts if shift.id == shift_id), None)
 
-    def publish_week(self, week_start: datetime, published_by: str = "Lokaler Modus", *, user_id: str = "system") -> int:
+    def publish_week(self, week_start: datetime, published_by: str = "Lokaler Modus") -> int:
         week_end = week_start + timedelta(days=7)
         week_shifts = [shift for shift in self.shifts if week_start <= shift.start < week_end]
         if not week_shifts:
@@ -333,12 +230,9 @@ class SchedulerService:
         if open_slots:
             raise ValueError(f"Es sind noch {open_slots} offene Besetzungen vorhanden.")
         published_at = datetime.now()
-        before = [self._shift_snapshot(shift) for shift in week_shifts]
         for shift in week_shifts:
             shift.published_at = published_at
             shift.published_by = published_by.strip() or "Lokaler Modus"
-        after = [self._shift_snapshot(shift) for shift in week_shifts]
-        self.record_audit_event("schedule.published", "week", week_start.date().isoformat(), before, after, user_id=user_id)
         return len(week_shifts)
 
     def add_forecasts(self, forecasts: Iterable[RevenueForecast]) -> int:
@@ -386,12 +280,11 @@ class SchedulerService:
         metrics.extend(self.forecast_staffing_recommendations())
         return metrics
 
-    def export_schedule(self, path: str | Path, export_format: ExportFormat = ExportFormat.CSV, *, user_id: str = "system") -> Path:
+    def export_schedule(self, path: str | Path, export_format: ExportFormat = ExportFormat.CSV) -> Path:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
         if export_format == ExportFormat.PDF_TEXT:
             output.write_text(self._schedule_as_text(), encoding="utf-8")
-            self.record_audit_event("schedule.exported", "export", str(output), None, {"path": str(output), "format": export_format.value, "shift_count": len(self.shifts)}, user_id=user_id)
             return output
 
         delimiter = ";" if export_format in {ExportFormat.CSV, ExportFormat.EXCEL_COMPATIBLE} else ","
@@ -408,10 +301,9 @@ class SchedulerService:
                     shift.required_employees,
                     ", ".join(shift.employee_names),
                 ])
-        self.record_audit_event("schedule.exported", "export", str(output), None, {"path": str(output), "format": export_format.value, "shift_count": len(self.shifts)}, user_id=user_id)
         return output
 
-    def export_reports(self, path: str | Path, *, user_id: str = "system") -> Path:
+    def export_reports(self, path: str | Path) -> Path:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("w", newline="", encoding="utf-8") as handle:
@@ -419,7 +311,6 @@ class SchedulerService:
             writer.writerow(["Kategorie", "Kennzahl", "Wert", "Hinweis"])
             for metric in self.create_reports():
                 writer.writerow([metric.category, metric.name, metric.value, metric.note])
-        self.record_audit_event("reports.exported", "export", str(output), None, {"path": str(output), "format": "csv", "metric_count": len(self.create_reports())}, user_id=user_id)
         return output
 
     def _schedule_as_text(self) -> str:
@@ -428,112 +319,6 @@ class SchedulerService:
             employees = ", ".join(shift.employee_names) or "nicht besetzt"
             lines.append(f"{shift.name} | {shift.start:%d.%m.%Y %H:%M}-{shift.end:%H:%M} | {employees}")
         return "\n".join(lines) + "\n"
-
-
-    def record_audit_event(
-        self,
-        action: str,
-        entity_type: str,
-        entity_id: str,
-        before: object | None,
-        after: object | None,
-        *,
-        user_id: str = "system",
-    ) -> AuditEvent:
-        event = AuditEvent(
-            timestamp=datetime.now(),
-            user_id=str(user_id or "system"),
-            action=action,
-            entity_type=entity_type,
-            entity_id=str(entity_id),
-            before=self._audit_json(before),
-            after=self._audit_json(after),
-        )
-        self.audit_events.append(event)
-        return event
-
-    def audit_trail(self, limit: int | None = None) -> list[AuditEvent]:
-        events = sorted(self.audit_events, key=lambda event: event.timestamp, reverse=True)
-        return events[:limit] if limit is not None else events
-
-    @classmethod
-    def _audit_json(cls, value: object | None) -> str:
-        if value is None:
-            return ""
-        return json.dumps(cls._json_ready(value), ensure_ascii=False, sort_keys=True)
-
-    @classmethod
-    def _json_ready(cls, value: object) -> object:
-        if isinstance(value, datetime):
-            return value.isoformat()
-        if isinstance(value, Path):
-            return str(value)
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        if isinstance(value, dict):
-            return {str(key): cls._json_ready(item) for key, item in value.items()}
-        if isinstance(value, (list, tuple, set)):
-            return [cls._json_ready(item) for item in value]
-        if is_dataclass(value):
-            return cls._json_ready(asdict(value))
-        return str(value)
-
-    @staticmethod
-    def _employee_snapshot(employee: Employee) -> dict[str, object]:
-        return {
-            "id": employee.id,
-            "name": employee.name,
-            "department": employee.department,
-            "qualification": employee.qualification,
-            "weekly_hours_limit": employee.weekly_hours_limit,
-            "branch": employee.branch,
-            "hourly_wage": employee.hourly_wage,
-            "is_active": employee.is_active,
-            "break_minutes_per_shift": employee.break_minutes_per_shift,
-            "shift_ids": [shift.id for shift in employee.shifts],
-            "absence_ids": [absence.id for absence in employee.absences],
-        }
-
-    @staticmethod
-    def _shift_snapshot(shift: Shift) -> dict[str, object]:
-        return {
-            "id": shift.id,
-            "name": shift.name,
-            "department": shift.department,
-            "start": shift.start,
-            "end": shift.end,
-            "required_employees": shift.required_employees,
-            "required_qualification": shift.required_qualification,
-            "branch": shift.branch,
-            "employee_ids": list(shift.employee_ids),
-            "employee_names": list(shift.employee_names),
-            "published_at": shift.published_at,
-            "published_by": shift.published_by,
-        }
-
-    @staticmethod
-    def _absence_snapshot(absence: Absence, employee_id: str) -> dict[str, object]:
-        return {
-            "id": absence.id,
-            "employee_id": employee_id,
-            "start": absence.start,
-            "end": absence.end,
-            "reason": absence.reason,
-        }
-
-    @staticmethod
-    def _assignment_snapshot(employee: Employee, shift: Shift) -> dict[str, object]:
-        employee_has_shift = any(item.id == shift.id for item in employee.shifts)
-        shift_has_employee = employee.id in shift.employee_ids
-        return {
-            "employee_id": employee.id,
-            "employee_name": employee.name,
-            "shift_id": shift.id,
-            "shift_name": shift.name,
-            "assigned": employee_has_shift and shift_has_employee,
-            "employee_shift_ids": [item.id for item in employee.shifts],
-            "shift_employee_ids": list(shift.employee_ids),
-        }
 
     @staticmethod
     def _remove_assignment_from_shift(shift: Shift, employee_id: str) -> None:
@@ -603,3 +388,7 @@ def _parse_date(value: str) -> datetime:
 
 def format_shift_options(shifts: Iterable[Shift]) -> list[str]:
     return [f"{shift.name} | {shift.start:%d.%m.%Y %H:%M} | {len(shift.employee_ids)}/{shift.required_employees}" for shift in shifts]
+
+
+from .audit import install_service_audit
+install_service_audit(SchedulerService)

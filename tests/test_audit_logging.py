@@ -9,7 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from python_dienstplaner.repository import DEFAULT_AUDIT_LOAD_LIMIT, SQLiteSchedulerRepository
+from python_dienstplaner.audit import DEFAULT_AUDIT_LOAD_LIMIT
+from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import SchedulerService
 
 
