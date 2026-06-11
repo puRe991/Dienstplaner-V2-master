@@ -474,3 +474,7 @@ def _parse_date(value: str) -> datetime:
 
 def format_shift_options(shifts: Iterable[Shift]) -> list[str]:
     return [f"{shift.name} | {shift.start:%d.%m.%Y %H:%M} | {len(shift.employee_ids)}/{shift.required_employees}" for shift in shifts]
+
+
+from .audit import install_service_audit
+install_service_audit(SchedulerService)

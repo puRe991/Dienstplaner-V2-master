@@ -662,3 +662,7 @@ class SQLiteSchedulerRepository:
         connection = sqlite3.connect(self.database_path)
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
+
+
+from .audit import install_repository_audit
+install_repository_audit(SQLiteSchedulerRepository)
