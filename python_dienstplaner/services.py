@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
 
-from .models import Absence, AssignmentResult, AuditEvent, Employee, ExportFormat, ReportMetric, RevenueForecast, Shift
+from .audit import AuditEvent
+from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, Shift
 from .rules import PlanningRules
 
 

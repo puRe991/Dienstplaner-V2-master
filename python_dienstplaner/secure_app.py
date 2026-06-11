@@ -5,7 +5,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from .app import SchedulerApp
-from .auth import Permission, User
+from .auth import Permission, User, UserRole
 from .auth_ui import authenticate_on_start, user_label, user_has_permission
 from .repository import SQLiteSchedulerRepository
 
@@ -76,8 +76,11 @@ class AuthenticatedSchedulerApp(SchedulerApp):
             super()._delete_absence(absence_id)
 
     def _open_audit_log_window(self) -> None:
-        if self._require_permission(Permission.VIEW_AUDIT_LOG, "Änderungsverlauf anzeigen"):
+        if self.current_user is not None and self.current_user.role == UserRole.ADMIN:
             super()._open_audit_log_window()
+            return
+        messagebox.showwarning("Keine Berechtigung", "Sie haben keine Berechtigung für: Änderungsverlauf anzeigen", parent=self)
+        self._set_status("Aktion gesperrt: Änderungsverlauf anzeigen")
 
     def _export_reports_csv(self) -> None:
         if self._require_permission(Permission.EXPORT, "Export"):

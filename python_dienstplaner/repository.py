@@ -10,7 +10,8 @@ from typing import Iterable
 from uuid import uuid4
 
 from .auth import User, UserRole
-from .models import Absence, AuditEvent, Employee, RevenueForecast, Shift
+from .audit import AuditEvent
+from .models import Absence, Employee, RevenueForecast, Shift
 from .services import SchedulerService
 
 
