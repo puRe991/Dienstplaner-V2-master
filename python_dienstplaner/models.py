@@ -10,7 +10,8 @@ from uuid import uuid4
 class ExportFormat(str, Enum):
     CSV = "csv"
     EXCEL_COMPATIBLE = "excel"
-    PDF_TEXT = "pdf"
+    PDF_TEXT = "pdf_text"
+    PDF = "pdf"
 
 
 DEFAULT_ABSENCE_REASONS: tuple[str, ...] = (

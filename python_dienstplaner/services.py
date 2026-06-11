@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
 
+from .exporters import ExportHeader, ExportOptions, ScheduleExporter
 from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, RuleProfile, Shift
 from .rules import PlanningRules
 
@@ -351,28 +352,49 @@ class SchedulerService:
         metrics.extend(self.forecast_staffing_recommendations())
         return metrics
 
-    def export_schedule(self, path: str | Path, export_format: ExportFormat = ExportFormat.CSV) -> Path:
-        output = Path(path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        if export_format == ExportFormat.PDF_TEXT:
-            output.write_text(self._schedule_as_text(), encoding="utf-8")
-            return output
+    def export_schedule(
+        self,
+        path: str | Path,
+        export_format: ExportFormat = ExportFormat.CSV,
+        *,
+        options: ExportOptions | None = None,
+        header: ExportHeader | None = None,
+    ) -> Path:
+        return ScheduleExporter(self.employees, self.shifts).export_schedule(path, export_format, options=options, header=header)
 
-        delimiter = ";" if export_format in {ExportFormat.CSV, ExportFormat.EXCEL_COMPATIBLE} else ","
-        with output.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.writer(handle, delimiter=delimiter)
-            writer.writerow(["Schicht", "Abteilung", "Filiale", "Start", "Ende", "Kapazität", "Mitarbeitende"])
-            for shift in sorted(self.shifts, key=lambda item: (item.start, item.name)):
-                writer.writerow([
-                    shift.name,
-                    shift.department,
-                    shift.branch,
-                    shift.start.isoformat(sep=" ", timespec="minutes"),
-                    shift.end.isoformat(sep=" ", timespec="minutes"),
-                    shift.required_employees,
-                    ", ".join(shift.employee_names),
-                ])
-        return output
+    def export_week_plan_pdf(
+        self,
+        path: str | Path,
+        week_start: datetime,
+        *,
+        options: ExportOptions | None = None,
+        header: ExportHeader | None = None,
+    ) -> Path:
+        return ScheduleExporter(self.employees, self.shifts).export_week_plan_pdf(path, week_start, options=options, header=header)
+
+    def export_day_plan_pdf(
+        self,
+        path: str | Path,
+        day: datetime,
+        *,
+        options: ExportOptions | None = None,
+        header: ExportHeader | None = None,
+    ) -> Path:
+        return ScheduleExporter(self.employees, self.shifts).export_day_plan_pdf(path, day, options=options, header=header)
+
+    def export_employee_plan_pdf(
+        self,
+        path: str | Path,
+        employee_id: str,
+        period_start: datetime,
+        period_end: datetime,
+        *,
+        options: ExportOptions | None = None,
+        header: ExportHeader | None = None,
+    ) -> Path:
+        return ScheduleExporter(self.employees, self.shifts).export_employee_plan_pdf(
+            path, employee_id, period_start, period_end, options=options, header=header
+        )
 
     def export_reports(self, path: str | Path) -> Path:
         output = Path(path)
@@ -383,13 +405,6 @@ class SchedulerService:
             for metric in self.create_reports():
                 writer.writerow([metric.category, metric.name, metric.value, metric.note])
         return output
-
-    def _schedule_as_text(self) -> str:
-        lines = ["Dienstplan", "========", ""]
-        for shift in sorted(self.shifts, key=lambda item: (item.start, item.name)):
-            employees = ", ".join(shift.employee_names) or "nicht besetzt"
-            lines.append(f"{shift.name} | {shift.start:%d.%m.%Y %H:%M}-{shift.end:%H:%M} | {employees}")
-        return "\n".join(lines) + "\n"
 
     @staticmethod
     def _remove_assignment_from_shift(shift: Shift, employee_id: str) -> None:

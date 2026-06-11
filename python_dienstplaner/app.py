@@ -1367,11 +1367,17 @@ class SchedulerApp(tk.Tk):
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
             defaultextension=".csv",
-            filetypes=[("CSV", "*.csv"), ("Text", "*.txt")],
+            filetypes=[("PDF", "*.pdf"), ("CSV", "*.csv"), ("Text", "*.txt")],
         )
         if not path:
             return
-        export_format = ExportFormat.PDF_TEXT if Path(path).suffix.lower() == ".txt" else ExportFormat.CSV
+        suffix = Path(path).suffix.lower()
+        if suffix == ".pdf":
+            export_format = ExportFormat.PDF
+        elif suffix == ".txt":
+            export_format = ExportFormat.PDF_TEXT
+        else:
+            export_format = ExportFormat.CSV
         try:
             output = self.service.export_schedule(path, export_format)
             self._set_status(f"Exportiert: {output}")

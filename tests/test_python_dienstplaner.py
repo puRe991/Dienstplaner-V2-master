@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.auth import Permission, User, UserRole
+from python_dienstplaner.exporters import ExportHeader, ExportOptions
 from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile
 from python_dienstplaner.repository import SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
@@ -300,6 +301,87 @@ class SchedulerServiceTests(unittest.TestCase):
 
         self.assertIn("Schicht;Abteilung;Filiale;Start;Ende;Kapazität;Mitarbeitende", content)
         self.assertIn("Eva Retail", content)
+
+    def test_exports_empty_week_plan_as_real_pdf_with_header(self) -> None:
+        service = SchedulerService()
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = service.export_week_plan_pdf(
+                Path(directory) / "leer.pdf",
+                datetime(2026, 1, 5),
+                header=ExportHeader(company_name="Muster GmbH", created_at=datetime(2026, 1, 6, 9, 30), created_by="Admin"),
+            )
+            content = output.read_bytes()
+
+        self.assertTrue(content.startswith(b"%PDF-1.4"))
+        self.assertIn("Muster GmbH".encode("cp1252"), content)
+        self.assertIn("Keine Eintr".encode("cp1252"), content)
+
+    def test_week_pdf_handles_special_characters(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Zoë Müller", "Frische / Kühlung", "Käse", hourly_wage=17.5)
+        shift = service.add_shift("Spät & Käse (Süd)", "Frische / Kühlung", datetime(2026, 1, 6, 12), datetime(2026, 1, 6, 20), 1, "Käse")
+        service.assign(employee.id, shift.id)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = service.export_week_plan_pdf(
+                Path(directory) / "sonderzeichen.pdf",
+                datetime(2026, 1, 5),
+                header=ExportHeader(company_name="Bäckerei & Co.", period="KW 02", created_at=datetime(2026, 1, 6, 9), created_by="Jörg Admin"),
+            )
+            content = output.read_bytes()
+
+        self.assertIn("Zoë Müller".encode("cp1252"), content)
+        self.assertIn("Spät & Käse \\(Süd\\)".encode("cp1252"), content)
+
+    def test_export_privacy_filters_wage_absence_reason_and_unpublished_shifts(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=99.99)
+        employee.absences.append(Absence(datetime(2026, 1, 7, 8), datetime(2026, 1, 7, 16), "Krank"))
+        unpublished = service.add_shift("Unveröffentlicht", "Kasse", datetime(2026, 1, 7, 8), datetime(2026, 1, 7, 16), 1, "Kasse")
+        published = service.add_shift("Veröffentlicht", "Kasse", datetime(2026, 1, 8, 8), datetime(2026, 1, 8, 16), 1, "Kasse")
+        service.assign(employee.id, unpublished.id)
+        service.assign(employee.id, published.id)
+        published.published_at = datetime(2026, 1, 8, 10)
+        published.published_by = "Planerin"
+
+        with tempfile.TemporaryDirectory() as directory:
+            weekly = service.export_schedule(
+                Path(directory) / "published.csv",
+                ExportFormat.CSV,
+                options=ExportOptions(include_hourly_wage=False, only_published_shifts=True),
+            ).read_text(encoding="utf-8")
+            employee_pdf = service.export_employee_plan_pdf(
+                Path(directory) / "employee.pdf",
+                employee.id,
+                datetime(2026, 1, 5),
+                datetime(2026, 1, 12),
+                options=ExportOptions(include_hourly_wage=False, include_absence_reason=False),
+            ).read_bytes()
+
+        self.assertIn("Veröffentlicht", weekly)
+        self.assertNotIn("Unveröffentlicht", weekly)
+        self.assertNotIn("Stundenlohn", weekly)
+        self.assertNotIn(b"99.99", employee_pdf)
+        self.assertNotIn(b"Krank", employee_pdf)
+        self.assertIn(b"Abwesend", employee_pdf)
+
+    def test_export_columns_respect_options(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=18.25)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        with tempfile.TemporaryDirectory() as directory:
+            without_wage = service.export_schedule(Path(directory) / "ohne.csv", ExportFormat.CSV).read_text(encoding="utf-8").splitlines()[0]
+            with_wage = service.export_schedule(
+                Path(directory) / "mit.csv",
+                ExportFormat.CSV,
+                options=ExportOptions(include_hourly_wage=True),
+            ).read_text(encoding="utf-8").splitlines()[0]
+
+        self.assertEqual("Schicht;Abteilung;Filiale;Start;Ende;Kapazität;Mitarbeitende", without_wage)
+        self.assertEqual("Schicht;Abteilung;Filiale;Start;Ende;Kapazität;Mitarbeitende;Stundenlohn", with_wage)
 
 
 class RepositoryTests(unittest.TestCase):
