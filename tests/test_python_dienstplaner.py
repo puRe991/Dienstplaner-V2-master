@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.auth import Permission, User, UserRole
 from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat
-from python_dienstplaner.repository import SQLiteSchedulerRepository
+from python_dienstplaner.repository import DEFAULT_AUDIT_LOAD_LIMIT, SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
 
@@ -281,6 +281,30 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual("2025-12-29", publication_event.entity_id)
         self.assertIsNone(json.loads(publication_event.before)[0]["published_at"])
         self.assertIsNotNone(json.loads(publication_event.after)[0]["published_at"])
+
+    def test_load_limits_in_memory_audit_events_without_pruning_history(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            for index in range(DEFAULT_AUDIT_LOAD_LIMIT + 5):
+                service.record_audit_event("test.event", "test", str(index), None, {"index": index})
+            repository.save(service)
+
+            loaded = repository.load()
+            all_events = repository.list_audit_events(DEFAULT_AUDIT_LOAD_LIMIT + 10)
+
+        self.assertEqual(DEFAULT_AUDIT_LOAD_LIMIT, len(loaded.audit_events))
+        self.assertEqual(DEFAULT_AUDIT_LOAD_LIMIT + 5, len(all_events))
+
+    def test_audit_event_normalizes_empty_user_id(self) -> None:
+        service = SchedulerService()
+
+        event = service.record_audit_event(" test.event ", " test ", 42, None, {"ok": True}, user_id="  ")
+
+        self.assertEqual("system", event.user_id)
+        self.assertEqual("test.event", event.action)
+        self.assertEqual("test", event.entity_type)
+        self.assertEqual("42", event.entity_id)
 
 
 class ForecastImportTests(unittest.TestCase):

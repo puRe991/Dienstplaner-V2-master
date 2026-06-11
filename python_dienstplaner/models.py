@@ -180,14 +180,18 @@ class AuditEvent:
     id: str = field(default_factory=lambda: str(uuid4()))
 
     def __post_init__(self) -> None:
-        if not self.action.strip():
+        action = str(self.action).strip()
+        entity_type = str(self.entity_type).strip()
+        if not action:
             raise ValueError("Audit-Aktion ist erforderlich.")
-        if not self.entity_type.strip():
+        if not entity_type:
             raise ValueError("Audit-Entitätstyp ist erforderlich.")
-        object.__setattr__(self, "user_id", self.user_id.strip() or "system")
-        object.__setattr__(self, "action", self.action.strip())
-        object.__setattr__(self, "entity_type", self.entity_type.strip())
-        object.__setattr__(self, "entity_id", self.entity_id.strip())
+        object.__setattr__(self, "user_id", str(self.user_id or "system").strip() or "system")
+        object.__setattr__(self, "action", action)
+        object.__setattr__(self, "entity_type", entity_type)
+        object.__setattr__(self, "entity_id", str(self.entity_id or "").strip())
+        object.__setattr__(self, "before", str(self.before or ""))
+        object.__setattr__(self, "after", str(self.after or ""))
 
 
 @dataclass(frozen=True)
