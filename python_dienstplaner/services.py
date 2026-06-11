@@ -522,12 +522,15 @@ class SchedulerService:
 
     @staticmethod
     def _assignment_snapshot(employee: Employee, shift: Shift) -> dict[str, object]:
+        employee_has_shift = any(item.id == shift.id for item in employee.shifts)
+        shift_has_employee = employee.id in shift.employee_ids
         return {
             "employee_id": employee.id,
             "employee_name": employee.name,
             "shift_id": shift.id,
             "shift_name": shift.name,
-            "assigned": employee.id in shift.employee_ids,
+            "assigned": employee_has_shift and shift_has_employee,
+            "employee_shift_ids": [item.id for item in employee.shifts],
             "shift_employee_ids": list(shift.employee_ids),
         }
 

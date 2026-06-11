@@ -366,6 +366,20 @@ class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
         self.assertTrue(json.loads(assignment_deletes[0].before)["assigned"])
         self.assertFalse(json.loads(assignment_deletes[0].after)["assigned"])
 
+    def test_deleting_shift_audits_removed_assignment(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        self.assertTrue(service.delete_shift(shift.id, user_id="admin-1"))
+
+        assignment_deletes = [event for event in service.audit_events if event.action == "assignment.deleted"]
+        self.assertEqual(1, len(assignment_deletes))
+        self.assertEqual(f"{employee.id}:{shift.id}", assignment_deletes[0].entity_id)
+        self.assertTrue(json.loads(assignment_deletes[0].before)["assigned"])
+        self.assertFalse(json.loads(assignment_deletes[0].after)["assigned"])
+
 
 class LicenseManagerTests(unittest.TestCase):
     def _signed_license(self, path: Path, *, valid_until, company_name: str = "Muster GmbH", max_users: int = 10):
