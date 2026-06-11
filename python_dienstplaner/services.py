@@ -138,9 +138,22 @@ class SchedulerService:
         if employee is None:
             return False
         before = self._employee_snapshot(employee)
+        assignment_snapshots = [
+            (shift, self._assignment_snapshot(employee, shift))
+            for shift in self.shifts
+            if employee_id in shift.employee_ids
+        ]
         self.employees = [item for item in self.employees if item.id != employee_id]
-        for shift in self.shifts:
+        for shift, assignment_before in assignment_snapshots:
             self._remove_assignment_from_shift(shift, employee_id)
+            self.record_audit_event(
+                "assignment.deleted",
+                "assignment",
+                f"{employee_id}:{shift.id}",
+                assignment_before,
+                self._assignment_snapshot(employee, shift),
+                user_id=user_id,
+            )
         self.record_audit_event("employee.deleted", "employee", employee_id, before, None, user_id=user_id)
         return True
 
@@ -189,8 +202,19 @@ class SchedulerService:
         )
         return copied
 
-    def update_shift(self, shift_id: str, **changes) -> Shift:
-        user_id = str(changes.pop("user_id", "system"))
+    def update_shift(
+        self,
+        shift_id: str,
+        name: str,
+        department: str,
+        start: datetime,
+        end: datetime,
+        required_employees: int,
+        required_qualification: str = "",
+        branch: str = "Zentrale",
+        *,
+        user_id: str = "system",
+    ) -> Shift:
         shift = self.find_shift(shift_id)
         if shift is None:
             raise ValueError("Schicht wurde nicht gefunden.")
@@ -199,13 +223,13 @@ class SchedulerService:
             id=shift.id,
             employee_ids=list(shift.employee_ids),
             employee_names=list(shift.employee_names),
-            name=changes.get("name", shift.name),
-            department=changes.get("department", shift.department),
-            start=changes.get("start", shift.start),
-            end=changes.get("end", shift.end),
-            required_employees=changes.get("required_employees", shift.required_employees),
-            required_qualification=changes.get("required_qualification", shift.required_qualification),
-            branch=changes.get("branch", shift.branch),
+            name=name,
+            department=department,
+            start=start,
+            end=end,
+            required_employees=required_employees,
+            required_qualification=required_qualification,
+            branch=branch,
             published_at=shift.published_at,
             published_by=shift.published_by,
         )
@@ -224,9 +248,22 @@ class SchedulerService:
         if shift is None:
             return False
         before = self._shift_snapshot(shift)
+        assignment_snapshots = [
+            (employee, self._assignment_snapshot(employee, shift))
+            for employee in self.employees
+            if any(item.id == shift.id for item in employee.shifts)
+        ]
         self.shifts = [item for item in self.shifts if item.id != shift.id]
-        for employee in self.employees:
+        for employee, assignment_before in assignment_snapshots:
             employee.shifts = [item for item in employee.shifts if item.id != shift.id]
+            self.record_audit_event(
+                "assignment.deleted",
+                "assignment",
+                f"{employee.id}:{shift.id}",
+                assignment_before,
+                self._assignment_snapshot(employee, shift),
+                user_id=user_id,
+            )
         self.record_audit_event("shift.deleted", "shift", shift.id, before, None, user_id=user_id)
         return True
 
@@ -404,10 +441,10 @@ class SchedulerService:
     ) -> AuditEvent:
         event = AuditEvent(
             timestamp=datetime.now(),
-            user_id=user_id,
+            user_id=str(user_id or "system"),
             action=action,
             entity_type=entity_type,
-            entity_id=entity_id,
+            entity_id=str(entity_id),
             before=self._audit_json(before),
             after=self._audit_json(after),
         )

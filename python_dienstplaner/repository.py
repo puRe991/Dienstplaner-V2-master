@@ -16,6 +16,7 @@ from .services import SchedulerService
 
 PASSWORD_ITERATIONS = 200_000
 PASSWORD_SALT_BYTES = 16
+DEFAULT_AUDIT_LOAD_LIMIT = 500
 
 
 class SQLiteSchedulerRepository:
@@ -236,7 +237,9 @@ class SQLiteSchedulerRepository:
                     SELECT id, timestamp, user_id, action, entity_type, entity_id, before, after
                     FROM audit_events
                     ORDER BY timestamp DESC, rowid DESC
-                    """
+                    LIMIT ?
+                    """,
+                    (DEFAULT_AUDIT_LOAD_LIMIT,),
                 )
             )
 
