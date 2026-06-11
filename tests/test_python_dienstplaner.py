@@ -340,6 +340,45 @@ class RepositoryTests(unittest.TestCase):
         self.assertFalse(loaded.active_rule_profile.daily_hours_limit_is_hard)
         self.assertEqual("Gastro", loaded.rules.profile.name)
 
+    def test_migrates_legacy_rule_profile_table(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "legacy_profiles.sqlite3"
+            with sqlite3.connect(database_path) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE rule_profiles(
+                        id TEXT,
+                        name TEXT,
+                        min_rest_hours REAL,
+                        max_daily_hours REAL,
+                        daily_hours_limit_is_hard INTEGER,
+                        is_active INTEGER
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO rule_profiles(
+                        id, name, min_rest_hours, max_daily_hours,
+                        daily_hours_limit_is_hard, is_active
+                    )
+                    VALUES(?, ?, ?, ?, ?, ?)
+                    """,
+                    ("legacy-strict", "Altprofil", 10, 9, 0, 1),
+                )
+
+            repository = SQLiteSchedulerRepository(database_path)
+            loaded = repository.load()
+            repository.save(loaded)
+            reloaded = repository.load()
+
+        self.assertEqual("Altprofil", reloaded.active_rule_profile.name)
+        self.assertEqual(10, reloaded.active_rule_profile.min_rest_hours)
+        self.assertEqual(9, reloaded.active_rule_profile.max_daily_hours)
+        self.assertFalse(reloaded.active_rule_profile.daily_hours_limit_is_hard)
+        self.assertTrue(reloaded.active_rule_profile.rest_time_is_hard)
+        self.assertEqual(30, reloaded.active_rule_profile.break_after_six_hours_minutes)
+
 
 class ForecastImportTests(unittest.TestCase):
     def test_imports_semicolon_separated_forecast_csv(self) -> None:

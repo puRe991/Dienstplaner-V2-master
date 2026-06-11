@@ -17,6 +17,41 @@ from .services import SchedulerService
 PASSWORD_ITERATIONS = 200_000
 PASSWORD_SALT_BYTES = 16
 
+RULE_PROFILE_COLUMNS: tuple[str, ...] = (
+    "id",
+    "name",
+    "min_rest_hours",
+    "max_daily_hours",
+    "break_after_six_hours_minutes",
+    "break_after_nine_hours_minutes",
+    "weekly_hours_limit_is_hard",
+    "daily_hours_limit_is_hard",
+    "rest_time_is_hard",
+    "profile_mismatch_is_hard",
+    "missing_availability_is_hard",
+    "insufficient_break_is_hard",
+    "is_active",
+)
+
+RULE_PROFILE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS rule_profiles(
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK(length(trim(name)) > 0),
+    min_rest_hours REAL NOT NULL CHECK(min_rest_hours >= 0),
+    max_daily_hours REAL NOT NULL CHECK(max_daily_hours > 0),
+    break_after_six_hours_minutes INTEGER NOT NULL CHECK(break_after_six_hours_minutes >= 0),
+    break_after_nine_hours_minutes INTEGER NOT NULL
+        CHECK(break_after_nine_hours_minutes >= break_after_six_hours_minutes),
+    weekly_hours_limit_is_hard INTEGER NOT NULL CHECK(weekly_hours_limit_is_hard IN (0, 1)),
+    daily_hours_limit_is_hard INTEGER NOT NULL CHECK(daily_hours_limit_is_hard IN (0, 1)),
+    rest_time_is_hard INTEGER NOT NULL CHECK(rest_time_is_hard IN (0, 1)),
+    profile_mismatch_is_hard INTEGER NOT NULL CHECK(profile_mismatch_is_hard IN (0, 1)),
+    missing_availability_is_hard INTEGER NOT NULL CHECK(missing_availability_is_hard IN (0, 1)),
+    insufficient_break_is_hard INTEGER NOT NULL CHECK(insufficient_break_is_hard IN (0, 1)),
+    is_active INTEGER NOT NULL CHECK(is_active IN (0, 1))
+);
+"""
+
 
 class SQLiteSchedulerRepository:
     """SQLite persistence layer for the Python Dienstplaner application.
@@ -376,7 +411,7 @@ class SQLiteSchedulerRepository:
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.executescript(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS users(
                     id TEXT PRIMARY KEY,
                     username TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK(length(trim(username)) > 0),
@@ -387,21 +422,7 @@ class SQLiteSchedulerRepository:
                     is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
                     created_at TEXT NOT NULL
                 );
-                CREATE TABLE IF NOT EXISTS rule_profiles(
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK(length(trim(name)) > 0),
-                    min_rest_hours REAL NOT NULL CHECK(min_rest_hours >= 0),
-                    max_daily_hours REAL NOT NULL CHECK(max_daily_hours > 0),
-                    break_after_six_hours_minutes INTEGER NOT NULL CHECK(break_after_six_hours_minutes >= 0),
-                    break_after_nine_hours_minutes INTEGER NOT NULL CHECK(break_after_nine_hours_minutes >= break_after_six_hours_minutes),
-                    weekly_hours_limit_is_hard INTEGER NOT NULL CHECK(weekly_hours_limit_is_hard IN (0, 1)),
-                    daily_hours_limit_is_hard INTEGER NOT NULL CHECK(daily_hours_limit_is_hard IN (0, 1)),
-                    rest_time_is_hard INTEGER NOT NULL CHECK(rest_time_is_hard IN (0, 1)),
-                    profile_mismatch_is_hard INTEGER NOT NULL CHECK(profile_mismatch_is_hard IN (0, 1)),
-                    missing_availability_is_hard INTEGER NOT NULL CHECK(missing_availability_is_hard IN (0, 1)),
-                    insufficient_break_is_hard INTEGER NOT NULL CHECK(insufficient_break_is_hard IN (0, 1)),
-                    is_active INTEGER NOT NULL CHECK(is_active IN (0, 1))
-                );
+                {RULE_PROFILE_TABLE_SQL}
                 CREATE TABLE IF NOT EXISTS employees(
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -450,6 +471,7 @@ class SQLiteSchedulerRepository:
                 );
                 """
             )
+            self._migrate_rule_profiles(connection)
             self._ensure_default_rule_profile(connection)
             self._ensure_column(connection, "employees", "break_minutes_per_shift", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(connection, "absences", "id", "TEXT")
@@ -460,11 +482,103 @@ class SQLiteSchedulerRepository:
             self._ensure_column(connection, "shifts", "published_by", "TEXT NOT NULL DEFAULT ''")
 
     @staticmethod
-    def _ensure_default_rule_profile(connection: sqlite3.Connection) -> None:
-        count = int(connection.execute("SELECT COUNT(*) FROM rule_profiles").fetchone()[0])
-        if count:
+    def _migrate_rule_profiles(connection: sqlite3.Connection) -> None:
+        """Upgrade partially-created rule profile tables from earlier builds.
+
+        SQLite cannot add primary keys, UNIQUE constraints, or CHECK constraints to
+        an existing table. Rebuilding the table keeps old profile values where
+        possible and prevents startup/save failures when a user has already run a
+        build with an incomplete rule_profiles schema.
+        """
+        current_columns = [
+            row[1] for row in connection.execute("PRAGMA table_info(rule_profiles)")
+        ]
+        if set(RULE_PROFILE_COLUMNS).issubset(current_columns):
             return
-        profile = RuleProfile()
+
+        legacy_table = f"rule_profiles_legacy_{uuid4().hex}"
+        connection.execute(f"ALTER TABLE rule_profiles RENAME TO {legacy_table}")
+        connection.execute(RULE_PROFILE_TABLE_SQL)
+        legacy_columns = [
+            row[1] for row in connection.execute(f"PRAGMA table_info({legacy_table})")
+        ]
+        rows = (
+            connection.execute(f"SELECT {', '.join(legacy_columns)} FROM {legacy_table}").fetchall()
+            if legacy_columns
+            else []
+        )
+
+        used_names: set[str] = set()
+        used_ids: set[str] = set()
+        for index, row in enumerate(rows, start=1):
+            values = dict(zip(legacy_columns, row))
+            profile = SQLiteSchedulerRepository._rule_profile_from_legacy_row(values, index, used_names, used_ids)
+            used_names.add(profile.name.casefold())
+            used_ids.add(profile.id)
+            SQLiteSchedulerRepository._insert_rule_profile(connection, profile)
+        connection.execute(f"DROP TABLE {legacy_table}")
+
+    @staticmethod
+    def _rule_profile_from_legacy_row(
+        values: dict[str, object], index: int, used_names: set[str], used_ids: set[str]
+    ) -> RuleProfile:
+        defaults = RuleProfile()
+        name = SQLiteSchedulerRepository._legacy_text(
+            values.get("name"), f"Migriertes Regelprofil {index}"
+        )
+        original_name = name
+        suffix = index
+        while name.casefold() in used_names:
+            name = f"{original_name} {suffix}"
+            suffix += 1
+
+        profile_id = SQLiteSchedulerRepository._legacy_text(values.get("id"), str(uuid4()))
+        while profile_id in used_ids:
+            profile_id = str(uuid4())
+
+        break_after_six = SQLiteSchedulerRepository._legacy_int(
+            values.get("break_after_six_hours_minutes"), defaults.break_after_six_hours_minutes
+        )
+        break_after_nine = SQLiteSchedulerRepository._legacy_int(
+            values.get("break_after_nine_hours_minutes"), defaults.break_after_nine_hours_minutes
+        )
+        if break_after_nine < break_after_six:
+            break_after_nine = break_after_six
+
+        return RuleProfile(
+            id=profile_id,
+            name=name,
+            min_rest_hours=SQLiteSchedulerRepository._legacy_float(
+                values.get("min_rest_hours"), defaults.min_rest_hours
+            ),
+            max_daily_hours=SQLiteSchedulerRepository._legacy_positive_float(
+                values.get("max_daily_hours"), defaults.max_daily_hours
+            ),
+            break_after_six_hours_minutes=break_after_six,
+            break_after_nine_hours_minutes=break_after_nine,
+            weekly_hours_limit_is_hard=SQLiteSchedulerRepository._legacy_bool(
+                values.get("weekly_hours_limit_is_hard"), defaults.weekly_hours_limit_is_hard
+            ),
+            daily_hours_limit_is_hard=SQLiteSchedulerRepository._legacy_bool(
+                values.get("daily_hours_limit_is_hard"), defaults.daily_hours_limit_is_hard
+            ),
+            rest_time_is_hard=SQLiteSchedulerRepository._legacy_bool(
+                values.get("rest_time_is_hard"), defaults.rest_time_is_hard
+            ),
+            profile_mismatch_is_hard=SQLiteSchedulerRepository._legacy_bool(
+                values.get("profile_mismatch_is_hard"), defaults.profile_mismatch_is_hard
+            ),
+            missing_availability_is_hard=SQLiteSchedulerRepository._legacy_bool(
+                values.get("missing_availability_is_hard"), defaults.missing_availability_is_hard
+            ),
+            insufficient_break_is_hard=SQLiteSchedulerRepository._legacy_bool(
+                values.get("insufficient_break_is_hard"), defaults.insufficient_break_is_hard
+            ),
+            is_active=SQLiteSchedulerRepository._legacy_bool(values.get("is_active"), defaults.is_active),
+        )
+
+    @staticmethod
+    def _insert_rule_profile(connection: sqlite3.Connection, profile: RuleProfile) -> None:
         connection.execute(
             """
             INSERT INTO rule_profiles(
@@ -488,9 +602,55 @@ class SQLiteSchedulerRepository:
                 1 if profile.profile_mismatch_is_hard else 0,
                 1 if profile.missing_availability_is_hard else 0,
                 1 if profile.insufficient_break_is_hard else 0,
-                1,
+                1 if profile.is_active else 0,
             ),
         )
+
+    @staticmethod
+    def _legacy_text(value: object, default: str) -> str:
+        if value is None:
+            return default
+        text = str(value).strip()
+        return text or default
+
+    @staticmethod
+    def _legacy_float(value: object, default: float) -> float:
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return default
+        return numeric_value if numeric_value >= 0 else default
+
+    @staticmethod
+    def _legacy_positive_float(value: object, default: float) -> float:
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return default
+        return numeric_value if numeric_value > 0 else default
+
+    @staticmethod
+    def _legacy_int(value: object, default: int) -> int:
+        try:
+            numeric_value = int(value)
+        except (TypeError, ValueError):
+            return default
+        return numeric_value if numeric_value >= 0 else default
+
+    @staticmethod
+    def _legacy_bool(value: object, default: bool) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "ja"}
+        return bool(value)
+
+    @staticmethod
+    def _ensure_default_rule_profile(connection: sqlite3.Connection) -> None:
+        count = int(connection.execute("SELECT COUNT(*) FROM rule_profiles").fetchone()[0])
+        if count:
+            return
+        SQLiteSchedulerRepository._insert_rule_profile(connection, RuleProfile())
 
     @staticmethod
     def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
