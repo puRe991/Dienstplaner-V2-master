@@ -434,12 +434,29 @@ class SchedulerApp(tk.Tk):
         })
         tree.column("before", width=230)
         tree.column("after", width=230)
+        integrity_label = tk.Label(window, text="", bg="#F8FAFC", fg="#166534", anchor="w", justify="left", wraplength=1120)
+        integrity_label.pack(fill="x", padx=16, pady=(0, 8))
 
         def compact(value: str) -> str:
             normalized = " ".join(value.split())
             return normalized[:117] + "..." if len(normalized) > 120 else normalized
 
         def refresh() -> None:
+            integrity = self.repository.verify_audit_integrity()
+            if integrity.is_valid:
+                integrity_label.configure(
+                    text=f"Integrität geprüft: {integrity.checked_events} Audit-Einträge, keine Probleme erkannt.",
+                    bg="#DCFCE7",
+                    fg="#166534",
+                )
+            else:
+                preview = " | ".join(integrity.problems[:3])
+                suffix = f" (+{len(integrity.problems) - 3} weitere)" if len(integrity.problems) > 3 else ""
+                integrity_label.configure(
+                    text=f"⚠ Audit-Integrität verletzt: {preview}{suffix}",
+                    bg="#FEE2E2",
+                    fg="#991B1B",
+                )
             self._clear_tree(tree)
             events = self.repository.list_audit_events(500)
             if not events:
@@ -474,7 +491,7 @@ class SchedulerApp(tk.Tk):
             detail.configure(bg="#FFFFFF")
             text = tk.Text(detail, width=120, height=28, wrap="word")
             text.pack(fill="both", expand=True, padx=12, pady=12)
-            text.insert("end", f"Zeitpunkt: {event.timestamp.isoformat()}\nBenutzer: {event.user_id}\nAktion: {event.action}\nObjekt: {event.entity_type} {event.entity_id}\n\nVorher:\n{event.before or '-'}\n\nNachher:\n{event.after or '-'}")
+            text.insert("end", f"Zeitpunkt: {event.timestamp.isoformat()}\nBenutzer: {event.user_id}\nAktion: {event.action}\nObjekt: {event.entity_type} {event.entity_id}\nPrevious Hash: {event.previous_hash or '-'}\nEvent Hash: {event.event_hash or '-'}\n\nVorher:\n{event.before or '-'}\n\nNachher:\n{event.after or '-'}")
             text.configure(state="disabled")
 
         self._add_manager_buttons(window, [("Details", show_details), ("Aktualisieren", refresh)])
