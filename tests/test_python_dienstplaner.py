@@ -662,6 +662,73 @@ class DashboardStartupTests(unittest.TestCase):
         self.assertEqual("Früh Mo 08:00", SchedulerApp._employee_week_assignment_text([shift]))
 
 
+class UiActionHelperTests(unittest.TestCase):
+    def test_redact_log_value_removes_sensitive_terms_and_bounds_length(self) -> None:
+        from python_dienstplaner.app import redact_log_value
+
+        value = "Passwort=geheim Recovery-Code: ABC-123 Token=secret " + ("x" * 400)
+
+        redacted = redact_log_value(value, max_length=80)
+
+        self.assertNotIn("geheim", redacted)
+        self.assertNotIn("ABC-123", redacted)
+        self.assertNotIn("secret", redacted.lower())
+        self.assertLessEqual(len(redacted), 81)
+        self.assertTrue(redacted.endswith("…"))
+
+    def test_configure_app_logging_writes_to_given_directory_once(self) -> None:
+        from python_dienstplaner.app import configure_app_logging
+
+        with tempfile.TemporaryDirectory() as directory:
+            logger = configure_app_logging(Path(directory))
+            handler_count = len([handler for handler in logger.handlers if getattr(handler, "_dienstplaner_file_handler", False)])
+
+            same_logger = configure_app_logging(Path(directory))
+            same_handler_count = len([handler for handler in same_logger.handlers if getattr(handler, "_dienstplaner_file_handler", False)])
+            logger.info("ui_action=test event=completed detail=ok")
+
+            for handler in logger.handlers:
+                handler.flush()
+
+            self.assertIs(logger, same_logger)
+            self.assertEqual(handler_count, same_handler_count)
+            self.assertTrue((Path(directory) / "dienstplaner.log").exists())
+
+    def test_run_ui_action_handles_expected_domain_error(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        app = SchedulerApp.__new__(SchedulerApp)
+        statuses: list[str] = []
+        app._set_status = statuses.append
+        app._log_ui_info = lambda *_args, **_kwargs: None
+        app._log_ui_failure = lambda *_args, **_kwargs: None
+
+        with patch("python_dienstplaner.app.messagebox.showwarning") as showwarning:
+            app._run_ui_action("Dienstplan veröffentlichen", lambda: (_ for _ in ()).throw(ValueError("Offene Slots vorhanden")))
+
+        self.assertEqual("Dienstplan veröffentlichen läuft …", statuses[0])
+        self.assertEqual("Dienstplan veröffentlichen nicht möglich: Offene Slots vorhanden", statuses[-1])
+        showwarning.assert_called_once()
+
+    def test_run_ui_action_logs_technical_error_without_raw_message_in_dialog(self) -> None:
+        from python_dienstplaner.app import SchedulerApp
+
+        app = SchedulerApp.__new__(SchedulerApp)
+        statuses: list[str] = []
+        failures: list[tuple[str, BaseException]] = []
+        app._set_status = statuses.append
+        app._log_ui_info = lambda *_args, **_kwargs: None
+        app._log_ui_failure = lambda action, exc: failures.append((action, exc))
+
+        with patch("python_dienstplaner.app.messagebox.showerror") as showerror:
+            app._run_ui_action("Export", lambda: (_ for _ in ()).throw(OSError("/tmp/eva_export.csv nicht beschreibbar")))
+
+        self.assertEqual("Export fehlgeschlagen. Details stehen im lokalen Logfile.", statuses[-1])
+        self.assertEqual("Export", failures[0][0])
+        self.assertIsInstance(failures[0][1], OSError)
+        self.assertNotIn("eva_export", showerror.call_args.args[1])
+
+
 class SchedulerAppPersistenceTests(unittest.TestCase):
     def test_persist_changes_saves_service_and_updates_status(self) -> None:
         from python_dienstplaner.app import SchedulerApp
