@@ -6,6 +6,7 @@ import tkinter as tk
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 from tkinter import filedialog, messagebox, ttk
 
 from .licensing import LicenseCheckResult, LicenseManager
@@ -354,7 +355,7 @@ class SchedulerApp(tk.Tk):
                 self._set_status("Bitte einen Mitarbeiter auswählen.")
                 return
             if messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=window):
-                self.service.delete_employee(employee.id, user_id=self._current_user_id())
+                self._delete_employee(employee.id)
                 self._persist_changes("Mitarbeiter gelöscht.", window)
                 self._refresh_all()
                 refresh()
@@ -427,6 +428,42 @@ class SchedulerApp(tk.Tk):
 
     def _current_user_id(self) -> str:
         return "local"
+
+    def _add_employee(self, *args: Any, **kwargs: Any) -> Employee:
+        return self.service.add_employee(*args, **kwargs)
+
+    def _update_employee(self, *args: Any, **kwargs: Any) -> Employee:
+        return self.service.update_employee(*args, **kwargs)
+
+    def _delete_employee(self, employee_id: str) -> bool:
+        return self.service.delete_employee(employee_id, user_id=self._current_user_id())
+
+    def _add_absence(self, employee_id: str, start: datetime, end: datetime, reason: str = "") -> Absence:
+        return self.service.add_absence(employee_id, start, end, reason, user_id=self._current_user_id())
+
+    def _delete_absence_record(self, absence_id: str) -> bool:
+        return self.service.delete_absence(absence_id, user_id=self._current_user_id())
+
+    def _publish_week(self) -> int:
+        return self.service.publish_week(self.week_start, user_id=self._current_user_id())
+
+    def _export_schedule(self, path: str | Path, export_format: ExportFormat) -> Path:
+        return self.service.export_schedule(path, export_format, user_id=self._current_user_id())
+
+    def _export_reports(self, path: str | Path) -> Path:
+        return self.service.export_reports(path, user_id=self._current_user_id())
+
+    def _set_active_rule_profile(self, profile_id: str) -> RuleProfile:
+        return self.service.set_active_rule_profile(profile_id)
+
+    def _add_rule_profile(self, profile: RuleProfile) -> RuleProfile:
+        return self.service.add_rule_profile(profile)
+
+    def _update_rule_profile(self, profile_id: str, updated: RuleProfile) -> RuleProfile:
+        return self.service.update_rule_profile(profile_id, updated)
+
+    def _delete_rule_profile(self, profile_id: str) -> bool:
+        return self.service.delete_rule_profile(profile_id)
 
     def _open_department_manager(self) -> None:
         window = self._create_manager_window("Abteilungen verwalten", "620x480")
@@ -675,7 +712,7 @@ class SchedulerApp(tk.Tk):
             if profile is None:
                 self._set_status("Bitte ein Regelprofil auswählen.")
                 return
-            self.service.set_active_rule_profile(profile.id)
+            self._set_active_rule_profile(profile.id)
             if self._persist_changes(f"Regelprofil '{profile.name}' aktiviert.", window):
                 refresh()
 
@@ -687,7 +724,7 @@ class SchedulerApp(tk.Tk):
             if not messagebox.askyesno("Regelprofil löschen", f"Soll '{profile.name}' gelöscht werden?", parent=window):
                 return
             try:
-                self.service.delete_rule_profile(profile.id)
+                self._delete_rule_profile(profile.id)
                 if self._persist_changes("Regelprofil gelöscht.", window):
                     refresh()
             except ValueError as exc:
@@ -745,9 +782,9 @@ class SchedulerApp(tk.Tk):
                     is_active=values["active"].get(),
                 )
                 if profile is None:
-                    self.service.add_rule_profile(updated)
+                    self._add_rule_profile(updated)
                 else:
-                    self.service.update_rule_profile(profile.id, updated)
+                    self._update_rule_profile(profile.id, updated)
                 if not self._persist_changes("Regelprofil gespeichert.", dialog):
                     return
                 dialog.destroy()
@@ -1091,7 +1128,7 @@ class SchedulerApp(tk.Tk):
     def _delete_absence(self, absence_id: str) -> None:
         if not messagebox.askyesno("Abwesenheit löschen", "Soll diese Abwesenheit gelöscht werden?", parent=self):
             return
-        if self.service.delete_absence(absence_id, user_id=self._current_user_id()):
+        if self._delete_absence_record(absence_id):
             if not self._persist_changes("Abwesenheit gelöscht."):
                 return
             self._refresh_all()
@@ -1230,7 +1267,7 @@ class SchedulerApp(tk.Tk):
                 wage = float(values["wage"].get().replace(",", "."))
                 break_minutes = int(values["break"].get())
                 if employee is None:
-                    self.service.add_employee(
+                    self._add_employee(
                         values["name"].get(),
                         values["department"].get(),
                         values["qualification"].get(),
@@ -1242,7 +1279,7 @@ class SchedulerApp(tk.Tk):
                         user_id=self._current_user_id(),
                     )
                 else:
-                    self.service.update_employee(
+                    self._update_employee(
                         employee.id,
                         values["name"].get(),
                         values["department"].get(),
@@ -1265,7 +1302,7 @@ class SchedulerApp(tk.Tk):
             def delete_employee() -> None:
                 if not messagebox.askyesno("Mitarbeiter löschen", f"Soll {employee.name} wirklich gelöscht werden?", parent=dialog):
                     return
-                self.service.delete_employee(employee.id, user_id=self._current_user_id())
+                self._delete_employee(employee.id)
                 if not self._persist_changes("Mitarbeiter gelöscht.", dialog):
                     return
                 dialog.destroy()
@@ -1305,7 +1342,7 @@ class SchedulerApp(tk.Tk):
         def save_absence() -> None:
             try:
                 employee_id = employee_options[values["employee"].get()]
-                self.service.add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get(), user_id=self._current_user_id())
+                self._add_absence(employee_id, self._parse_datetime(values["start"].get()), self._parse_datetime(values["end"].get()), values["reason"].get())
                 if not self._persist_changes("Abwesenheit gespeichert.", dialog):
                     return
                 dialog.destroy()
@@ -1422,7 +1459,7 @@ class SchedulerApp(tk.Tk):
         if not path:
             return
         try:
-            output = self.service.export_reports(path, user_id=self._current_user_id())
+            output = self._export_reports(path)
             self._persist_changes(f"Berichte exportiert: {output}")
         except OSError as exc:
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
@@ -1443,7 +1480,7 @@ class SchedulerApp(tk.Tk):
         else:
             export_format = ExportFormat.CSV
         try:
-            output = self.service.export_schedule(path, export_format, user_id=self._current_user_id())
+            output = self._export_schedule(path, export_format)
             self._persist_changes(f"Exportiert: {output}")
         except OSError as exc:
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
@@ -1463,7 +1500,7 @@ class SchedulerApp(tk.Tk):
 
     def _publish_schedule(self) -> None:
         try:
-            count = self.service.publish_week(self.week_start, user_id=self._current_user_id())
+            count = self._publish_week()
             if not self._persist_changes(f"Dienstplan veröffentlicht: {count} Schichten gespeichert."):
                 return
             self._refresh_all()

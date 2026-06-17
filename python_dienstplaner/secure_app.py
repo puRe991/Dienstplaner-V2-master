@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 import tkinter as tk
 from tkinter import messagebox
 
 from .app import SchedulerApp
+from .application_service import SchedulerApplicationService
 from .auth import Permission, User, UserRole
 from .auth_ui import authenticate_on_start, user_label, user_has_permission
 from .repository import SQLiteSchedulerRepository
@@ -20,12 +22,14 @@ class AuthenticatedSchedulerApp(SchedulerApp):
 
     def __init__(self, service, repository: SQLiteSchedulerRepository, current_user: User | None = None) -> None:
         self.current_user: User | None = current_user
+        self.application_service = SchedulerApplicationService(service, current_user)
         super().__init__(service, repository)
 
     def _configure_styles(self) -> None:
         super()._configure_styles()
         if self.current_user is None:
             self.current_user = authenticate_on_start(self, self.repository)
+            self.application_service.set_current_user(self.current_user)
 
     def _build_header(self) -> None:
         super()._build_header()
@@ -44,14 +48,54 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         return user_has_permission(user, permission)
 
     def _require_permission(self, permission: Permission, action: str, parent: tk.Misc | None = None) -> bool:
-        if self._user_has_permission(self.current_user, permission):
+        if self.application_service.has_permission(permission):
             return True
         messagebox.showwarning("Keine Berechtigung", f"Sie haben keine Berechtigung für: {action}", parent=parent or self)
         self._set_status(f"Aktion gesperrt: {action}")
         return False
 
     def _current_user_id(self) -> str:
-        return self.current_user.id if self.current_user else "local"
+        return self.application_service.audit_context.user_id
+
+
+    def _add_employee(self, *args: Any, **kwargs: Any):
+        kwargs.pop("user_id", None)
+        return self.application_service.add_employee(*args, **kwargs)
+
+    def _update_employee(self, *args: Any, **kwargs: Any):
+        kwargs.pop("user_id", None)
+        return self.application_service.update_employee(*args, **kwargs)
+
+    def _delete_employee(self, employee_id: str) -> bool:
+        return self.application_service.delete_employee(employee_id)
+
+    def _add_absence(self, *args: Any, **kwargs: Any):
+        kwargs.pop("user_id", None)
+        return self.application_service.add_absence(*args, **kwargs)
+
+    def _delete_absence_record(self, absence_id: str) -> bool:
+        return self.application_service.delete_absence(absence_id)
+
+    def _publish_week(self) -> int:
+        return self.application_service.publish_week(self.week_start)
+
+    def _export_schedule(self, path, export_format):
+        return self.application_service.export_schedule(path, export_format)
+
+    def _export_reports(self, path):
+        return self.application_service.export_reports(path)
+
+    def _set_active_rule_profile(self, profile_id: str):
+        return self.application_service.set_active_rule_profile(profile_id)
+
+    def _add_rule_profile(self, profile):
+        return self.application_service.add_rule_profile(profile)
+
+    def _update_rule_profile(self, profile_id: str, updated):
+        return self.application_service.update_rule_profile(profile_id, updated)
+
+    def _delete_rule_profile(self, profile_id: str) -> bool:
+        return self.application_service.delete_rule_profile(profile_id)
 
     def _open_employee_manager(self) -> None:
         if self._require_permission(Permission.MANAGE_EMPLOYEES, "Mitarbeiter bearbeiten"):
@@ -98,8 +142,7 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         if not self._require_permission(Permission.PUBLISH_SCHEDULE, "Dienstplan veröffentlichen"):
             return
         try:
-            published_by = self.current_user.display_name if self.current_user else "Lokaler Benutzer"
-            count = self.service.publish_week(self.week_start, published_by, user_id=self._current_user_id())
+            count = self._publish_week()
             if not self._persist_changes(f"Dienstplan veröffentlicht: {count} Schichten gespeichert."):
                 return
             self._refresh_all()
