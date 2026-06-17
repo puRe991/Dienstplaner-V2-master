@@ -784,6 +784,31 @@ class UserAuthenticationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 repository.create_user("viewer", "kurz", UserRole.VIEWER)
 
+    def test_rejects_empty_trivial_and_single_group_passwords(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+
+            invalid_passwords = ["            ", "password", "admin123", "12345678", "aaaaaaaaaaaa"]
+            for password in invalid_passwords:
+                with self.subTest(password=password):
+                    with self.assertRaises(ValueError):
+                        repository.create_user(f"user-{len(password)}-{ord(password[0])}", password, UserRole.ADMIN)
+
+    def test_accepts_valid_passwords_for_user_creation_and_admin_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+
+            user = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            recovery_code = repository.create_admin_recovery_code()
+            recovered_user, _next_code = repository.reset_admin_with_recovery_code(
+                recovery_code,
+                "admin-neu",
+                "Noch sicherer 2026!",
+            )
+
+            self.assertEqual(UserRole.ADMIN, user.role)
+            self.assertEqual(UserRole.ADMIN, recovered_user.role)
+
     def test_admin_recovery_code_creates_new_admin_and_rotates_code(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database_path = Path(directory) / "auth.sqlite3"
