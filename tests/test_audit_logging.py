@@ -122,6 +122,72 @@ class AuditLoggingTests(unittest.TestCase):
         self.assertTrue(json.loads(assignment_deletes[0].before)["assigned"])
         self.assertFalse(json.loads(assignment_deletes[0].after)["assigned"])
 
+    def test_verify_audit_integrity_accepts_valid_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            service.update_employee(employee.id, "Eva Neu", "Kasse", "Kasse", 40, "Zentrale", 16.0, True)
+
+            repository.save(service)
+            result = repository.verify_audit_integrity()
+
+        self.assertTrue(result.is_valid, result.problems)
+        self.assertEqual(2, result.checked_events)
+        self.assertEqual([], result.problems)
+
+    def test_verify_audit_integrity_detects_tampered_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "test.sqlite3"
+            repository = SQLiteSchedulerRepository(database_path)
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            service.update_employee(employee.id, "Eva Neu", "Kasse", "Kasse", 40, "Zentrale", 16.0, True)
+            repository.save(service)
+
+            with repository._connect() as connection:
+                connection.execute("UPDATE audit_events SET after = ? WHERE action = ?", ('{"name":"Manipuliert"}', "employee.updated"))
+            result = repository.verify_audit_integrity()
+
+        self.assertFalse(result.is_valid)
+        self.assertTrue(any("verändert" in problem for problem in result.problems))
+
+    def test_verify_audit_integrity_detects_deleted_event(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+            service.assign(employee.id, shift.id)
+            repository.save(service)
+
+            with repository._connect() as connection:
+                connection.execute("DELETE FROM audit_events WHERE action = ?", ("shift.created",))
+            result = repository.verify_audit_integrity()
+
+        self.assertFalse(result.is_valid)
+        self.assertTrue(any("vorherigen Hash" in problem for problem in result.problems))
+
+    def test_verify_audit_integrity_detects_reordered_events(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+            shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+            service.assign(employee.id, shift.id)
+            repository.save(service)
+
+            first_timestamp = repository.list_audit_events(1000)[-1].timestamp
+            with repository._connect() as connection:
+                connection.execute(
+                    "UPDATE audit_events SET timestamp = ? WHERE action = ?",
+                    (first_timestamp.replace(year=first_timestamp.year - 1).isoformat(), "assignment.created"),
+                )
+            result = repository.verify_audit_integrity()
+
+        self.assertFalse(result.is_valid)
+        self.assertTrue(any("vorherigen Hash" in problem or "verändert" in problem for problem in result.problems))
+
 
 if __name__ == "__main__":
     unittest.main()

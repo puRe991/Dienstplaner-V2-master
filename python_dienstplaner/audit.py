@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timedelta
@@ -10,11 +11,21 @@ from uuid import uuid4
 from .models import Absence, AssignmentResult, Employee, ExportFormat, Shift
 
 DEFAULT_AUDIT_LOAD_LIMIT = 500
+GENESIS_AUDIT_HASH = ""
+
+
+@dataclass(frozen=True)
+class AuditIntegrityResult:
+    """Result of the audit hash-chain verification."""
+
+    is_valid: bool
+    checked_events: int
+    problems: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class AuditEvent:
-    """Immutable audit entry storing actor, action, target and JSON snapshots."""
+    """Immutable audit entry storing actor, action, target, JSON snapshots and hash-chain data."""
 
     timestamp: datetime
     user_id: str
@@ -23,6 +34,8 @@ class AuditEvent:
     entity_id: str
     before: str = ""
     after: str = ""
+    previous_hash: str = GENESIS_AUDIT_HASH
+    event_hash: str = ""
     id: str = field(default_factory=lambda: str(uuid4()))
 
     def __post_init__(self) -> None:
@@ -38,6 +51,40 @@ class AuditEvent:
         object.__setattr__(self, "entity_id", str(self.entity_id or "").strip())
         object.__setattr__(self, "before", str(self.before or ""))
         object.__setattr__(self, "after", str(self.after or ""))
+        object.__setattr__(self, "previous_hash", str(self.previous_hash or ""))
+        object.__setattr__(self, "event_hash", str(self.event_hash or ""))
+
+
+def calculate_audit_event_hash(
+    *,
+    previous_hash: str,
+    timestamp: datetime,
+    user_id: str,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    before: str,
+    after: str,
+) -> str:
+    """Return a deterministic SHA-256 hash for an audit event.
+
+    The event id is intentionally not part of the hash because ids are storage
+    metadata. The protected payload is exactly the business audit content plus
+    the previous link in the chain.
+    """
+
+    payload = [
+        str(previous_hash or ""),
+        timestamp.isoformat(),
+        str(user_id or "system"),
+        str(action or ""),
+        str(entity_type or ""),
+        str(entity_id or ""),
+        str(before or ""),
+        str(after or ""),
+    ]
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def audit_json(value: object | None) -> str:
@@ -141,14 +188,31 @@ def install_service_audit(service_cls: type[Any]) -> None:
         self.audit_events: list[AuditEvent] = []
 
     def record_audit_event(self, action, entity_type, entity_id, before, after, *, user_id="system") -> AuditEvent:
-        event = AuditEvent(
-            timestamp=datetime.now(),
-            user_id=str(user_id or "system"),
+        timestamp = datetime.now()
+        normalized_user_id = str(user_id or "system")
+        before_json = audit_json(before)
+        after_json = audit_json(after)
+        previous_hash = max(self.audit_events, key=lambda event: event.timestamp).event_hash if self.audit_events else GENESIS_AUDIT_HASH
+        event_hash = calculate_audit_event_hash(
+            previous_hash=previous_hash,
+            timestamp=timestamp,
+            user_id=normalized_user_id,
             action=action,
             entity_type=entity_type,
             entity_id=str(entity_id),
-            before=audit_json(before),
-            after=audit_json(after),
+            before=before_json,
+            after=after_json,
+        )
+        event = AuditEvent(
+            timestamp=timestamp,
+            user_id=normalized_user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=str(entity_id),
+            before=before_json,
+            after=after_json,
+            previous_hash=previous_hash,
+            event_hash=event_hash,
         )
         self.audit_events.append(event)
         return event
@@ -312,6 +376,38 @@ def install_service_audit(service_cls: type[Any]) -> None:
     service_cls._audit_installed = True
 
 
+def _backfill_audit_hashes(connection) -> None:
+    rows = connection.execute(
+        """
+        SELECT rowid, timestamp, user_id, action, entity_type, entity_id, before, after, previous_hash, event_hash
+        FROM audit_events
+        ORDER BY timestamp ASC, rowid ASC
+        """
+    ).fetchall()
+    previous_hash = GENESIS_AUDIT_HASH
+    for row in rows:
+        rowid, timestamp_text, user_id, action, entity_type, entity_id, before, after, stored_previous_hash, stored_event_hash = row
+        if stored_previous_hash and stored_event_hash:
+            previous_hash = stored_event_hash
+            continue
+        timestamp = datetime.fromisoformat(timestamp_text)
+        event_hash = calculate_audit_event_hash(
+            previous_hash=previous_hash,
+            timestamp=timestamp,
+            user_id=user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            before=before or "",
+            after=after or "",
+        )
+        connection.execute(
+            "UPDATE audit_events SET previous_hash = ?, event_hash = ? WHERE rowid = ?",
+            (previous_hash, event_hash, rowid),
+        )
+        previous_hash = event_hash
+
+
 def install_repository_audit(repository_cls: type[Any]) -> None:
     if getattr(repository_cls, "_audit_installed", False):
         return
@@ -333,12 +429,20 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
                     entity_type TEXT NOT NULL CHECK(length(trim(entity_type)) > 0),
                     entity_id TEXT NOT NULL,
                     before TEXT NOT NULL DEFAULT '',
-                    after TEXT NOT NULL DEFAULT ''
+                    after TEXT NOT NULL DEFAULT '',
+                    previous_hash TEXT NOT NULL DEFAULT '',
+                    event_hash TEXT NOT NULL DEFAULT ''
                 );
                 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp ON audit_events(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id);
                 """
             )
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(audit_events)").fetchall()}
+            if "previous_hash" not in columns:
+                connection.execute("ALTER TABLE audit_events ADD COLUMN previous_hash TEXT NOT NULL DEFAULT ''")
+            if "event_hash" not in columns:
+                connection.execute("ALTER TABLE audit_events ADD COLUMN event_hash TEXT NOT NULL DEFAULT ''")
+            _backfill_audit_hashes(connection)
 
     def save(self, service):
         original_save(self, service)
@@ -349,9 +453,9 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
             connection.executemany(
                 """
                 INSERT OR IGNORE INTO audit_events(
-                    id, timestamp, user_id, action, entity_type, entity_id, before, after
+                    id, timestamp, user_id, action, entity_type, entity_id, before, after, previous_hash, event_hash
                 )
-                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -363,6 +467,8 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
                         event.entity_id,
                         event.before,
                         event.after,
+                        event.previous_hash,
+                        event.event_hash,
                     )
                     for event in audit_events
                 ],
@@ -380,7 +486,7 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, timestamp, user_id, action, entity_type, entity_id, before, after
+                SELECT id, timestamp, user_id, action, entity_type, entity_id, before, after, previous_hash, event_hash
                 FROM audit_events
                 ORDER BY timestamp DESC, rowid DESC
                 LIMIT ?
@@ -397,6 +503,8 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
                 entity_id=row[5],
                 before=row[6] or "",
                 after=row[7] or "",
+                previous_hash=row[8] or "",
+                event_hash=row[9] or "",
             )
             for row in rows
         ]
@@ -404,5 +512,48 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
     repository_cls._initialize = _initialize
     repository_cls.save = save
     repository_cls.load = load
+
+    def verify_audit_integrity(self) -> AuditIntegrityResult:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, timestamp, user_id, action, entity_type, entity_id, before, after, previous_hash, event_hash
+                FROM audit_events
+                ORDER BY timestamp ASC, rowid ASC
+                """
+            ).fetchall()
+
+        problems: list[str] = []
+        expected_previous_hash = GENESIS_AUDIT_HASH
+        seen_hashes: set[str] = set()
+        for index, row in enumerate(rows, start=1):
+            event_id, timestamp_text, user_id, action, entity_type, entity_id, before, after, previous_hash, event_hash = row
+            try:
+                timestamp = datetime.fromisoformat(timestamp_text)
+            except ValueError:
+                problems.append(f"Eintrag {index} ({event_id}) hat einen ungültigen Zeitstempel.")
+                expected_previous_hash = str(event_hash or "")
+                continue
+            if previous_hash != expected_previous_hash:
+                problems.append(f"Eintrag {index} ({event_id}) verweist auf einen unerwarteten vorherigen Hash.")
+            calculated_hash = calculate_audit_event_hash(
+                previous_hash=previous_hash or "",
+                timestamp=timestamp,
+                user_id=user_id,
+                action=action,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                before=before or "",
+                after=after or "",
+            )
+            if event_hash != calculated_hash:
+                problems.append(f"Eintrag {index} ({event_id}) wurde nachträglich verändert oder fehlerhaft gespeichert.")
+            if event_hash in seen_hashes:
+                problems.append(f"Eintrag {index} ({event_id}) verwendet einen doppelten Event-Hash.")
+            seen_hashes.add(event_hash)
+            expected_previous_hash = str(event_hash or "")
+        return AuditIntegrityResult(is_valid=not problems, checked_events=len(rows), problems=problems)
+
     repository_cls.list_audit_events = list_audit_events
+    repository_cls.verify_audit_integrity = verify_audit_integrity
     repository_cls._audit_installed = True
