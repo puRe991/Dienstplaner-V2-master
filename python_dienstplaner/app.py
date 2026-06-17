@@ -1,17 +1,72 @@
 from __future__ import annotations
 
 import calendar
+import logging
+import os
+import re
 import sqlite3
+import sys
 import tkinter as tk
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from typing import Callable
 
 from .licensing import LicenseCheckResult, LicenseManager
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
+
+
+SENSITIVE_LOG_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?i)(password|passwort|recovery[-_ ]?code|wiederherstellungscode|secret|token)\s*[:=]\s*\S+"),
+    re.compile(r"(?i)(password|passwort|recovery[-_ ]?code|wiederherstellungscode|secret|token)"),
+)
+
+
+def app_data_dir() -> Path:
+    """Return a platform-appropriate local app data directory for logs and diagnostics."""
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        return base / "Dienstplanung Pro"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Dienstplanung Pro"
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "dienstplanung-pro"
+
+
+def redact_log_value(value: object, max_length: int = 240) -> str:
+    """Create a bounded diagnostic string without known secrets or bulky exports."""
+    text = str(value)
+    for pattern in SENSITIVE_LOG_PATTERNS:
+        text = pattern.sub("[REDACTED]", text)
+    text = " ".join(text.split())
+    if len(text) > max_length:
+        return f"{text[:max_length]}…"
+    return text
+
+
+def configure_app_logging(log_dir: Path | None = None) -> logging.Logger:
+    """Configure local file logging once; never logs passwords or full exports by design."""
+    logger = logging.getLogger("python_dienstplaner.ui")
+    logger.setLevel(logging.INFO)
+    target_dir = log_dir or app_data_dir()
+    target_file = target_dir / "dienstplaner.log"
+    for existing_handler in logger.handlers:
+        if getattr(existing_handler, "_dienstplaner_file_handler", False) and getattr(existing_handler, "baseFilename", None) == str(target_file):
+            return logger
+    if log_dir is None and any(getattr(handler, "_dienstplaner_file_handler", False) for handler in logger.handlers):
+        return logger
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(target_file, encoding="utf-8")
+    except OSError:
+        handler = logging.NullHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    handler._dienstplaner_file_handler = True  # type: ignore[attr-defined]
+    logger.addHandler(handler)
+    logger.propagate = False
+    return logger
 
 
 @dataclass(frozen=True)
@@ -59,6 +114,7 @@ class SchedulerApp(tk.Tk):
         self.schedule_cells: dict[tuple[str, int], tk.Label] = {}
         self.sidebar_buttons: dict[str, tk.Button] = {}
         self.active_view = "Dienstplan"
+        self.ui_logger = configure_app_logging()
 
         self.title("Dienstplanung Pro")
         self.geometry("1440x840")
@@ -1405,13 +1461,62 @@ class SchedulerApp(tk.Tk):
             self.repository.save(self.service)
         except (OSError, sqlite3.Error) as exc:
             self._set_status("Speichern fehlgeschlagen – Änderungen sind nur bis zum Beenden im Speicher.")
+            self._log_ui_failure("Speichern", exc)
             messagebox.showerror("Speichern fehlgeschlagen", str(exc), parent=parent or self)
             return False
         self._set_status(success_message)
         return True
 
+    def _run_ui_action(self, action_name: str, callback: Callable[[], None]) -> None:
+        """Run a UI action with consistent status, user errors and diagnostics.
+
+        ValueError represents expected domain validation. Technical failures are
+        logged locally with redacted messages and shown with a generic hint so
+        sensitive data from imports, exports or credentials does not leak.
+        """
+        self._set_status(f"{action_name} läuft …")
+        try:
+            callback()
+        except ValueError as exc:
+            message = redact_log_value(exc)
+            self._set_status(f"{action_name} nicht möglich: {message}")
+            self._log_ui_info(action_name, "expected_error", message)
+            messagebox.showwarning(action_name, message, parent=self)
+        except (OSError, sqlite3.Error) as exc:
+            self._set_status(f"{action_name} fehlgeschlagen. Details stehen im lokalen Logfile.")
+            self._log_ui_failure(action_name, exc)
+            messagebox.showerror(
+                f"{action_name} fehlgeschlagen",
+                "Die Aktion konnte wegen eines technischen Fehlers nicht abgeschlossen werden. "
+                "Bitte prüfen Sie das lokale Logfile oder versuchen Sie es erneut.",
+                parent=self,
+            )
+        except Exception as exc:
+            self._set_status(f"{action_name} fehlgeschlagen. Details stehen im lokalen Logfile.")
+            self._log_ui_failure(action_name, exc)
+            messagebox.showerror(
+                f"{action_name} fehlgeschlagen",
+                "Ein unerwarteter Fehler ist aufgetreten. Bitte prüfen Sie das lokale Logfile.",
+                parent=self,
+            )
+        else:
+            self._log_ui_info(action_name, "completed", "ok")
+
+    def _log_ui_info(self, action_name: str, event: str, detail: str) -> None:
+        logger = self.__dict__.get("ui_logger") or configure_app_logging()
+        logger.info("ui_action=%s event=%s detail=%s", redact_log_value(action_name, 80), event, redact_log_value(detail))
+
+    def _log_ui_failure(self, action_name: str, exc: BaseException) -> None:
+        logger = self.__dict__.get("ui_logger") or configure_app_logging()
+        logger.exception(
+            "ui_action=%s error_type=%s error=%s",
+            redact_log_value(action_name, 80),
+            type(exc).__name__,
+            redact_log_value(exc),
+        )
+
     def _save(self) -> None:
-        self._persist_changes("Dienstplan gespeichert.")
+        self._run_ui_action("Speichern", lambda: self._persist_changes("Dienstplan gespeichert."))
 
     def _export_reports_csv(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -1421,11 +1526,11 @@ class SchedulerApp(tk.Tk):
         )
         if not path:
             return
-        try:
+        def export_reports() -> None:
             output = self.service.export_reports(path, user_id=self._current_user_id())
             self._persist_changes(f"Berichte exportiert: {output}")
-        except OSError as exc:
-            messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
+
+        self._run_ui_action("Berichte exportieren", export_reports)
 
     def _export_csv(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -1442,35 +1547,33 @@ class SchedulerApp(tk.Tk):
             export_format = ExportFormat.PDF_TEXT
         else:
             export_format = ExportFormat.CSV
-        try:
+        def export_schedule() -> None:
             output = self.service.export_schedule(path, export_format, user_id=self._current_user_id())
             self._persist_changes(f"Exportiert: {output}")
-        except OSError as exc:
-            messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
+
+        self._run_ui_action("Dienstplan exportieren", export_schedule)
 
     def _import_forecast(self) -> None:
         path = filedialog.askopenfilename(title="Forecast CSV importieren", filetypes=[("CSV", "*.csv"), ("Alle Dateien", "*.*")])
         if not path:
             return
-        try:
+        def import_forecast() -> None:
             forecasts = ForecastImportService().import_csv(path)
             added = self.service.add_forecasts(forecasts)
             if not self._persist_changes(f"{len(forecasts)} Forecast-Zeilen importiert, {added} neu gespeichert."):
                 return
             self._refresh_all()
-        except (OSError, ValueError) as exc:
-            messagebox.showerror("Forecast-Import fehlgeschlagen", str(exc), parent=self)
+
+        self._run_ui_action("Forecast importieren", import_forecast)
 
     def _publish_schedule(self) -> None:
-        try:
+        def publish() -> None:
             count = self.service.publish_week(self.week_start, user_id=self._current_user_id())
             if not self._persist_changes(f"Dienstplan veröffentlicht: {count} Schichten gespeichert."):
                 return
             self._refresh_all()
-        except ValueError as exc:
-            messagebox.showwarning("Dienstplan prüfen", str(exc), parent=self)
-        except OSError as exc:
-            messagebox.showerror("Veröffentlichung fehlgeschlagen", str(exc), parent=self)
+
+        self._run_ui_action("Dienstplan veröffentlichen", publish)
 
     def _apply_search(self) -> None:
         self._refresh_schedule_grid()
