@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
@@ -425,41 +426,106 @@ class SchedulerService:
             self.departments.sort(key=str.casefold)
 
 
+@dataclass(frozen=True)
+class ForecastImportError:
+    line_number: int
+    reason: str
+
+
+@dataclass(frozen=True)
+class ForecastImportResult:
+    forecasts: list[RevenueForecast]
+    errors: list[ForecastImportError]
+
+    @property
+    def imported_count(self) -> int:
+        return len(self.forecasts)
+
+    @property
+    def skipped_count(self) -> int:
+        return len(self.errors)
+
+
 class ForecastImportService:
-    def import_csv(self, path: str | Path) -> List[RevenueForecast]:
+    REQUIRED_COLUMNS = ("FilialeId", "Filiale", "Datum", "Umsatz", "Kunden")
+
+    def import_csv(self, path: str | Path) -> ForecastImportResult:
         input_path = Path(path)
         if not input_path.exists() or not input_path.is_file():
             raise FileNotFoundError(f"Forecast-Datei wurde nicht gefunden: {input_path}")
 
-        result: list[RevenueForecast] = []
+        forecasts: list[RevenueForecast] = []
+        errors: list[ForecastImportError] = []
         with input_path.open("r", newline="", encoding="utf-8-sig") as handle:
-            reader = csv.reader(handle, delimiter=";")
-            header = next(reader, None)
-            if header is None:
+            reader = csv.DictReader(handle, delimiter=";")
+            if reader.fieldnames is None:
                 raise ValueError("Forecast-Datei ist leer.")
-            for row in reader:
-                forecast = self._parse_row(row)
-                if forecast is not None:
-                    result.append(forecast)
-        if not result:
-            raise ValueError("Forecast-Datei enthält keine gültigen Datenzeilen.")
-        return result
+
+            missing_columns = [column for column in self.REQUIRED_COLUMNS if column not in reader.fieldnames]
+            if missing_columns:
+                return ForecastImportResult(
+                    forecasts=[],
+                    errors=[ForecastImportError(1, f"Fehlende Spalten: {', '.join(missing_columns)}")],
+                )
+
+            for line_number, row in enumerate(reader, start=2):
+                try:
+                    forecasts.append(self._parse_row(row))
+                except ValueError as exc:
+                    errors.append(ForecastImportError(line_number, str(exc)))
+        return ForecastImportResult(forecasts=forecasts, errors=errors)
+
+    @classmethod
+    def _parse_row(cls, row: dict[str, str | None]) -> RevenueForecast:
+        branch = cls._required_text(row, "Filiale")
+        if not branch:
+            raise ValueError("Filiale ist leer.")
+
+        branch_id_text = cls._required_text(row, "FilialeId")
+        try:
+            branch_id = int(branch_id_text)
+        except ValueError as exc:
+            raise ValueError("FilialeId ist keine gültige Ganzzahl.") from exc
+
+        try:
+            date = _parse_date(cls._required_text(row, "Datum"))
+        except ValueError as exc:
+            raise ValueError("Datum ist ungültig.") from exc
+
+        revenue = cls._parse_decimal(cls._required_text(row, "Umsatz"), "Umsatz")
+        if revenue < 0:
+            raise ValueError("Umsatz darf nicht negativ sein.")
+
+        customers_text = cls._required_text(row, "Kunden")
+        try:
+            expected_customers = int(customers_text)
+        except ValueError as exc:
+            raise ValueError("Kunden ist keine gültige Ganzzahl.") from exc
+        if expected_customers < 0:
+            raise ValueError("Kunden darf nicht negativ sein.")
+
+        return RevenueForecast(
+            branch_id=branch_id,
+            branch=branch,
+            date=date,
+            expected_revenue=revenue,
+            expected_customers=expected_customers,
+        )
 
     @staticmethod
-    def _parse_row(row: list[str]) -> RevenueForecast | None:
-        if len(row) < 5:
-            return None
+    def _required_text(row: dict[str, str | None], column: str) -> str:
+        value = row.get(column)
+        if value is None:
+            raise ValueError(f"Spalte {column} fehlt in der Zeile.")
+        return value.strip()
+
+    @staticmethod
+    def _parse_decimal(value: str, column: str) -> float:
+        normalized = value.replace(".", "").replace(",", ".")
         try:
-            revenue = float(row[3].replace(".", "").replace(",", "."))
-            return RevenueForecast(
-                branch_id=int(row[0]),
-                branch=row[1].strip(),
-                date=_parse_date(row[2]),
-                expected_revenue=revenue,
-                expected_customers=int(row[4]),
-            )
-        except (TypeError, ValueError):
-            return None
+            return float(normalized)
+        except ValueError as exc:
+            raise ValueError(f"{column} hat ein ungültiges Zahlenformat.") from exc
 
 
 def _parse_date(value: str) -> datetime:

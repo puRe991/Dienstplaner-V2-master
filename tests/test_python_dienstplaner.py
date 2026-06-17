@@ -468,11 +468,51 @@ class ForecastImportTests(unittest.TestCase):
             path = Path(directory) / "forecast.csv"
             path.write_text("FilialeId;Filiale;Datum;Umsatz;Kunden\n1;Zentrale;01.01.2026;1.234,50;120\n", encoding="utf-8")
 
-            forecasts = ForecastImportService().import_csv(path)
+            result = ForecastImportService().import_csv(path)
 
-        self.assertEqual(1, len(forecasts))
-        self.assertEqual(1234.50, forecasts[0].expected_revenue)
-        self.assertEqual(120, forecasts[0].expected_customers)
+        self.assertEqual(1, result.imported_count)
+        self.assertEqual(0, result.skipped_count)
+        self.assertEqual(1234.50, result.forecasts[0].expected_revenue)
+        self.assertEqual(120, result.forecasts[0].expected_customers)
+
+    def test_collects_errors_for_partially_invalid_forecast_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecast.csv"
+            path.write_text(
+                "FilialeId;Filiale;Datum;Umsatz;Kunden\n"
+                "1;Zentrale;01.01.2026;1.234,50;120\n"
+                "2;Nord;31.02.2026;100,00;10\n"
+                "3;Süd;-2026-01-03;100,00;10\n"
+                "4;West;03.01.2026;-1,00;10\n"
+                "5;Ost;04.01.2026;1,00;-10\n"
+                "6;;05.01.2026;1,00;10\n"
+                "7;Mitte;06.01.2026;abc;10\n",
+                encoding="utf-8",
+            )
+
+            result = ForecastImportService().import_csv(path)
+
+        self.assertEqual(1, result.imported_count)
+        self.assertEqual(6, result.skipped_count)
+        self.assertEqual([1], [forecast.branch_id for forecast in result.forecasts])
+        self.assertEqual([3, 4, 5, 6, 7, 8], [error.line_number for error in result.errors])
+        self.assertTrue(any("Datum ist ungültig" in error.reason for error in result.errors))
+        self.assertTrue(any("Umsatz darf nicht negativ" in error.reason for error in result.errors))
+        self.assertTrue(any("Kunden darf nicht negativ" in error.reason for error in result.errors))
+        self.assertTrue(any("Filiale ist leer" in error.reason for error in result.errors))
+        self.assertTrue(any("Umsatz hat ein ungültiges Zahlenformat" in error.reason for error in result.errors))
+
+    def test_reports_missing_forecast_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecast.csv"
+            path.write_text("FilialeId;Filiale;Datum;Umsatz\n1;Zentrale;01.01.2026;1.234,50\n", encoding="utf-8")
+
+            result = ForecastImportService().import_csv(path)
+
+        self.assertEqual(0, result.imported_count)
+        self.assertEqual(1, result.skipped_count)
+        self.assertEqual(1, result.errors[0].line_number)
+        self.assertIn("Fehlende Spalten: Kunden", result.errors[0].reason)
 
 
 
@@ -730,8 +770,8 @@ class PublishingAndForecastTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
             service = SchedulerService()
-            forecasts = ForecastImportService().import_csv(_write_forecast(Path(directory) / "forecast.csv"))
-            service.add_forecasts(forecasts)
+            result = ForecastImportService().import_csv(_write_forecast(Path(directory) / "forecast.csv"))
+            service.add_forecasts(result.forecasts)
             repository.save(service)
 
             loaded = repository.load()

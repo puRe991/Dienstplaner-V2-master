@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 from .licensing import LicenseCheckResult, LicenseManager
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
 from .repository import SQLiteSchedulerRepository
-from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
+from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportError, ForecastImportService, SchedulerService
 
 
 @dataclass(frozen=True)
@@ -1453,13 +1453,36 @@ class SchedulerApp(tk.Tk):
         if not path:
             return
         try:
-            forecasts = ForecastImportService().import_csv(path)
-            added = self.service.add_forecasts(forecasts)
-            if not self._persist_changes(f"{len(forecasts)} Forecast-Zeilen importiert, {added} neu gespeichert."):
-                return
-            self._refresh_all()
+            result = ForecastImportService().import_csv(path)
+            added = self.service.add_forecasts(result.forecasts) if result.forecasts else 0
+            summary = self._format_forecast_import_summary(result.imported_count, added, result.errors)
+            if result.forecasts:
+                if not self._persist_changes(summary):
+                    return
+                self._refresh_all()
+                if result.errors:
+                    messagebox.showwarning("Forecast-Import teilweise fehlgeschlagen", summary, parent=self)
+                else:
+                    messagebox.showinfo("Forecast-Import abgeschlossen", summary, parent=self)
+            else:
+                messagebox.showwarning("Forecast-Import ohne gültige Daten", summary, parent=self)
         except (OSError, ValueError) as exc:
             messagebox.showerror("Forecast-Import fehlgeschlagen", str(exc), parent=self)
+
+    @staticmethod
+    def _format_forecast_import_summary(imported_count: int, added_count: int, errors: list[ForecastImportError]) -> str:
+        lines = [
+            f"{imported_count} Forecast-Zeilen importiert.",
+            f"{added_count} Forecast-Zeilen neu gespeichert oder ersetzt.",
+            f"{len(errors)} Zeilen übersprungen.",
+        ]
+        if errors:
+            lines.append("")
+            lines.append("Fehlerhafte Zeilen:")
+            lines.extend(f"Zeile {error.line_number}: {error.reason}" for error in errors[:10])
+            if len(errors) > 10:
+                lines.append(f"… und {len(errors) - 10} weitere Fehler.")
+        return "\n".join(lines)
 
     def _publish_schedule(self) -> None:
         try:
