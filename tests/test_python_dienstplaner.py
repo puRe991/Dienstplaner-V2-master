@@ -612,6 +612,31 @@ class DashboardStartupTests(unittest.TestCase):
 
         self.assertFalse(hasattr(SchedulerApp, "_ensure_demo_data"))
 
+    def test_create_app_checks_license_against_active_users_not_employees(self) -> None:
+        from python_dienstplaner.app import create_app
+        from python_dienstplaner.licensing import LicenseCheckResult
+
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "app.sqlite3"
+            repository = SQLiteSchedulerRepository(database_path)
+            service = SchedulerService()
+            service.add_employee("Aktive Mitarbeiterin", "Kasse", "Kasse", is_active=True)
+            service.add_employee("Noch eine aktive Mitarbeiterin", "Kasse", "Kasse", is_active=True)
+            repository.save(service)
+            inactive_user = repository.create_user("inactive", "sicheres-passwort", UserRole.VIEWER)
+            repository.create_user("active", "sicheres-passwort", UserRole.PLANNER)
+            with sqlite3.connect(database_path) as connection:
+                connection.execute("UPDATE users SET is_active = 0 WHERE id = ?", (inactive_user.id,))
+
+            license_result = LicenseCheckResult(True, "Lizenz gültig.")
+            with patch("python_dienstplaner.app.LicenseManager") as manager_cls, patch("python_dienstplaner.app.SchedulerApp") as app_cls:
+                manager_cls.return_value.check.return_value = license_result
+
+                create_app(database_path, Path(directory) / "license.json")
+
+        manager_cls.return_value.check.assert_called_once_with(current_user_count=1)
+        app_cls.assert_called_once()
+
     def test_legend_only_contains_existing_week_entries(self) -> None:
         from python_dienstplaner.app import SchedulerApp
 
@@ -763,6 +788,25 @@ class UserAuthenticationTests(unittest.TestCase):
             self.assertRegex(user.password_salt, r"^[0-9a-f]{32}$")
             self.assertRegex(user.password_hash, r"^[0-9a-f]{64}$")
             self.assertIsNone(repository.authenticate_user("admin", "falsch"))
+
+    def test_active_user_count_ignores_inactive_users_and_employees(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "auth.sqlite3"
+            repository = SQLiteSchedulerRepository(database_path)
+            service = SchedulerService()
+            service.add_employee("Aktive Mitarbeiterin", "Kasse", "Kasse", is_active=True)
+            service.add_employee("Inaktiver Mitarbeiter", "Lager", "Lager", is_active=False)
+            repository.save(service)
+            active_user = repository.create_user("active", "sicheres-passwort", UserRole.PLANNER)
+            inactive_user = repository.create_user("inactive", "sicheres-passwort", UserRole.VIEWER)
+
+            with sqlite3.connect(database_path) as connection:
+                connection.execute("UPDATE users SET is_active = 0 WHERE id = ?", (inactive_user.id,))
+
+            self.assertEqual(2, repository.user_count())
+            self.assertEqual(1, repository.active_user_count())
+            self.assertEqual(active_user.id, repository.authenticate_user("active", "sicheres-passwort").id)
+            self.assertIsNone(repository.authenticate_user("inactive", "sicheres-passwort"))
 
     def test_password_salts_are_unique_per_user(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

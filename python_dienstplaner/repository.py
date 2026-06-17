@@ -304,6 +304,10 @@ class SQLiteSchedulerRepository:
         with self._connect() as connection:
             return int(connection.execute("SELECT COUNT(*) FROM users").fetchone()[0])
 
+    def active_user_count(self) -> int:
+        with self._connect() as connection:
+            return int(connection.execute("SELECT COUNT(*) FROM users WHERE is_active = 1").fetchone()[0])
+
     def create_user(self, username: str, password: str, role: UserRole | str, display_name: str = "") -> User:
         normalized_username = username.strip()
         if not normalized_username:

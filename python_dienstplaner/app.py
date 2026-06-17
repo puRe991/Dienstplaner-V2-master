@@ -1612,7 +1612,7 @@ def create_app(
 ) -> SchedulerApp:
     repository = SQLiteSchedulerRepository(database_path)
     service = repository.load()
-    active_user_count = sum(1 for employee in service.employees if employee.is_active)
+    active_user_count = repository.active_user_count()
     license_result = LicenseManager(license_path).check(current_user_count=active_user_count)
     return SchedulerApp(service, repository, license_result)
 
