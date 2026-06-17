@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from .auth import User, UserRole
 from .models import Absence, Employee, RevenueForecast, RuleProfile, Shift
+from .password_policy import validate_password
 from .services import SchedulerService
 
 
@@ -342,9 +343,8 @@ class SQLiteSchedulerRepository:
         normalized_username = username.strip()
         if not normalized_username:
             raise ValueError("Benutzername ist erforderlich.")
-        if len(password) < 8:
-            raise ValueError("Passwort muss mindestens 8 Zeichen lang sein.")
         user_role = role if isinstance(role, UserRole) else UserRole(str(role))
+        validate_password(password)
         salt, password_hash = self._hash_password(password)
         user = User(
             username=normalized_username,

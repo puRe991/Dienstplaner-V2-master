@@ -58,7 +58,7 @@ def run_initial_setup(parent: tk.Tk, repository: SQLiteSchedulerRepository) -> U
             result["user"] = created_user
             dialog.destroy()
         except ValueError as exc:
-            messagebox.showerror("Setup fehlgeschlagen", str(exc), parent=dialog)
+            messagebox.showerror("Setup fehlgeschlagen", _user_friendly_auth_error(exc), parent=dialog)
 
     ttk.Button(dialog, text="Administrator anlegen", style="Primary.TButton", command=create_admin).grid(row=6, column=1, sticky="e", padx=18, pady=(12, 18))
     parent.wait_window(dialog)
@@ -159,7 +159,7 @@ def run_admin_recovery_dialog(parent: tk.Misc, repository: SQLiteSchedulerReposi
             result["user"] = user
             dialog.destroy()
         except ValueError as exc:
-            messagebox.showerror("Wiederherstellung fehlgeschlagen", str(exc), parent=dialog)
+            messagebox.showerror("Wiederherstellung fehlgeschlagen", _user_friendly_auth_error(exc), parent=dialog)
 
     button_bar = ttk.Frame(dialog)
     button_bar.grid(row=7, column=0, columnspan=2, sticky="ew", padx=18, pady=(12, 18))
@@ -187,6 +187,29 @@ def _show_recovery_code(parent: tk.Misc, recovery_code: str, title: str, message
     tk.Label(dialog, text="Hinweis: Wer diesen Code besitzt, kann einen neuen Admin anlegen.", bg="#FFFFFF", fg="#B45309", wraplength=430, justify="left").grid(row=3, column=0, sticky="w", padx=18, pady=(0, 12))
     ttk.Button(dialog, text="Ich habe den Code gespeichert", style="Primary.TButton", command=dialog.destroy).grid(row=4, column=0, sticky="e", padx=18, pady=(0, 18))
     parent.wait_window(dialog)
+
+
+def _user_friendly_auth_error(error: ValueError) -> str:
+    """Return validation messages suitable for end users.
+
+    Repository validation already raises German business messages. This helper
+    keeps UI dialogs from exposing exception details if a future validation
+    error is unexpectedly technical.
+    """
+    message = str(error).strip()
+    user_facing_prefixes = (
+        "Passwort",
+        "Dieses Passwort",
+        "Benutzername",
+        "Wiederherstellungscode",
+        "Für diese Datenbank",
+    )
+    if message.startswith(user_facing_prefixes):
+        return message
+    return (
+        "Die Eingaben konnten nicht gespeichert werden. "
+        "Bitte prüfen Sie Benutzername, Passwort und Wiederherstellungscode."
+    )
 
 
 def user_label(user: User | None) -> str:
