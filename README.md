@@ -106,3 +106,58 @@ FilialeId;Filiale;Datum;Umsatz;Kunden
 - Prüfe personenbezogene Exportdateien und die SQLite-Datenbank auf ausreichenden Zugriffsschutz.
 - Ergänze bei produktiver Nutzung eine Authentifizierung und ein Berechtigungskonzept.
 - Halte neue Funktionen in `python_dienstplaner/services.py` testbar und decke Edge Cases in `tests/` ab.
+
+## Versionierung
+
+Die App-Version steht zentral in `python_dienstplaner/__init__.py` als `__version__`. Erhöhe die Version vor jedem Release nach semantischer Versionierung:
+
+- Patch-Version für reine Fehlerkorrekturen.
+- Minor-Version für kompatible neue Funktionen oder Datenbankmigrationen.
+- Major-Version für nicht kompatible Änderungen.
+
+## Datenbankmigrationen
+
+`python_dienstplaner/repository.py` verwaltet das SQLite-Schema über die Tabelle `schema_version`. Jede Migration hat eine fortlaufende Nummer und läuft nur, wenn die gespeicherte Version kleiner ist. Die Migrationsschritte sind idempotent aufgebaut: `CREATE TABLE IF NOT EXISTS`, Spaltenprüfung per `PRAGMA table_info` und defensive Nacharbeiten erlauben einen sicheren Neustart nach abgebrochenen Updates.
+
+Release-Regeln für Schemaänderungen:
+
+1. Neue Schemaänderung als neue nummerierte Migration ergänzen.
+2. `SCHEMA_VERSION` erhöhen.
+3. Migration so schreiben, dass sie auf teilweise migrierten Datenbanken erneut laufen kann.
+4. Test für eine neue Datenbank und mindestens eine alte Testdatenbank ergänzen.
+5. Vor dem Release eine Sicherung produktiver SQLite-Dateien erstellen.
+
+## Build und Release
+
+### Lokaler Prüflauf
+
+```bash
+python -m unittest discover -s tests -p 'test_python_*.py'
+python -m unittest discover -s tests
+```
+
+### Release-Checkliste
+
+1. Version in `python_dienstplaner/__init__.py` erhöhen.
+2. Datenbankmigrationen und Tests abschließen.
+3. Tests lokal ausführen.
+4. README und Upgrade-Hinweise aktualisieren.
+5. Git-Tag erstellen, z. B. `v0.2.0`.
+6. Release-Artefakte bauen und Prüfsummen veröffentlichen.
+
+## Windows-Packaging mit PyInstaller
+
+Optional kann eine Windows-Distribution mit PyInstaller erstellt werden:
+
+```powershell
+py -3 -m pip install pyinstaller
+py -3 scripts/build_windows_pyinstaller.py
+```
+
+Hinweise:
+
+- Lege ein Windows-Icon als `assets/dienstplaner.ico` ab. Das Skript bindet es automatisch ein.
+- Lege eine `LICENSE`-Datei im Repository-Root ab. Das Skript fügt sie dem Build hinzu, wenn sie vorhanden ist.
+- Speichere produktive Daten außerhalb des Programmordners. Der sichere Standard-Launcher nutzt in PyInstaller-Builds `%APPDATA%\Dienstplaner\data\dienstplaner.sqlite3`; alternativ kannst du `DIENSTPLANER_DATABASE_PATH` setzen. Der Entwicklungspfad `python_dienstplaner/data/dienstplaner.sqlite3` bleibt nur für den Quellcode-Start aktiv.
+- Überschreibe bei Upgrades nie ungeprüft das Datenverzeichnis. Sichere zuerst die SQLite-Datei und starte danach die neue Version, damit die Migrationen kontrolliert laufen.
+- Wenn ein Upgrade fehlschlägt, nutze die Sicherung der SQLite-Datei und prüfe die Fehlermeldung, bevor du erneut migrierst.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
@@ -8,6 +10,16 @@ from .app import SchedulerApp
 from .auth import Permission, User, UserRole
 from .auth_ui import authenticate_on_start, user_label, user_has_permission
 from .repository import SQLiteSchedulerRepository
+
+
+def default_database_path() -> Path:
+    configured_path = os.environ.get("DIENSTPLANER_DATABASE_PATH")
+    if configured_path:
+        return Path(configured_path).expanduser()
+    if getattr(sys, "frozen", False):
+        app_data = os.environ.get("APPDATA") or str(Path.home())
+        return Path(app_data) / "Dienstplaner" / "data" / "dienstplaner.sqlite3"
+    return Path("python_dienstplaner/data/dienstplaner.sqlite3")
 
 
 class AuthenticatedSchedulerApp(SchedulerApp):
@@ -109,8 +121,8 @@ class AuthenticatedSchedulerApp(SchedulerApp):
             messagebox.showerror("Veröffentlichung fehlgeschlagen", str(exc), parent=self)
 
 
-def create_app(database_path: str | Path = "python_dienstplaner/data/dienstplaner.sqlite3") -> AuthenticatedSchedulerApp:
-    repository = SQLiteSchedulerRepository(database_path)
+def create_app(database_path: str | Path | None = None) -> AuthenticatedSchedulerApp:
+    repository = SQLiteSchedulerRepository(database_path or default_database_path())
     service = repository.load()
     return AuthenticatedSchedulerApp(service, repository)
 

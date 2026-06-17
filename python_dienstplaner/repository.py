@@ -6,7 +6,7 @@ import secrets
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 from uuid import uuid4
 
 from .auth import User, UserRole
@@ -18,6 +18,8 @@ PASSWORD_ITERATIONS = 200_000
 PASSWORD_SALT_BYTES = 16
 ADMIN_RECOVERY_SECRET_ID = "admin_recovery"
 ADMIN_RECOVERY_CODE_BYTES = 24
+SCHEMA_VERSION = 4
+Migration = Callable[[sqlite3.Connection], None]
 
 RULE_PROFILE_COLUMNS: tuple[str, ...] = (
     "id",
@@ -462,83 +464,162 @@ class SQLiteSchedulerRepository:
         return connection.execute("SELECT employee_id, shift_id FROM assignments")
 
     def _initialize(self) -> None:
+        """Create or upgrade the SQLite schema to the latest version."""
         with self._connect() as connection:
-            connection.executescript(
-                f"""
-                CREATE TABLE IF NOT EXISTS users(
-                    id TEXT PRIMARY KEY,
-                    username TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK(length(trim(username)) > 0),
-                    display_name TEXT NOT NULL DEFAULT '',
-                    role TEXT NOT NULL CHECK(role IN ('admin', 'planner', 'viewer')),
-                    password_hash TEXT NOT NULL,
-                    password_salt TEXT NOT NULL,
-                    is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
-                    created_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS auth_recovery(
-                    id TEXT PRIMARY KEY,
-                    code_hash TEXT NOT NULL,
-                    code_salt TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                {RULE_PROFILE_TABLE_SQL}
-                CREATE TABLE IF NOT EXISTS employees(
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    department TEXT NOT NULL,
-                    qualification TEXT NOT NULL,
-                    weekly_hours_limit INTEGER NOT NULL CHECK(weekly_hours_limit > 0),
-                    branch TEXT NOT NULL,
-                    hourly_wage REAL NOT NULL CHECK(hourly_wage >= 0),
-                    is_active INTEGER NOT NULL CHECK(is_active IN (0, 1)),
-                    break_minutes_per_shift INTEGER NOT NULL DEFAULT 0 CHECK(break_minutes_per_shift >= 0)
-                );
-                CREATE TABLE IF NOT EXISTS departments(
-                    name TEXT PRIMARY KEY CHECK(length(trim(name)) > 0)
-                );
-                CREATE TABLE IF NOT EXISTS shifts(
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    department TEXT NOT NULL,
-                    start TEXT NOT NULL,
-                    end TEXT NOT NULL,
-                    required_employees INTEGER NOT NULL CHECK(required_employees > 0),
-                    required_qualification TEXT NOT NULL,
-                    branch TEXT NOT NULL,
-                    published_at TEXT,
-                    published_by TEXT NOT NULL DEFAULT ''
-                );
-                CREATE TABLE IF NOT EXISTS assignments(
-                    employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
-                    shift_id TEXT NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
-                    PRIMARY KEY(employee_id, shift_id)
-                );
-                CREATE TABLE IF NOT EXISTS absences(
-                    id TEXT PRIMARY KEY,
-                    employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
-                    start TEXT NOT NULL,
-                    end TEXT NOT NULL,
-                    reason TEXT NOT NULL DEFAULT ''
-                );
-                CREATE TABLE IF NOT EXISTS forecasts(
-                    branch_id INTEGER NOT NULL,
-                    branch TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    expected_revenue REAL NOT NULL CHECK(expected_revenue >= 0),
-                    expected_customers INTEGER NOT NULL CHECK(expected_customers >= 0),
-                    PRIMARY KEY(branch_id, date)
-                );
-                """
+            connection.execute("BEGIN")
+            try:
+                self._ensure_schema_version_table(connection)
+                current_version = self._current_schema_version(connection)
+                for version, migration in self._migrations():
+                    if version > current_version:
+                        migration(connection)
+                        self._set_schema_version(connection, version)
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+
+    @staticmethod
+    def _migrations() -> tuple[tuple[int, Migration], ...]:
+        """Return ordered, idempotent schema migrations.
+
+        Each migration may safely run on a partially upgraded legacy database.
+        The schema_version table records successfully completed versions, while
+        defensive CREATE/ALTER statements keep re-runs harmless after crashes.
+        """
+        return (
+            (1, SQLiteSchedulerRepository._migration_001_initial_schema),
+            (2, SQLiteSchedulerRepository._migration_002_rule_profile_constraints),
+            (3, SQLiteSchedulerRepository._migration_003_planning_metadata),
+            (4, SQLiteSchedulerRepository._migration_004_forecasts),
+        )
+
+    @staticmethod
+    def _ensure_schema_version_table(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_version(
+                id INTEGER PRIMARY KEY CHECK(id = 1),
+                version INTEGER NOT NULL CHECK(version >= 0),
+                applied_at TEXT NOT NULL
             )
-            self._migrate_rule_profiles(connection)
-            self._ensure_default_rule_profile(connection)
-            self._ensure_column(connection, "employees", "break_minutes_per_shift", "INTEGER NOT NULL DEFAULT 0")
-            self._ensure_column(connection, "absences", "id", "TEXT")
-            for rowid, in connection.execute("SELECT rowid FROM absences WHERE id IS NULL OR id = ''"):
-                connection.execute("UPDATE absences SET id = ? WHERE rowid = ?", (str(uuid4()), rowid))
-            connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_absences_id ON absences(id)")
-            self._ensure_column(connection, "shifts", "published_at", "TEXT")
-            self._ensure_column(connection, "shifts", "published_by", "TEXT NOT NULL DEFAULT ''")
+            """
+        )
+        if connection.execute("SELECT 1 FROM schema_version WHERE id = 1").fetchone() is None:
+            connection.execute(
+                "INSERT INTO schema_version(id, version, applied_at) VALUES(1, 0, ?)",
+                (datetime.now().isoformat(),),
+            )
+
+    @staticmethod
+    def _current_schema_version(connection: sqlite3.Connection) -> int:
+        row = connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+        return int(row[0]) if row else 0
+
+    @staticmethod
+    def _set_schema_version(connection: sqlite3.Connection, version: int) -> None:
+        connection.execute(
+            """
+            INSERT INTO schema_version(id, version, applied_at) VALUES(1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                version = excluded.version,
+                applied_at = excluded.applied_at
+            """,
+            (version, datetime.now().isoformat()),
+        )
+
+    @staticmethod
+    def _migration_001_initial_schema(connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            f"""
+            CREATE TABLE IF NOT EXISTS users(
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE COLLATE NOCASE CHECK(length(trim(username)) > 0),
+                display_name TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL CHECK(role IN ('admin', 'planner', 'viewer')),
+                password_hash TEXT NOT NULL,
+                password_salt TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS auth_recovery(
+                id TEXT PRIMARY KEY,
+                code_hash TEXT NOT NULL,
+                code_salt TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            {RULE_PROFILE_TABLE_SQL}
+            CREATE TABLE IF NOT EXISTS employees(
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                qualification TEXT NOT NULL,
+                weekly_hours_limit INTEGER NOT NULL CHECK(weekly_hours_limit > 0),
+                branch TEXT NOT NULL,
+                hourly_wage REAL NOT NULL CHECK(hourly_wage >= 0),
+                is_active INTEGER NOT NULL CHECK(is_active IN (0, 1)),
+                break_minutes_per_shift INTEGER NOT NULL DEFAULT 0 CHECK(break_minutes_per_shift >= 0)
+            );
+            CREATE TABLE IF NOT EXISTS departments(
+                name TEXT PRIMARY KEY CHECK(length(trim(name)) > 0)
+            );
+            CREATE TABLE IF NOT EXISTS shifts(
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                start TEXT NOT NULL,
+                end TEXT NOT NULL,
+                required_employees INTEGER NOT NULL CHECK(required_employees > 0),
+                required_qualification TEXT NOT NULL,
+                branch TEXT NOT NULL,
+                published_at TEXT,
+                published_by TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS assignments(
+                employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                shift_id TEXT NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+                PRIMARY KEY(employee_id, shift_id)
+            );
+            CREATE TABLE IF NOT EXISTS absences(
+                id TEXT PRIMARY KEY,
+                employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+                start TEXT NOT NULL,
+                end TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT ''
+            );
+            """
+        )
+        SQLiteSchedulerRepository._ensure_default_rule_profile(connection)
+
+    @staticmethod
+    def _migration_002_rule_profile_constraints(connection: sqlite3.Connection) -> None:
+        SQLiteSchedulerRepository._migrate_rule_profiles(connection)
+        SQLiteSchedulerRepository._ensure_default_rule_profile(connection)
+
+    @staticmethod
+    def _migration_003_planning_metadata(connection: sqlite3.Connection) -> None:
+        SQLiteSchedulerRepository._ensure_column(connection, "employees", "break_minutes_per_shift", "INTEGER NOT NULL DEFAULT 0")
+        SQLiteSchedulerRepository._ensure_column(connection, "absences", "id", "TEXT")
+        for rowid, in connection.execute("SELECT rowid FROM absences WHERE id IS NULL OR id = ''"):
+            connection.execute("UPDATE absences SET id = ? WHERE rowid = ?", (str(uuid4()), rowid))
+        connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_absences_id ON absences(id)")
+        SQLiteSchedulerRepository._ensure_column(connection, "shifts", "published_at", "TEXT")
+        SQLiteSchedulerRepository._ensure_column(connection, "shifts", "published_by", "TEXT NOT NULL DEFAULT ''")
+
+    @staticmethod
+    def _migration_004_forecasts(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS forecasts(
+                branch_id INTEGER NOT NULL,
+                branch TEXT NOT NULL,
+                date TEXT NOT NULL,
+                expected_revenue REAL NOT NULL CHECK(expected_revenue >= 0),
+                expected_customers INTEGER NOT NULL CHECK(expected_customers >= 0),
+                PRIMARY KEY(branch_id, date)
+            )
+            """
+        )
 
     @staticmethod
     def _migrate_rule_profiles(connection: sqlite3.Connection) -> None:
