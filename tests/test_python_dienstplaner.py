@@ -408,6 +408,56 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(30, loaded.employees[0].break_minutes_per_shift)
         self.assertIn("Non-Food", loaded.department_options())
 
+    def test_backup_and_restore_preserves_core_application_tables(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            directory_path = Path(directory)
+            database_path = directory_path / "dienstplaner.sqlite3"
+            backup_path = directory_path / "backup.sqlite3"
+            repository = SQLiteSchedulerRepository(database_path)
+            service = SchedulerService()
+            employee = service.add_employee("Eva Retail", "Kasse", "Kasse", user_id="admin")
+            shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse", user_id="admin")
+            service.assign(employee.id, shift.id, user_id="planner")
+            service.add_absence(employee.id, datetime(2026, 1, 2, 8), datetime(2026, 1, 2, 16), "Urlaub", user_id="planner")
+            repository.create_user("admin", "sicheres-passwort", UserRole.ADMIN, "Admin")
+            repository.save(service)
+
+            created_backup = repository.backup_to(backup_path)
+            self.assertEqual(backup_path, created_backup)
+
+            changed_service = SchedulerService()
+            changed_service.add_employee("Max Mutation", "Lager", "Lager", user_id="admin")
+            repository.save(changed_service)
+            repository.create_user("viewer", "sicheres-passwort", UserRole.VIEWER, "Viewer")
+
+            repository.restore_from(backup_path)
+            restored = repository.load()
+            authenticated_admin = repository.authenticate_user("admin", "sicheres-passwort")
+            authenticated_viewer = repository.authenticate_user("viewer", "sicheres-passwort")
+            actions = {event.action for event in repository.list_audit_events(20)}
+
+        self.assertEqual(["Eva Retail"], [item.name for item in restored.employees])
+        self.assertEqual(["Früh"], [item.name for item in restored.shifts])
+        self.assertEqual([restored.shifts[0]], restored.employees[0].shifts)
+        self.assertEqual("Urlaub", restored.employees[0].absences[0].reason)
+        self.assertIsNotNone(authenticated_admin)
+        self.assertIsNone(authenticated_viewer)
+        self.assertIn("employee.created", actions)
+        self.assertIn("shift.created", actions)
+        self.assertIn("assignment.created", actions)
+        self.assertIn("absence.created", actions)
+
+    def test_restore_rejects_non_dienstplaner_sqlite_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            directory_path = Path(directory)
+            repository = SQLiteSchedulerRepository(directory_path / "dienstplaner.sqlite3")
+            invalid_backup = directory_path / "invalid.sqlite3"
+            with sqlite3.connect(invalid_backup) as connection:
+                connection.execute("CREATE TABLE unrelated(id INTEGER PRIMARY KEY)")
+
+            with self.assertRaisesRegex(ValueError, "gültiges Dienstplaner-Backup"):
+                repository.restore_from(invalid_backup)
+
     def test_saves_and_loads_rule_profiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repository = SQLiteSchedulerRepository(Path(directory) / "profiles.sqlite3")
