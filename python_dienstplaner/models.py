@@ -14,6 +14,58 @@ class ExportFormat(str, Enum):
     PDF = "pdf"
 
 
+class ExportTargetType(str, Enum):
+    INTERNAL_MANAGEMENT = "internal_management"
+    EMPLOYEE = "employee"
+    ANONYMIZED_REPORT = "anonymized_report"
+
+
+@dataclass(frozen=True)
+class ExportPrivacyProfile:
+    """Reusable privacy profile for every export path.
+
+    The target type describes the intended audience without storing personal
+    recipient data in audit logs. Boolean flags control sensitive data classes
+    consistently across CSV, PDF and report exports.
+    """
+
+    name: str = "Mitarbeiterexport"
+    target_type: ExportTargetType = ExportTargetType.EMPLOYEE
+    include_wages: bool = False
+    include_absences: bool = True
+    include_employee_notes: bool = False
+    include_internal_ids: bool = False
+    anonymize_employee_names: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("Exportprofilname ist erforderlich.")
+
+    @classmethod
+    def internal_management(cls) -> "ExportPrivacyProfile":
+        return cls(
+            name="Interner Managementexport",
+            target_type=ExportTargetType.INTERNAL_MANAGEMENT,
+            include_wages=True,
+            include_absences=True,
+            include_employee_notes=True,
+            include_internal_ids=True,
+        )
+
+    @classmethod
+    def employee(cls) -> "ExportPrivacyProfile":
+        return cls(name="Mitarbeiterexport", target_type=ExportTargetType.EMPLOYEE, include_absences=True)
+
+    @classmethod
+    def anonymized_report(cls) -> "ExportPrivacyProfile":
+        return cls(
+            name="Anonymisierter Report",
+            target_type=ExportTargetType.ANONYMIZED_REPORT,
+            include_absences=False,
+            anonymize_employee_names=True,
+        )
+
+
 DEFAULT_ABSENCE_REASONS: tuple[str, ...] = (
     "Urlaub",
     "Freier Tag",

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.audit import DEFAULT_AUDIT_LOAD_LIMIT
 from python_dienstplaner.repository import SQLiteSchedulerRepository
+from python_dienstplaner.models import ExportFormat, ExportPrivacyProfile
 from python_dienstplaner.services import SchedulerService
 
 
@@ -121,6 +122,23 @@ class AuditLoggingTests(unittest.TestCase):
         self.assertEqual(f"{employee.id}:{shift.id}", assignment_deletes[0].entity_id)
         self.assertTrue(json.loads(assignment_deletes[0].before)["assigned"])
         self.assertFalse(json.loads(assignment_deletes[0].after)["assigned"])
+
+    def test_export_audit_records_profile_format_and_target_without_path_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service = SchedulerService()
+            service.export_schedule(
+                Path(directory) / "dienstplan.csv",
+                ExportFormat.CSV,
+                privacy_profile=ExportPrivacyProfile.anonymized_report(),
+                user_id="admin",
+            )
+
+        event = service.audit_events[-1]
+        self.assertEqual("schedule.exported", event.action)
+        self.assertIn('"profile": "Anonymisierter Report"', event.after)
+        self.assertIn('"format": "csv"', event.after)
+        self.assertIn('"target_type": "anonymized_report"', event.after)
+        self.assertNotIn("dienstplan.csv", event.after)
 
 
 if __name__ == "__main__":

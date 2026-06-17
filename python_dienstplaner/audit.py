@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .models import Absence, AssignmentResult, Employee, ExportFormat, Shift
+from .models import Absence, AssignmentResult, Employee, ExportFormat, ExportPrivacyProfile, Shift
 
 DEFAULT_AUDIT_LOAD_LIMIT = 500
 
@@ -284,12 +284,38 @@ def install_service_audit(service_cls: type[Any]) -> None:
 
     def export_schedule(self, path, export_format=ExportFormat.CSV, *, user_id="system", **kwargs):
         output = original_export_schedule(self, path, export_format, **kwargs)
-        self.record_audit_event("schedule.exported", "export", str(output), None, {"path": str(output), "format": export_format.value, "shift_count": len(self.shifts)}, user_id=user_id)
+        profile = _export_profile_from_kwargs(kwargs)
+        self.record_audit_event(
+            "schedule.exported",
+            "export",
+            "schedule",
+            None,
+            {
+                "format": export_format.value,
+                "profile": profile.name,
+                "target_type": profile.target_type.value,
+                "shift_count": len(self.shifts),
+            },
+            user_id=user_id,
+        )
         return output
 
-    def export_reports(self, path, *, user_id="system"):
-        output = original_export_reports(self, path)
-        self.record_audit_event("reports.exported", "export", str(output), None, {"path": str(output), "format": "csv", "metric_count": len(self.create_reports())}, user_id=user_id)
+    def export_reports(self, path, *, user_id="system", **kwargs):
+        output = original_export_reports(self, path, **kwargs)
+        profile = _export_profile_from_kwargs(kwargs)
+        self.record_audit_event(
+            "reports.exported",
+            "export",
+            "reports",
+            None,
+            {
+                "format": "csv",
+                "profile": profile.name,
+                "target_type": profile.target_type.value,
+                "metric_count": len(self.create_reports()),
+            },
+            user_id=user_id,
+        )
         return output
 
     service_cls.__init__ = __init__
@@ -311,6 +337,16 @@ def install_service_audit(service_cls: type[Any]) -> None:
     service_cls.export_reports = export_reports
     service_cls._audit_installed = True
 
+
+
+def _export_profile_from_kwargs(kwargs: dict[str, Any]) -> ExportPrivacyProfile:
+    profile = kwargs.get("privacy_profile")
+    if isinstance(profile, ExportPrivacyProfile):
+        return profile
+    options = kwargs.get("options")
+    if options is not None and hasattr(options, "effective_privacy_profile"):
+        return options.effective_privacy_profile
+    return ExportPrivacyProfile.employee()
 
 def install_repository_audit(repository_cls: type[Any]) -> None:
     if getattr(repository_cls, "_audit_installed", False):

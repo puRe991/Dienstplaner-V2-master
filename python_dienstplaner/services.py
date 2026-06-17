@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable, List
 
 from .exporters import ExportHeader, ExportOptions, ScheduleExporter
-from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, RuleProfile, Shift
+from .models import Absence, AssignmentResult, Employee, ExportFormat, ExportPrivacyProfile, ReportMetric, RevenueForecast, RuleProfile, Shift
 from .rules import PlanningRules
 
 
@@ -358,9 +358,11 @@ class SchedulerService:
         export_format: ExportFormat = ExportFormat.CSV,
         *,
         options: ExportOptions | None = None,
+        privacy_profile: ExportPrivacyProfile | None = None,
         header: ExportHeader | None = None,
     ) -> Path:
-        return ScheduleExporter(self.employees, self.shifts).export_schedule(path, export_format, options=options, header=header)
+        export_options = options or ExportOptions.from_privacy_profile(privacy_profile)
+        return ScheduleExporter(self.employees, self.shifts).export_schedule(path, export_format, options=export_options, header=header)
 
     def export_week_plan_pdf(
         self,
@@ -368,9 +370,11 @@ class SchedulerService:
         week_start: datetime,
         *,
         options: ExportOptions | None = None,
+        privacy_profile: ExportPrivacyProfile | None = None,
         header: ExportHeader | None = None,
     ) -> Path:
-        return ScheduleExporter(self.employees, self.shifts).export_week_plan_pdf(path, week_start, options=options, header=header)
+        export_options = options or ExportOptions.from_privacy_profile(privacy_profile)
+        return ScheduleExporter(self.employees, self.shifts).export_week_plan_pdf(path, week_start, options=export_options, header=header)
 
     def export_day_plan_pdf(
         self,
@@ -378,9 +382,11 @@ class SchedulerService:
         day: datetime,
         *,
         options: ExportOptions | None = None,
+        privacy_profile: ExportPrivacyProfile | None = None,
         header: ExportHeader | None = None,
     ) -> Path:
-        return ScheduleExporter(self.employees, self.shifts).export_day_plan_pdf(path, day, options=options, header=header)
+        export_options = options or ExportOptions.from_privacy_profile(privacy_profile)
+        return ScheduleExporter(self.employees, self.shifts).export_day_plan_pdf(path, day, options=export_options, header=header)
 
     def export_employee_plan_pdf(
         self,
@@ -390,19 +396,25 @@ class SchedulerService:
         period_end: datetime,
         *,
         options: ExportOptions | None = None,
+        privacy_profile: ExportPrivacyProfile | None = None,
         header: ExportHeader | None = None,
     ) -> Path:
+        export_options = options or ExportOptions.from_privacy_profile(privacy_profile)
         return ScheduleExporter(self.employees, self.shifts).export_employee_plan_pdf(
-            path, employee_id, period_start, period_end, options=options, header=header
+            path, employee_id, period_start, period_end, options=export_options, header=header
         )
 
-    def export_reports(self, path: str | Path) -> Path:
+    def export_reports(self, path: str | Path, *, privacy_profile: ExportPrivacyProfile | None = None) -> Path:
+        profile = privacy_profile or ExportPrivacyProfile.employee()
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle, delimiter=";")
             writer.writerow(["Kategorie", "Kennzahl", "Wert", "Hinweis"])
             for metric in self.create_reports():
+                if metric.category == "Kosten" and not profile.include_wages:
+                    writer.writerow([metric.category, metric.name, "Ausgeblendet", "Durch Exportprofil geschützt"])
+                    continue
                 writer.writerow([metric.category, metric.name, metric.value, metric.note])
         return output
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from .licensing import LicenseCheckResult, LicenseManager
-from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
+from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, ExportPrivacyProfile, RuleProfile, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -1413,7 +1413,50 @@ class SchedulerApp(tk.Tk):
     def _save(self) -> None:
         self._persist_changes("Dienstplan gespeichert.")
 
+    def _select_export_privacy_profile(self) -> ExportPrivacyProfile | None:
+        """Ask for the export audience before writing files.
+
+        The dialog makes data-minimization explicit: management gets wages and
+        internal IDs, employee exports omit wages, and anonymized reports hide
+        names plus absence details.
+        """
+        profiles = {
+            "Interner Managementexport": ExportPrivacyProfile.internal_management(),
+            "Mitarbeiterexport": ExportPrivacyProfile.employee(),
+            "Anonymisierter Report": ExportPrivacyProfile.anonymized_report(),
+        }
+        choice = tk.StringVar(value="Mitarbeiterexport")
+        dialog = tk.Toplevel(self)
+        dialog.title("Exportprofil auswählen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        ttk.Label(dialog, text="Datenschutzprofil für diesen Export", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=18, pady=(16, 8))
+        descriptions = {
+            "Interner Managementexport": "Enthält Löhne und interne IDs. Nur für berechtigte Managementzwecke nutzen.",
+            "Mitarbeiterexport": "Ohne Löhne und interne IDs. Abwesenheiten bleiben als Planinformation sichtbar.",
+            "Anonymisierter Report": "Ohne Namen, Löhne, Abwesenheitsdetails und interne IDs.",
+        }
+        for label, description in descriptions.items():
+            ttk.Radiobutton(dialog, text=label, value=label, variable=choice).pack(anchor="w", padx=18, pady=(6, 0))
+            ttk.Label(dialog, text=description, style="Muted.TLabel", wraplength=460).pack(anchor="w", padx=40, pady=(0, 4))
+        selected: dict[str, ExportPrivacyProfile | None] = {"profile": None}
+
+        def confirm() -> None:
+            selected["profile"] = profiles[choice.get()]
+            dialog.destroy()
+
+        buttons = ttk.Frame(dialog)
+        buttons.pack(fill="x", padx=18, pady=16)
+        ttk.Button(buttons, text="Abbrechen", command=dialog.destroy).pack(side="right", padx=(8, 0))
+        ttk.Button(buttons, text="Export fortsetzen", style="Primary.TButton", command=confirm).pack(side="right")
+        self.wait_window(dialog)
+        return selected["profile"]
+
     def _export_reports_csv(self) -> None:
+        profile = self._select_export_privacy_profile()
+        if profile is None:
+            return
         path = filedialog.asksaveasfilename(
             title="Berichte exportieren",
             defaultextension=".csv",
@@ -1422,12 +1465,15 @@ class SchedulerApp(tk.Tk):
         if not path:
             return
         try:
-            output = self.service.export_reports(path, user_id=self._current_user_id())
-            self._persist_changes(f"Berichte exportiert: {output}")
+            output = self.service.export_reports(path, privacy_profile=profile, user_id=self._current_user_id())
+            self._persist_changes(f"Berichte exportiert ({profile.name}): {output}")
         except OSError as exc:
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
 
     def _export_csv(self) -> None:
+        profile = self._select_export_privacy_profile()
+        if profile is None:
+            return
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
             defaultextension=".csv",
@@ -1443,8 +1489,8 @@ class SchedulerApp(tk.Tk):
         else:
             export_format = ExportFormat.CSV
         try:
-            output = self.service.export_schedule(path, export_format, user_id=self._current_user_id())
-            self._persist_changes(f"Exportiert: {output}")
+            output = self.service.export_schedule(path, export_format, privacy_profile=profile, user_id=self._current_user_id())
+            self._persist_changes(f"Exportiert ({profile.name}): {output}")
         except OSError as exc:
             messagebox.showerror("Export fehlgeschlagen", str(exc), parent=self)
 
