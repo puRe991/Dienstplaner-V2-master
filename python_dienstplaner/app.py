@@ -329,7 +329,9 @@ class SchedulerApp(tk.Tk):
             ("📈 Forecast importieren", self._import_forecast),
         ]:
             ttk.Button(actions, text=text, style="Ghost.TButton", command=command).pack(fill="x", padx=12, pady=5)
-        ttk.Button(actions, text="💾 Speichern", style="Ghost.TButton", command=self._save).pack(fill="x", padx=12, pady=(5, 12))
+        ttk.Button(actions, text="💾 Speichern", style="Ghost.TButton", command=self._save).pack(fill="x", padx=12, pady=(5, 5))
+        ttk.Button(actions, text="Backup erstellen", style="Ghost.TButton", command=self._create_backup).pack(fill="x", padx=12, pady=5)
+        ttk.Button(actions, text="Backup wiederherstellen", style="Danger.TButton", command=self._restore_backup).pack(fill="x", padx=12, pady=(5, 12))
         ttk.Button(actions, text="CSV Export", style="Ghost.TButton", command=self._export_csv).pack(fill="x", padx=12, pady=(0, 12))
 
     def _activate_sidebar(self, key: str, command: object) -> None:
@@ -766,7 +768,7 @@ class SchedulerApp(tk.Tk):
             except ValueError as exc:
                 messagebox.showerror("Regelprofil kann nicht gelöscht werden", str(exc), parent=window)
 
-        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Aktivieren", activate), ("Löschen", delete), ("Jetzt speichern", self._save), ("Dienstplan CSV Export", self._export_csv)])
+        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Aktivieren", activate), ("Löschen", delete), ("Jetzt speichern", self._save), ("Backup erstellen", self._create_backup), ("Backup wiederherstellen", self._restore_backup), ("Dienstplan CSV Export", self._export_csv)])
         tree.bind("<Double-Button-1>", lambda _event: edit())
         refresh()
 
@@ -1534,6 +1536,63 @@ class SchedulerApp(tk.Tk):
 
     def _save(self) -> None:
         self._run_ui_action("Speichern", lambda: self._persist_changes("Dienstplan gespeichert."))
+
+
+    def _create_backup(self) -> None:
+        default_name = f"dienstplaner-backup-{datetime.now():%Y%m%d-%H%M%S}.sqlite3"
+        path = filedialog.asksaveasfilename(
+            title="Backup erstellen",
+            initialfile=default_name,
+            defaultextension=".sqlite3",
+            filetypes=[("SQLite-Datenbank", "*.sqlite3 *.db"), ("Alle Dateien", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            self.repository.save(self.service)
+            backup_path = self.repository.backup_to(path)
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            self._set_status("Backup konnte nicht erstellt werden.")
+            messagebox.showerror("Backup fehlgeschlagen", str(exc), parent=self)
+            return
+        self._set_status(f"Backup erstellt: {backup_path}")
+        messagebox.showinfo("Backup erstellt", f"Backup wurde erstellt:\n{backup_path}", parent=self)
+
+    def _restore_backup(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Backup wiederherstellen",
+            filetypes=[("SQLite-Datenbank", "*.sqlite3 *.db"), ("Alle Dateien", "*.*")],
+        )
+        if not path:
+            return
+        backup_path = Path(path)
+        if backup_path.suffix.lower() not in {".sqlite3", ".db"}:
+            messagebox.showerror("Ungültiges Dateiformat", "Bitte eine SQLite-Backup-Datei mit .sqlite3 oder .db auswählen.", parent=self)
+            return
+        warning = (
+            "Beim Wiederherstellen wird die aktuelle Datenbank durch das ausgewählte Backup ersetzt.\n\n"
+            "Die aktuelle Datenbank wird vorher automatisch gesichert. Nicht gespeicherte Änderungen werden gespeichert.\n\n"
+            "Möchten Sie fortfahren?"
+        )
+        if not messagebox.askyesno("Backup wiederherstellen", warning, icon="warning", parent=self):
+            return
+        safety_backup = self.repository.database_path.with_name(
+            f"{self.repository.database_path.stem}-vor-restore-{datetime.now():%Y%m%d-%H%M%S}{self.repository.database_path.suffix}"
+        )
+        try:
+            self.repository.save(self.service)
+            self.repository.backup_to(safety_backup)
+            self.repository.restore_from(backup_path)
+            self.service = self.repository.load()
+            self.selected_shift_id = None
+            self._refresh_all()
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            self._set_status("Restore fehlgeschlagen – aktuelle Datenbank wurde nicht ersetzt oder aus der Sicherung erhalten.")
+            messagebox.showerror("Restore fehlgeschlagen", f"{exc}\n\nSicherung der vorherigen Datenbank: {safety_backup}", parent=self)
+            return
+        self._set_status(f"Backup wiederhergestellt. Vorherige Datenbank: {safety_backup}")
+        messagebox.showinfo("Backup wiederhergestellt", f"Die Anwendung wurde neu geladen.\n\nVorherige Datenbank:\n{safety_backup}", parent=self)
+
 
     def _export_reports_csv(self) -> None:
         path = filedialog.asksaveasfilename(

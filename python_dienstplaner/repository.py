@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
 import secrets
 import sqlite3
 from datetime import datetime
@@ -301,6 +302,37 @@ class SQLiteSchedulerRepository:
         service.employees.extend(employees.values())
         service.shifts.extend(shifts.values())
         return service
+
+
+    def backup_to(self, path: str | Path) -> Path:
+        """Create a consistent SQLite backup using the SQLite backup API."""
+        target_path = Path(path).expanduser()
+        if target_path.exists() and target_path.is_dir():
+            raise ValueError("Backup-Ziel darf kein Verzeichnis sein.")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if self._same_database_file(target_path):
+            raise ValueError("Backup-Ziel darf nicht die aktuelle Datenbankdatei sein.")
+
+        with self._connect() as source, sqlite3.connect(target_path) as target:
+            source.backup(target)
+            target.execute("PRAGMA foreign_keys = ON")
+            self._validate_connection(target)
+        return target_path
+
+    def restore_from(self, path: str | Path) -> None:
+        """Replace the current database with a validated SQLite backup."""
+        source_path = Path(path).expanduser()
+        if not source_path.is_file():
+            raise ValueError("Backup-Datei wurde nicht gefunden.")
+        if self._same_database_file(source_path):
+            raise ValueError("Backup-Quelle darf nicht die aktuelle Datenbankdatei sein.")
+
+        with sqlite3.connect(f"file:{source_path}?mode=ro", uri=True) as source:
+            source.execute("PRAGMA foreign_keys = ON")
+            self._validate_connection(source)
+            with self._connect() as target:
+                source.backup(target)
+                self._validate_connection(target)
 
     def user_count(self) -> int:
         with self._connect() as connection:
@@ -797,6 +829,39 @@ class SQLiteSchedulerRepository:
         columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
         if column not in columns:
             connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+    @staticmethod
+    def _validate_connection(connection: sqlite3.Connection) -> None:
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()
+        if integrity is None or integrity[0] != "ok":
+            raise ValueError("Die Datei ist keine intakte SQLite-Datenbank.")
+        required_tables = {
+            "users",
+            "employees",
+            "shifts",
+            "assignments",
+            "absences",
+            "departments",
+            "forecasts",
+            "rule_profiles",
+            "audit_events",
+        }
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        missing = sorted(required_tables - tables)
+        if missing:
+            raise ValueError("Die Datei ist kein gültiges Dienstplaner-Backup.")
+
+    def _same_database_file(self, path: Path) -> bool:
+        try:
+            return os.path.samefile(self.database_path, path)
+        except FileNotFoundError:
+            return self.database_path.resolve() == path.resolve()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
