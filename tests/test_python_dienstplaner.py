@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from python_dienstplaner.auth import Permission, User, UserRole
 from python_dienstplaner.exporters import ExportHeader, ExportOptions
 from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile
-from python_dienstplaner.repository import SQLiteSchedulerRepository
+from python_dienstplaner.repository import SCHEMA_VERSION, SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
 
@@ -738,6 +738,96 @@ class PublishingAndForecastTests(unittest.TestCase):
 
         self.assertEqual(1, len(loaded.forecasts))
         self.assertIn("Forecast", [metric.category for metric in loaded.create_reports()])
+
+
+    def test_new_database_records_latest_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "new.sqlite3"
+            SQLiteSchedulerRepository(database_path)
+
+            with sqlite3.connect(database_path) as connection:
+                version = connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0]
+                tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+        self.assertEqual(SCHEMA_VERSION, version)
+        self.assertIn("schema_version", tables)
+        self.assertIn("forecasts", tables)
+
+    def test_migrates_legacy_schema_idempotently(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "legacy.sqlite3"
+            employee_id = "employee-1"
+            shift_id = "shift-1"
+            with sqlite3.connect(database_path) as connection:
+                connection.executescript(
+                    """
+                    CREATE TABLE employees(
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        department TEXT NOT NULL,
+                        qualification TEXT NOT NULL,
+                        weekly_hours_limit INTEGER NOT NULL,
+                        branch TEXT NOT NULL,
+                        hourly_wage REAL NOT NULL,
+                        is_active INTEGER NOT NULL
+                    );
+                    CREATE TABLE shifts(
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        department TEXT NOT NULL,
+                        start TEXT NOT NULL,
+                        end TEXT NOT NULL,
+                        required_employees INTEGER NOT NULL,
+                        required_qualification TEXT NOT NULL,
+                        branch TEXT NOT NULL
+                    );
+                    CREATE TABLE assignments(
+                        employee_id TEXT NOT NULL,
+                        shift_id TEXT NOT NULL,
+                        PRIMARY KEY(employee_id, shift_id)
+                    );
+                    CREATE TABLE absences(
+                        employee_id TEXT NOT NULL,
+                        start TEXT NOT NULL,
+                        end TEXT NOT NULL,
+                        reason TEXT NOT NULL DEFAULT ''
+                    );
+                    """
+                )
+                connection.execute(
+                    "INSERT INTO employees VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                    (employee_id, "Eva Legacy", "Kasse", "Kasse", 40, "Zentrale", 13.5, 1),
+                )
+                connection.execute(
+                    "INSERT INTO shifts VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                    (shift_id, "Früh", "Kasse", "2026-01-01T08:00:00", "2026-01-01T16:00:00", 1, "Kasse", "Zentrale"),
+                )
+                connection.execute("INSERT INTO assignments VALUES(?, ?)", (employee_id, shift_id))
+                connection.execute(
+                    "INSERT INTO absences(employee_id, start, end, reason) VALUES(?, ?, ?, ?)",
+                    (employee_id, "2026-01-02T08:00:00", "2026-01-02T16:00:00", "Urlaub"),
+                )
+
+            repository = SQLiteSchedulerRepository(database_path)
+            first_load = repository.load()
+            SQLiteSchedulerRepository(database_path)
+            second_load = repository.load()
+
+            with sqlite3.connect(database_path) as connection:
+                version = connection.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()[0]
+                employee_columns = {row[1] for row in connection.execute("PRAGMA table_info(employees)")}
+                shift_columns = {row[1] for row in connection.execute("PRAGMA table_info(shifts)")}
+                absence_ids = [row[0] for row in connection.execute("SELECT id FROM absences")]
+
+        self.assertEqual(SCHEMA_VERSION, version)
+        self.assertIn("break_minutes_per_shift", employee_columns)
+        self.assertIn("published_at", shift_columns)
+        self.assertIn("published_by", shift_columns)
+        self.assertTrue(all(absence_ids))
+        self.assertEqual(1, len(first_load.employees))
+        self.assertEqual([first_load.shifts[0]], first_load.employees[0].shifts)
+        self.assertEqual(1, len(second_load.employees))
+        self.assertEqual("Eva Legacy", second_load.employees[0].name)
 
     def test_exports_reports_as_csv(self) -> None:
         service = SchedulerService()
