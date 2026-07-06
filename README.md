@@ -53,10 +53,10 @@ Unter Windows kann die Anwendung alternativ per Doppelklick auf `start_python_di
 ## Tests und Qualitätssicherung
 
 ```bash
-python -m unittest discover -s tests -p 'test_python_*.py'
+python -m unittest discover -s tests
 ```
 
-Die Tests prüfen die Planungsregeln, Zuweisungen, Abwesenheitslogik, Exporte, Forecast-Importe und SQLite-Persistenz.
+Die Tests prüfen die Planungsregeln, Zuweisungen, Abwesenheitslogik, Exporte, Forecast-Importe, SQLite-Persistenz und die Audit-Integrität (Hash-Kette).
 
 ## Projektstruktur
 
@@ -132,7 +132,6 @@ Release-Regeln für Schemaänderungen:
 ### Lokaler Prüflauf
 
 ```bash
-python -m unittest discover -s tests -p 'test_python_*.py'
 python -m unittest discover -s tests
 ```
 
