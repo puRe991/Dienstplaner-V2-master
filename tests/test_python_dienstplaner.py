@@ -1105,6 +1105,103 @@ class UserAuthenticationTests(unittest.TestCase):
             self.assertTrue(recovery_code)
 
 
+class UserManagementTests(unittest.TestCase):
+    def test_get_user_returns_none_for_unknown_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            self.assertIsNone(repository.get_user("does-not-exist"))
+
+    def test_set_user_active_toggles_login_ability(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER)
+
+            repository.set_user_active(planner.id, False, user_id=admin.id)
+
+            self.assertFalse(repository.get_user(planner.id).is_active)
+            self.assertIsNone(repository.authenticate_user("planer", "Sicheres Passwort 2026"))
+
+            repository.set_user_active(planner.id, True, user_id=admin.id)
+
+            self.assertTrue(repository.get_user(planner.id).is_active)
+            self.assertIsNotNone(repository.authenticate_user("planer", "Sicheres Passwort 2026"))
+
+    def test_set_user_active_refuses_to_deactivate_last_active_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            with self.assertRaises(ValueError):
+                repository.set_user_active(admin.id, False)
+            self.assertTrue(repository.get_user(admin.id).is_active)
+
+    def test_set_user_active_allows_deactivating_admin_when_another_admin_remains(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            first_admin = repository.create_user("admin1", "Sicheres Passwort 2026", UserRole.ADMIN)
+            second_admin = repository.create_user("admin2", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            repository.set_user_active(first_admin.id, False, user_id=second_admin.id)
+
+            self.assertFalse(repository.get_user(first_admin.id).is_active)
+
+    def test_update_user_role_changes_permissions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER)
+
+            updated = repository.update_user_role(planner.id, UserRole.VIEWER, user_id=admin.id)
+
+            self.assertEqual(UserRole.VIEWER, updated.role)
+            self.assertEqual(UserRole.VIEWER, repository.get_user(planner.id).role)
+
+    def test_update_user_role_refuses_to_demote_last_active_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            with self.assertRaises(ValueError):
+                repository.update_user_role(admin.id, UserRole.PLANNER)
+            self.assertEqual(UserRole.ADMIN, repository.get_user(admin.id).role)
+
+    def test_admin_reset_password_replaces_hash_and_enforces_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER)
+
+            repository.admin_reset_password(planner.id, "Neues Sicheres Passwort!", user_id=admin.id)
+
+            self.assertIsNone(repository.authenticate_user("planer", "Sicheres Passwort 2026"))
+            self.assertIsNotNone(repository.authenticate_user("planer", "Neues Sicheres Passwort!"))
+            with self.assertRaises(ValueError):
+                repository.admin_reset_password(planner.id, "kurz")
+
+    def test_user_management_actions_are_recorded_in_audit_hash_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN, user_id="system")
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER, user_id=admin.id)
+            repository.set_user_active(planner.id, False, user_id=admin.id)
+            repository.update_user_role(planner.id, UserRole.VIEWER, user_id=admin.id)
+            repository.admin_reset_password(planner.id, "Noch sicherer 2026!", user_id=admin.id)
+
+            events = repository.list_audit_events(50)
+            actions = [event.action for event in reversed(events)]
+            self.assertEqual(
+                ["user.created", "user.created", "user.deactivated", "user.role_changed", "user.password_reset"],
+                actions,
+            )
+            for event in events:
+                self.assertNotIn("Sicheres Passwort", event.before)
+                self.assertNotIn("Sicheres Passwort", event.after)
+
+            integrity = repository.verify_audit_integrity()
+            self.assertTrue(integrity.is_valid, integrity.problems)
+
+
 class RolePermissionTests(unittest.TestCase):
     def test_role_permissions_match_locked_actions(self) -> None:
         admin = User("admin", UserRole.ADMIN)
@@ -1115,11 +1212,14 @@ class RolePermissionTests(unittest.TestCase):
         self.assertTrue(admin.has_permission(Permission.MANAGE_ABSENCES))
         self.assertTrue(admin.has_permission(Permission.PUBLISH_SCHEDULE))
         self.assertTrue(admin.has_permission(Permission.EXPORT))
+        self.assertTrue(admin.has_permission(Permission.MANAGE_USERS))
         self.assertFalse(planner.has_permission(Permission.MANAGE_EMPLOYEES))
         self.assertTrue(planner.has_permission(Permission.MANAGE_ABSENCES))
         self.assertTrue(planner.has_permission(Permission.PUBLISH_SCHEDULE))
         self.assertTrue(planner.has_permission(Permission.EXPORT))
+        self.assertFalse(planner.has_permission(Permission.MANAGE_USERS))
         self.assertFalse(viewer.has_permission(Permission.EXPORT))
+        self.assertFalse(viewer.has_permission(Permission.MANAGE_USERS))
 
     def test_app_permission_helper_blocks_locked_actions_for_viewer(self) -> None:
         from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
@@ -1131,8 +1231,10 @@ class RolePermissionTests(unittest.TestCase):
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.PUBLISH_SCHEDULE))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_ABSENCES))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_EMPLOYEES))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_USERS))
         self.assertTrue(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.EXPORT))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.MANAGE_EMPLOYEES))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.MANAGE_USERS))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(None, Permission.EXPORT))
 
     def test_scheduler_app_constructor_does_not_force_modal_login_for_tests(self) -> None:

@@ -18,6 +18,7 @@ class Permission(str, Enum):
     MANAGE_ABSENCES = "manage_absences"
     MANAGE_EMPLOYEES = "manage_employees"
     MANAGE_RULE_PROFILES = "manage_rule_profiles"
+    MANAGE_USERS = "manage_users"
 
 
 ROLE_PERMISSIONS: dict[UserRole, frozenset[Permission]] = {

@@ -14,6 +14,7 @@ Python-Desktop-Anwendung zur Erstellung, Prüfung und Auswertung von Dienstplän
 - **Export:** Dienstpläne lokal als CSV, Excel-kompatibles HTML oder einfache PDF-Datei ausgeben.
 - **Persistenz:** Lokale SQLite-Datenbank für Mitarbeitende, Schichten, Zuweisungen und Abwesenheiten.
 - **Lokale Anmeldung:** Beim ersten Start wird ein Admin angelegt. Ein einmaliger Admin-Wiederherstellungscode ermöglicht das Anlegen eines neuen Admins, falls Benutzername oder Passwort vergessen wurden.
+- **Benutzerverwaltung:** Administratoren können über **Benutzer verwalten** im Hauptfenster weitere Nutzer anlegen, deaktivieren/aktivieren, die Rolle ändern und Passwörter zurücksetzen. Mindestens ein aktiver Administrator bleibt dabei immer erhalten; alle Änderungen werden im Änderungsverlauf protokolliert.
 
 ## Technologie
 
@@ -90,6 +91,18 @@ Der Ordner `python_dienstplaner/data/` wird bei Bedarf automatisch angelegt und 
 Beim Einrichten des ersten Administrators zeigt die Anwendung einen Admin-Wiederherstellungscode an. Bewahre diesen Code getrennt vom Gerät und sicher auf. Wer diesen Code besitzt, kann über **Admin-Zugang wiederherstellen** im Anmeldefenster einen neuen lokalen Administrator anlegen. Nach erfolgreicher Wiederherstellung entwertet die Anwendung den alten Code und zeigt einen neuen Code an.
 
 Ohne gespeicherten Wiederherstellungscode kann die Anwendung ein vergessenes Admin-Passwort nicht entschlüsseln, weil Passwörter nur gehasht gespeichert werden. In diesem Fall bleibt nur die Wiederherstellung aus einem Backup oder ein administrativer Datenbankeingriff.
+
+## Rollen und Benutzerverwaltung
+
+Es gibt drei lokale Rollen:
+
+| Rolle | Berechtigungen |
+| --- | --- |
+| Administrator | Alle Rechte, inklusive Benutzerverwaltung, Regelprofile und Änderungsverlauf. |
+| Planer | Dienstpläne veröffentlichen, exportieren, Abwesenheiten verwalten. Keine Mitarbeiter-, Rollen- oder Benutzerverwaltung. |
+| Betrachter | Nur Lesezugriff auf die Planungsansicht. |
+
+Administratoren erreichen die Benutzerverwaltung über den Button **🔑 Benutzer verwalten** im Kopfbereich der Anwendung. Dort lassen sich Nutzer anlegen, aktivieren/deaktivieren, in der Rolle ändern und ihr Passwort zurücksetzen. Die Anwendung verhindert, dass der letzte aktive Administrator deaktiviert oder herabgestuft wird, damit der Zugang nicht versehentlich verloren geht. Jede Änderung wird mit Zeitstempel und ausführendem Benutzer im Änderungsverlauf protokolliert.
 
 ## Forecast-CSV
 

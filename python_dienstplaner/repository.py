@@ -396,16 +396,7 @@ class SQLiteSchedulerRepository:
             return None
         if not self._verify_password(password, row[5], row[4]):
             return None
-        return User(
-            id=row[0],
-            username=row[1],
-            display_name=row[2] or row[1],
-            role=UserRole(row[3]),
-            password_hash=row[4],
-            password_salt=row[5],
-            is_active=bool(row[6]),
-            created_at=datetime.fromisoformat(row[7]),
-        )
+        return self._user_from_row(row)
 
     def has_admin_recovery_code(self) -> bool:
         with self._connect() as connection:
@@ -467,19 +458,75 @@ class SQLiteSchedulerRepository:
                 ORDER BY username COLLATE NOCASE
                 """
             ).fetchall()
-        return [
-            User(
-                id=row[0],
-                username=row[1],
-                display_name=row[2] or row[1],
-                role=UserRole(row[3]),
-                password_hash=row[4],
-                password_salt=row[5],
-                is_active=bool(row[6]),
-                created_at=datetime.fromisoformat(row[7]),
+        return [self._user_from_row(row) for row in rows]
+
+    def get_user(self, user_id: str) -> User | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, username, display_name, role, password_hash, password_salt, is_active, created_at
+                FROM users
+                WHERE id = ?
+                """,
+                (user_id,),
+            ).fetchone()
+        return self._user_from_row(row) if row is not None else None
+
+    def set_user_active(self, user_id: str, is_active: bool) -> User:
+        user = self.get_user(user_id)
+        if user is None:
+            raise ValueError("Benutzer wurde nicht gefunden.")
+        if not is_active and user.role == UserRole.ADMIN and user.is_active:
+            self._ensure_not_last_active_admin(user_id)
+        with self._connect() as connection:
+            connection.execute("UPDATE users SET is_active = ? WHERE id = ?", (1 if is_active else 0, user_id))
+        return self.get_user(user_id)
+
+    def update_user_role(self, user_id: str, role: UserRole | str) -> User:
+        user = self.get_user(user_id)
+        if user is None:
+            raise ValueError("Benutzer wurde nicht gefunden.")
+        new_role = role if isinstance(role, UserRole) else UserRole(str(role))
+        if user.role == UserRole.ADMIN and new_role != UserRole.ADMIN and user.is_active:
+            self._ensure_not_last_active_admin(user_id)
+        with self._connect() as connection:
+            connection.execute("UPDATE users SET role = ? WHERE id = ?", (new_role.value, user_id))
+        return self.get_user(user_id)
+
+    def admin_reset_password(self, user_id: str, new_password: str) -> User:
+        user = self.get_user(user_id)
+        if user is None:
+            raise ValueError("Benutzer wurde nicht gefunden.")
+        validate_password(new_password)
+        salt, password_hash = self._hash_password(new_password)
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
+                (password_hash, salt, user_id),
             )
-            for row in rows
-        ]
+        return self.get_user(user_id)
+
+    def _ensure_not_last_active_admin(self, user_id: str) -> None:
+        with self._connect() as connection:
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM users WHERE role = ? AND is_active = 1 AND id != ?",
+                (UserRole.ADMIN.value, user_id),
+            ).fetchone()[0]
+        if remaining == 0:
+            raise ValueError("Es muss mindestens ein aktiver Administrator bestehen bleiben.")
+
+    @staticmethod
+    def _user_from_row(row: tuple) -> User:
+        return User(
+            id=row[0],
+            username=row[1],
+            display_name=row[2] or row[1],
+            role=UserRole(row[3]),
+            password_hash=row[4],
+            password_salt=row[5],
+            is_active=bool(row[6]),
+            created_at=datetime.fromisoformat(row[7]),
+        )
 
     @staticmethod
     def _hash_password(password: str, salt: str | None = None) -> tuple[str, str]:

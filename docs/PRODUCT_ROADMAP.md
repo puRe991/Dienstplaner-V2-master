@@ -39,18 +39,18 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ## Priorisierte Roadmap
 
-| Priorität | Initiative | Reach | Impact | Confidence | Aufwand | RICE | Begründung |
-| ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | Datenbankmigrationen | 9 | 5 | 0,85 | 8 | 4,78 | Grundlage für sichere Weiterentwicklung ohne Datenverlust. |
-| 2 | Backup/Restore | 8 | 5 | 0,80 | 10 | 3,20 | Reduziert Betriebsrisiko der lokalen SQLite-Datenhaltung. |
-| 3 | Benutzer- und Rechteverwaltung in der UI | 8 | 4 | 0,75 | 12 | 2,00 | Macht lokale Anmeldung administrierbar und bereitet Rechteprüfungen vor. |
-| 4 | Datenschutzprofile für Exporte | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
-| 5 | Import-Fehlerbericht | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
-| 6 | Kalender-/ICS-Export | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
-| 7 | Audit-Integrität | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
-| 8 | Packaging/Installer | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
-| 9 | Lizenzdurchsetzung | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
-| 10 | Automatische Regelvorschläge | 5 | 4 | 0,50 | 20 | 0,50 | Hoher Nutzen möglich, aber fachlich und technisch unsicher ohne Nutzungsdaten. |
+| Priorität | Initiative | Status | Reach | Impact | Confidence | Aufwand | RICE | Begründung |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | Datenbankmigrationen | ✅ Umgesetzt | 9 | 5 | 0,85 | 8 | 4,78 | Grundlage für sichere Weiterentwicklung ohne Datenverlust. |
+| 2 | Backup/Restore | ✅ Umgesetzt | 8 | 5 | 0,80 | 10 | 3,20 | Reduziert Betriebsrisiko der lokalen SQLite-Datenhaltung. |
+| 3 | Benutzer- und Rechteverwaltung in der UI | ✅ Umgesetzt | 8 | 4 | 0,75 | 12 | 2,00 | Macht lokale Anmeldung administrierbar und bereitet Rechteprüfungen vor. |
+| 4 | Datenschutzprofile für Exporte | Offen | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
+| 5 | Import-Fehlerbericht | Offen | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
+| 6 | Kalender-/ICS-Export | Offen | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
+| 7 | Audit-Integrität | ✅ Umgesetzt | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
+| 8 | Packaging/Installer | Offen | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
+| 9 | Lizenzdurchsetzung | Offen | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
+| 10 | Automatische Regelvorschläge | Offen | 5 | 4 | 0,50 | 20 | 0,50 | Hoher Nutzen möglich, aber fachlich und technisch unsicher ohne Nutzungsdaten. |
 
 ## Initiativen im Detail
 
@@ -74,6 +74,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 3. Benutzer- und Rechteverwaltung in der UI
 
+- **Status:** Umgesetzt (2026-07-06). UI unter „🔑 Benutzer verwalten" im Kopfbereich, nur für Administratoren sichtbar; Nutzer anlegen, aktivieren/deaktivieren, Rollenwechsel und Passwort-Reset stehen bereit. Ein Schutzmechanismus verhindert das Deaktivieren oder Herabstufen des letzten aktiven Administrators. Alle Aktionen sind Teil der Audit-Hashkette.
 - **Zielgruppe:** Administratoren, Teamleitungen, Dienstplanverantwortliche.
 - **Nutzen:** Admins können Nutzer anlegen, deaktivieren, Rollen ändern und Passwort-Resets steuern, ohne direkt in Datenbank oder Code einzugreifen.
 - **Risiko bei Nichtumsetzung:** Zugangskontrolle bleibt operativ schwach. Geteilte Admin-Zugänge und manuelle Eingriffe erhöhen Sicherheits- und Support-Risiken.
