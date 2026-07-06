@@ -25,4 +25,4 @@ jobs:
           python-version: '3.12'
 
       - name: Unit-Tests ausführen
-        run: python -m unittest discover -s tests -p 'test_python_*.py'
+        run: python -m unittest discover -s tests
