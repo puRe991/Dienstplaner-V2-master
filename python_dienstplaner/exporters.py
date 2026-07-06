@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -21,6 +22,58 @@ class ExportOptions:
     include_hourly_wage: bool = False
     include_absence_reason: bool = True
     only_published_shifts: bool = False
+    anonymize_employee_names: bool = False
+
+
+class ExportPrivacyProfile(str, Enum):
+    """Fixed export privacy profiles for the schedule export dialog.
+
+    The MVP intentionally ships three fixed profiles instead of a freely
+    configurable field matrix, so callers pick a purpose instead of assembling
+    ``ExportOptions`` by hand.
+    """
+
+    INTERNAL_FULL = "internal_full"
+    EMPLOYEE_PLAN_REDUCED = "employee_plan_reduced"
+    CONTROLLING_ANONYMIZED = "controlling_anonymized"
+
+
+EXPORT_PRIVACY_PROFILE_LABELS: dict[ExportPrivacyProfile, str] = {
+    ExportPrivacyProfile.INTERNAL_FULL: "Intern vollständig",
+    ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED: "Mitarbeitendenplan reduziert",
+    ExportPrivacyProfile.CONTROLLING_ANONYMIZED: "Controlling anonymisiert",
+}
+
+EXPORT_PRIVACY_PROFILE_DESCRIPTIONS: dict[ExportPrivacyProfile, str] = {
+    ExportPrivacyProfile.INTERNAL_FULL: (
+        "Vollständiger interner Export mit Stundenlöhnen, Abwesenheitsgründen und "
+        "allen Schichten, auch unveröffentlichten. Nur für internen Gebrauch weitergeben."
+    ),
+    ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED: (
+        "Reduzierter Plan für Mitarbeitende: keine Löhne, keine Abwesenheitsgründe, "
+        "nur bereits veröffentlichte Schichten."
+    ),
+    ExportPrivacyProfile.CONTROLLING_ANONYMIZED: (
+        "Anonymisierter Export für Controlling: Personalkosten bleiben sichtbar, "
+        "Mitarbeitendennamen werden anonymisiert und Abwesenheitsgründe entfernt."
+    ),
+}
+
+
+def export_options_for_profile(profile: ExportPrivacyProfile) -> ExportOptions:
+    """Return the fixed ``ExportOptions`` for one of the MVP privacy profiles."""
+    if profile == ExportPrivacyProfile.INTERNAL_FULL:
+        return ExportOptions(include_hourly_wage=True, include_absence_reason=True, only_published_shifts=False)
+    if profile == ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED:
+        return ExportOptions(include_hourly_wage=False, include_absence_reason=False, only_published_shifts=True)
+    if profile == ExportPrivacyProfile.CONTROLLING_ANONYMIZED:
+        return ExportOptions(
+            include_hourly_wage=True,
+            include_absence_reason=False,
+            only_published_shifts=False,
+            anonymize_employee_names=True,
+        )
+    raise ValueError(f"Unbekanntes Exportprofil: {profile}")
 
 
 @dataclass(frozen=True)
@@ -150,6 +203,10 @@ class ScheduleExporter:
     def _shift_rows(self, shifts: Iterable[Shift], options: ExportOptions) -> list[list[str]]:
         rows: list[list[str]] = []
         for shift in shifts:
+            if options.anonymize_employee_names:
+                assigned_display = ", ".join(f"Mitarbeiter {index + 1}" for index in range(len(shift.employee_names)))
+            else:
+                assigned_display = ", ".join(shift.employee_names)
             row = [
                 shift.name,
                 shift.department,
@@ -157,7 +214,7 @@ class ScheduleExporter:
                 shift.start.isoformat(sep=" ", timespec="minutes"),
                 shift.end.isoformat(sep=" ", timespec="minutes"),
                 str(shift.required_employees),
-                ", ".join(shift.employee_names) or "nicht besetzt",
+                assigned_display or "nicht besetzt",
             ]
             if options.include_hourly_wage:
                 wages = [self._format_wage(employee.hourly_wage) for employee in self._assigned_employees(shift)]

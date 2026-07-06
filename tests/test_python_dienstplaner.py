@@ -11,7 +11,13 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.auth import Permission, User, UserRole
-from python_dienstplaner.exporters import ExportHeader, ExportOptions
+from python_dienstplaner.exporters import (
+    EXPORT_PRIVACY_PROFILE_LABELS,
+    ExportHeader,
+    ExportOptions,
+    ExportPrivacyProfile,
+    export_options_for_profile,
+)
 from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile
 from python_dienstplaner.repository import SCHEMA_VERSION, SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
@@ -382,6 +388,58 @@ class SchedulerServiceTests(unittest.TestCase):
 
         self.assertEqual("Schicht;Abteilung;Filiale;Start;Ende;Kapazität;Mitarbeitende", without_wage)
         self.assertEqual("Schicht;Abteilung;Filiale;Start;Ende;Kapazität;Mitarbeitende;Stundenlohn", with_wage)
+
+    def test_controlling_anonymized_profile_replaces_employee_names_but_keeps_wage(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=18.25)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        options = export_options_for_profile(ExportPrivacyProfile.CONTROLLING_ANONYMIZED)
+        with tempfile.TemporaryDirectory() as directory:
+            content = service.export_schedule(
+                Path(directory) / "controlling.csv", ExportFormat.CSV, options=options
+            ).read_text(encoding="utf-8")
+
+        self.assertNotIn("Eva Retail", content)
+        self.assertIn("Mitarbeiter 1", content)
+        self.assertIn("18.25", content)
+
+    def test_employee_plan_reduced_profile_hides_wage_and_unpublished_shifts(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=18.25)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        options = export_options_for_profile(ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED)
+        with tempfile.TemporaryDirectory() as directory:
+            content = service.export_schedule(
+                Path(directory) / "employee_plan.csv", ExportFormat.CSV, options=options
+            ).read_text(encoding="utf-8")
+
+        self.assertNotIn("18.25", content)
+        self.assertNotIn("Früh", content)  # unpublished shift is excluded entirely
+
+    def test_internal_full_profile_keeps_wage_and_unpublished_shifts(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=18.25)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        options = export_options_for_profile(ExportPrivacyProfile.INTERNAL_FULL)
+        with tempfile.TemporaryDirectory() as directory:
+            content = service.export_schedule(
+                Path(directory) / "internal.csv", ExportFormat.CSV, options=options
+            ).read_text(encoding="utf-8")
+
+        self.assertIn("Eva Retail", content)
+        self.assertIn("18.25", content)
+        self.assertIn("Früh", content)
+
+    def test_all_privacy_profiles_have_a_label(self) -> None:
+        for profile in ExportPrivacyProfile:
+            self.assertIn(profile, EXPORT_PRIVACY_PROFILE_LABELS)
+            self.assertTrue(EXPORT_PRIVACY_PROFILE_LABELS[profile])
 
 
 class RepositoryTests(unittest.TestCase):

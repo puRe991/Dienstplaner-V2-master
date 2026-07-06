@@ -44,7 +44,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 | 1 | Datenbankmigrationen | ✅ Umgesetzt | 9 | 5 | 0,85 | 8 | 4,78 | Grundlage für sichere Weiterentwicklung ohne Datenverlust. |
 | 2 | Backup/Restore | ✅ Umgesetzt | 8 | 5 | 0,80 | 10 | 3,20 | Reduziert Betriebsrisiko der lokalen SQLite-Datenhaltung. |
 | 3 | Benutzer- und Rechteverwaltung in der UI | ✅ Umgesetzt | 8 | 4 | 0,75 | 12 | 2,00 | Macht lokale Anmeldung administrierbar und bereitet Rechteprüfungen vor. |
-| 4 | Datenschutzprofile für Exporte | Offen | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
+| 4 | Datenschutzprofile für Exporte | ✅ Umgesetzt | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
 | 5 | Import-Fehlerbericht | Offen | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
 | 6 | Kalender-/ICS-Export | Offen | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
 | 7 | Audit-Integrität | ✅ Umgesetzt | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
@@ -84,6 +84,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 4. Datenschutzprofile für Exporte
 
+- **Status:** Umgesetzt (2026-07-06). Vor jedem Dienstplan-Export wählt man eines der drei MVP-Profile in einem Dialog; die Wahl (inklusive aller Feldeinstellungen) wird im Änderungsverlauf protokolliert. Keine frei konfigurierbare Feldmatrix, wie im MVP vorgesehen.
 - **Zielgruppe:** Datenschutzverantwortliche, Dienstplanverantwortliche, Geschäftsführung.
 - **Nutzen:** Exporte enthalten nur die für den jeweiligen Zweck notwendigen personenbezogenen Daten.
 - **Risiko bei Nichtumsetzung:** CSV-, HTML- oder PDF-Exporte können unnötige personenbezogene Daten enthalten und unkontrolliert weitergegeben werden.

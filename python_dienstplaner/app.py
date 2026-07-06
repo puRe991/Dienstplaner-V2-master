@@ -13,10 +13,22 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
+from .exporters import (
+    EXPORT_PRIVACY_PROFILE_DESCRIPTIONS,
+    EXPORT_PRIVACY_PROFILE_LABELS,
+    ExportOptions,
+    ExportPrivacyProfile,
+    export_options_for_profile,
+)
 from .licensing import LicenseCheckResult, LicenseManager
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
+
+
+EXPORT_PRIVACY_PROFILE_BY_LABEL: dict[str, ExportPrivacyProfile] = {
+    label: profile for profile, label in EXPORT_PRIVACY_PROFILE_LABELS.items()
+}
 
 
 SENSITIVE_LOG_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -1609,6 +1621,52 @@ class SchedulerApp(tk.Tk):
         self._run_ui_action("Berichte exportieren", export_reports)
 
     def _export_csv(self) -> None:
+        self._open_export_privacy_dialog(self._run_schedule_export)
+
+    def _open_export_privacy_dialog(self, on_confirm: Callable[[ExportOptions], None]) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Exportprofil wählen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        tk.Label(dialog, text="Exportprofil wählen", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 8))
+        tk.Label(
+            dialog,
+            text="Das Profil bestimmt, welche personenbezogenen Daten im Export enthalten sind.",
+            bg="#FFFFFF",
+            fg="#334155",
+            wraplength=380,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 12))
+
+        profile_value = tk.StringVar(value=EXPORT_PRIVACY_PROFILE_LABELS[ExportPrivacyProfile.INTERNAL_FULL])
+        tk.Label(dialog, text="Profil", bg="#FFFFFF", fg="#334155").grid(row=2, column=0, sticky="w", padx=18, pady=6)
+        ttk.Combobox(
+            dialog,
+            textvariable=profile_value,
+            values=list(EXPORT_PRIVACY_PROFILE_LABELS.values()),
+            state="readonly",
+            width=32,
+        ).grid(row=2, column=1, padx=18, pady=6)
+
+        description_label = tk.Label(dialog, text="", bg="#FFFFFF", fg="#64748B", wraplength=380, justify="left")
+        description_label.grid(row=3, column=0, columnspan=2, sticky="w", padx=18, pady=(4, 12))
+
+        def update_description(*_args) -> None:
+            profile = EXPORT_PRIVACY_PROFILE_BY_LABEL[profile_value.get()]
+            description_label.configure(text=EXPORT_PRIVACY_PROFILE_DESCRIPTIONS[profile])
+
+        profile_value.trace_add("write", update_description)
+        update_description()
+
+        def confirm() -> None:
+            profile = EXPORT_PRIVACY_PROFILE_BY_LABEL[profile_value.get()]
+            dialog.destroy()
+            on_confirm(export_options_for_profile(profile))
+
+        ttk.Button(dialog, text="Weiter", style="Primary.TButton", command=confirm).grid(row=4, column=1, sticky="e", padx=18, pady=(0, 18))
+
+    def _run_schedule_export(self, options: ExportOptions) -> None:
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
             defaultextension=".csv",
@@ -1624,7 +1682,7 @@ class SchedulerApp(tk.Tk):
         else:
             export_format = ExportFormat.CSV
         def export_schedule() -> None:
-            output = self.service.export_schedule(path, export_format, user_id=self._current_user_id())
+            output = self.service.export_schedule(path, export_format, options=options, user_id=self._current_user_id())
             self._persist_changes(f"Exportiert: {output}")
 
         self._run_ui_action("Dienstplan exportieren", export_schedule)

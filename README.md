@@ -11,7 +11,7 @@ Python-Desktop-Anwendung zur Erstellung, Prüfung und Auswertung von Dienstplän
 - **Wochenansicht:** Dienstplan als Desktop-Oberfläche mit Kalender, Mitarbeiterliste, Schichtübersicht und Statusmeldungen.
 - **Abwesenheiten:** Urlaub, freie Tage, Krankheit, Fortbildung, Seminar und weitere Abwesenheitsarten erfassen; Überschneidungen mit bestehenden Schichten werden verhindert.
 - **Forecast-Import:** Umsatz- und Kundenfrequenzdaten aus CSV-Dateien importieren.
-- **Export:** Dienstpläne lokal als CSV, Excel-kompatibles HTML oder einfache PDF-Datei ausgeben.
+- **Export mit Datenschutzprofilen:** Dienstpläne lokal als CSV, Excel-kompatibles HTML oder einfache PDF-Datei ausgeben. Vor jedem Export wählt man eines von drei festen Profilen: „Intern vollständig" (mit Löhnen und Abwesenheitsgründen), „Mitarbeitendenplan reduziert" (ohne Löhne/Abwesenheitsgründe, nur veröffentlichte Schichten) oder „Controlling anonymisiert" (Personalkosten sichtbar, Namen anonymisiert).
 - **Persistenz:** Lokale SQLite-Datenbank für Mitarbeitende, Schichten, Zuweisungen und Abwesenheiten.
 - **Lokale Anmeldung:** Beim ersten Start wird ein Admin angelegt. Ein einmaliger Admin-Wiederherstellungscode ermöglicht das Anlegen eines neuen Admins, falls Benutzername oder Passwort vergessen wurden.
 - **Benutzerverwaltung:** Administratoren können über **Benutzer verwalten** im Hauptfenster weitere Nutzer anlegen, deaktivieren/aktivieren, die Rolle ändern und Passwörter zurücksetzen. Mindestens ein aktiver Administrator bleibt dabei immer erhalten; alle Änderungen werden im Änderungsverlauf protokolliert.
