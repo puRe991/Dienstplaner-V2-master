@@ -441,6 +441,64 @@ class SchedulerServiceTests(unittest.TestCase):
             self.assertIn(profile, EXPORT_PRIVACY_PROFILE_LABELS)
             self.assertTrue(EXPORT_PRIVACY_PROFILE_LABELS[profile])
 
+    def test_export_calendar_ics_contains_a_valid_event_for_each_shift(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 5, 8), datetime(2026, 1, 5, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = service.export_calendar_ics(
+                Path(directory) / "plan.ics", datetime(2026, 1, 1), datetime(2026, 1, 8)
+            )
+            content = output.read_bytes().decode("utf-8")
+
+        self.assertTrue(content.startswith("BEGIN:VCALENDAR\r\n"))
+        self.assertTrue(content.rstrip("\r\n").endswith("END:VCALENDAR"))
+        self.assertIn("BEGIN:VEVENT\r\n", content)
+        self.assertIn("DTSTART:20260105T080000\r\n", content)
+        self.assertIn("DTEND:20260105T160000\r\n", content)
+        self.assertIn("Eva Retail", content)
+
+    def test_export_calendar_ics_rejects_end_before_start(self) -> None:
+        service = SchedulerService()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                service.export_calendar_ics(Path(directory) / "plan.ics", datetime(2026, 1, 8), datetime(2026, 1, 1))
+
+    def test_export_calendar_ics_filters_by_employee_and_anonymizes_names(self) -> None:
+        service = SchedulerService()
+        eva = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        tom = service.add_employee("Tom Sales", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 5, 8), datetime(2026, 1, 5, 16), 2, "Kasse")
+        service.assign(eva.id, shift.id)
+        service.assign(tom.id, shift.id)
+
+        with tempfile.TemporaryDirectory() as directory:
+            eva_only = service.export_calendar_ics(
+                Path(directory) / "eva.ics", datetime(2026, 1, 1), datetime(2026, 1, 8), employee_id=eva.id
+            ).read_bytes().decode("utf-8")
+            anonymized = service.export_calendar_ics(
+                Path(directory) / "anon.ics",
+                datetime(2026, 1, 1),
+                datetime(2026, 1, 8),
+                options=export_options_for_profile(ExportPrivacyProfile.CONTROLLING_ANONYMIZED),
+            ).read_bytes().decode("utf-8")
+
+        self.assertEqual(1, eva_only.count("BEGIN:VEVENT"))
+        self.assertNotIn("Eva Retail", anonymized)
+        self.assertNotIn("Tom Sales", anonymized)
+        self.assertIn("Mitarbeiter 1", anonymized.replace("\r\n ", ""))
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                service.export_calendar_ics(
+                    Path(directory) / "missing.ics",
+                    datetime(2026, 1, 1),
+                    datetime(2026, 1, 8),
+                    employee_id="does-not-exist",
+                )
+
 
 class RepositoryTests(unittest.TestCase):
     def test_saves_and_loads_service_state(self) -> None:

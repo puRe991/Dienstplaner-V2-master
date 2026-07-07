@@ -46,7 +46,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 | 3 | Benutzer- und Rechteverwaltung in der UI | ✅ Umgesetzt | 8 | 4 | 0,75 | 12 | 2,00 | Macht lokale Anmeldung administrierbar und bereitet Rechteprüfungen vor. |
 | 4 | Datenschutzprofile für Exporte | ✅ Umgesetzt | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
 | 5 | Import-Fehlerbericht | ✅ Umgesetzt | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
-| 6 | Kalender-/ICS-Export | Offen | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
+| 6 | Kalender-/ICS-Export | ✅ Umgesetzt | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
 | 7 | Audit-Integrität | ✅ Umgesetzt | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
 | 8 | Packaging/Installer | Offen | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
 | 9 | Lizenzdurchsetzung | Offen | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
@@ -104,6 +104,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 6. Kalender-/ICS-Export
 
+- **Status:** Umgesetzt (2026-07-07). „Kalender (ICS) Export" exportiert die aktuell angezeigte Woche als RFC-5545-Datei, wahlweise gefiltert auf einen Mitarbeitenden (Service-Ebene) und mit demselben Datenschutzprofil-Dialog wie der CSV/PDF-Export. Zeiten werden als lokale „floating time" ohne Zeitzonen-Konvertierung geschrieben, passend zur restlichen Anwendung. Keine bidirektionale Synchronisierung, keine CalDAV-Anbindung.
 - **Zielgruppe:** Mitarbeitende, Dienstplanverantwortliche, Teamleitungen.
 - **Nutzen:** Schichten lassen sich in persönliche Kalender übernehmen und mit mobilen Geräten synchronisieren.
 - **Risiko bei Nichtumsetzung:** Mitarbeitende müssen Dienstplandaten manuell übertragen. Das erhöht Übertragungsfehler und reduziert Akzeptanz.

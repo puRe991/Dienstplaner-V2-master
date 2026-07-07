@@ -139,6 +139,40 @@ class ScheduleExporter:
         rows = self._shift_rows(selected, options or ExportOptions())
         return TabularExporter(self._shift_columns(options or ExportOptions()), rows, export_header).export(path, ExportFormat.PDF)
 
+    def export_ics(
+        self,
+        path: str | Path,
+        start: datetime,
+        end: datetime,
+        *,
+        employee_id: str | None = None,
+        options: ExportOptions | None = None,
+    ) -> Path:
+        """Export shifts in ``[start, end)`` as an iCalendar (.ics) file.
+
+        Times are written as floating local time (no TZID/UTC conversion)
+        since the application does not track a per-installation timezone.
+        Most calendar clients interpret floating time as the device's local
+        time, which matches how shift times are entered and displayed here.
+        """
+        if end <= start:
+            raise ValueError("Exportzeitraum muss nach dem Start enden.")
+        export_options = options or ExportOptions()
+        employee = None
+        if employee_id is not None:
+            employee = self._find_employee(employee_id)
+            if employee is None:
+                raise ValueError("Mitarbeiter wurde nicht gefunden.")
+
+        selected = self._filtered_shifts(export_options, start=start, end=end)
+        if employee is not None:
+            selected = [shift for shift in selected if employee.id in shift.employee_ids]
+
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(IcsCalendarDocument(selected, employee, export_options).render())
+        return output
+
     def export_employee_plan_pdf(
         self,
         path: str | Path,
@@ -311,6 +345,90 @@ class TabularExporter:
             return lines
         lines.extend(" | ".join(row) for row in self.rows)
         return lines
+
+
+class IcsCalendarDocument:
+    """Minimal dependency-free iCalendar (RFC 5545) writer for shift exports.
+
+    Times are written as floating local time (no TZID, no UTC conversion)
+    since the application does not track a per-installation timezone; most
+    calendar clients interpret floating time as the device's local time.
+    """
+
+    PRODID = "-//Dienstplanung Pro//Schichtexport//DE"
+    LINE_FOLD_LENGTH = 75
+
+    def __init__(self, shifts: Sequence[Shift], employee: Employee | None, options: ExportOptions) -> None:
+        self.shifts = list(shifts)
+        self.employee = employee
+        self.options = options
+
+    def render(self) -> bytes:
+        now = datetime.now()
+        lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:{self.PRODID}", "CALSCALE:GREGORIAN"]
+        for shift in sorted(self.shifts, key=lambda item: (item.start, item.name)):
+            lines.extend(self._event_lines(shift, now))
+        lines.append("END:VCALENDAR")
+
+        folded: list[str] = []
+        for line in lines:
+            folded.extend(self._fold_line(line))
+        return ("\r\n".join(folded) + "\r\n").encode("utf-8")
+
+    def _event_lines(self, shift: Shift, now: datetime) -> list[str]:
+        summary = shift.name if self.employee is None else f"{shift.name} ({shift.department})"
+        assigned = self._assigned_names(shift)
+        description_parts = [f"Abteilung: {shift.department}", f"Filiale: {shift.branch}"]
+        if assigned:
+            description_parts.append(f"Mitarbeitende: {', '.join(assigned)}")
+        return [
+            "BEGIN:VEVENT",
+            f"UID:{shift.id}@dienstplanung-pro",
+            f"DTSTAMP:{self._format_utc(now)}",
+            f"DTSTART:{self._format_floating(shift.start)}",
+            f"DTEND:{self._format_floating(shift.end)}",
+            f"SUMMARY:{self._escape(summary)}",
+            f"LOCATION:{self._escape(shift.branch)}",
+            f"DESCRIPTION:{self._escape(chr(10).join(description_parts))}",
+            "END:VEVENT",
+        ]
+
+    def _assigned_names(self, shift: Shift) -> list[str]:
+        if not self.options.anonymize_employee_names:
+            return list(shift.employee_names)
+        return [f"Mitarbeiter {index + 1}" for index in range(len(shift.employee_names))]
+
+    @staticmethod
+    def _format_floating(value: datetime) -> str:
+        return value.strftime("%Y%m%dT%H%M%S")
+
+    @staticmethod
+    def _format_utc(value: datetime) -> str:
+        return value.strftime("%Y%m%dT%H%M%SZ")
+
+    @staticmethod
+    def _escape(text: str) -> str:
+        return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+    @classmethod
+    def _fold_line(cls, line: str) -> list[str]:
+        encoded = line.encode("utf-8")
+        if len(encoded) <= cls.LINE_FOLD_LENGTH:
+            return [line]
+        chunks: list[str] = []
+        start = 0
+        limit = cls.LINE_FOLD_LENGTH
+        while start < len(encoded):
+            chunk = encoded[start : start + limit]
+            while chunk:
+                try:
+                    chunks.append(chunk.decode("utf-8"))
+                    break
+                except UnicodeDecodeError:
+                    chunk = chunk[:-1]
+            start += len(chunk)
+            limit = cls.LINE_FOLD_LENGTH - 1
+        return [chunks[0]] + [f" {chunk}" for chunk in chunks[1:]]
 
 
 class SimplePdfDocument:

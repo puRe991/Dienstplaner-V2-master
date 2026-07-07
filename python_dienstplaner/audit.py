@@ -193,6 +193,7 @@ def install_service_audit(service_cls: type[Any]) -> None:
     original_delete_absence = service_cls.delete_absence
     original_publish_week = service_cls.publish_week
     original_export_schedule = service_cls.export_schedule
+    original_export_calendar_ics = service_cls.export_calendar_ics
     original_export_reports = service_cls.export_reports
 
     def __init__(self, *args, **kwargs):
@@ -375,6 +376,25 @@ def install_service_audit(service_cls: type[Any]) -> None:
         )
         return output
 
+    def export_calendar_ics(self, path, start, end, *, employee_id=None, options=None, user_id="system"):
+        output = original_export_calendar_ics(self, path, start, end, employee_id=employee_id, options=options)
+        self.record_audit_event(
+            "calendar.exported",
+            "export",
+            str(output),
+            None,
+            {
+                "path": str(output),
+                "format": "ics",
+                "employee_id": employee_id,
+                "start": start,
+                "end": end,
+                "export_options": asdict(options) if options is not None else None,
+            },
+            user_id=user_id,
+        )
+        return output
+
     def export_reports(self, path, *, user_id="system"):
         output = original_export_reports(self, path)
         self.record_audit_event("reports.exported", "export", str(output), None, {"path": str(output), "format": "csv", "metric_count": len(self.create_reports())}, user_id=user_id)
@@ -396,6 +416,7 @@ def install_service_audit(service_cls: type[Any]) -> None:
     service_cls.delete_absence = delete_absence
     service_cls.publish_week = publish_week
     service_cls.export_schedule = export_schedule
+    service_cls.export_calendar_ics = export_calendar_ics
     service_cls.export_reports = export_reports
     service_cls._audit_installed = True
 

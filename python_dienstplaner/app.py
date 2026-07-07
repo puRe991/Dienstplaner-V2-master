@@ -345,7 +345,8 @@ class SchedulerApp(tk.Tk):
         ttk.Button(actions, text="💾 Speichern", style="Ghost.TButton", command=self._save).pack(fill="x", padx=12, pady=(5, 5))
         ttk.Button(actions, text="Backup erstellen", style="Ghost.TButton", command=self._create_backup).pack(fill="x", padx=12, pady=5)
         ttk.Button(actions, text="Backup wiederherstellen", style="Danger.TButton", command=self._restore_backup).pack(fill="x", padx=12, pady=(5, 12))
-        ttk.Button(actions, text="CSV Export", style="Ghost.TButton", command=self._export_csv).pack(fill="x", padx=12, pady=(0, 12))
+        ttk.Button(actions, text="CSV Export", style="Ghost.TButton", command=self._export_csv).pack(fill="x", padx=12, pady=(0, 5))
+        ttk.Button(actions, text="Kalender (ICS) Export", style="Ghost.TButton", command=self._export_ics).pack(fill="x", padx=12, pady=(0, 12))
 
     def _activate_sidebar(self, key: str, command: object) -> None:
         self.active_view = key
@@ -1687,6 +1688,26 @@ class SchedulerApp(tk.Tk):
             self._persist_changes(f"Exportiert: {output}")
 
         self._run_ui_action("Dienstplan exportieren", export_schedule)
+
+    def _export_ics(self) -> None:
+        self._open_export_privacy_dialog(self._run_calendar_export)
+
+    def _run_calendar_export(self, options: ExportOptions) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Kalender exportieren",
+            defaultextension=".ics",
+            filetypes=[("iCalendar", "*.ics")],
+        )
+        if not path:
+            return
+        start = self.week_start
+        end = start + timedelta(days=7)
+
+        def export_calendar() -> None:
+            output = self.service.export_calendar_ics(path, start, end, options=options, user_id=self._current_user_id())
+            self._set_status(f"Kalender exportiert: {output}")
+
+        self._run_ui_action("Kalender exportieren", export_calendar)
 
     def _import_forecast(self) -> None:
         path = filedialog.askopenfilename(title="Forecast CSV importieren", filetypes=[("CSV", "*.csv"), ("Alle Dateien", "*.*")])

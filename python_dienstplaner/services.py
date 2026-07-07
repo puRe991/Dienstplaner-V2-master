@@ -397,6 +397,17 @@ class SchedulerService:
             path, employee_id, period_start, period_end, options=options, header=header
         )
 
+    def export_calendar_ics(
+        self,
+        path: str | Path,
+        start: datetime,
+        end: datetime,
+        *,
+        employee_id: str | None = None,
+        options: ExportOptions | None = None,
+    ) -> Path:
+        return ScheduleExporter(self.employees, self.shifts).export_ics(path, start, end, employee_id=employee_id, options=options)
+
     def export_reports(self, path: str | Path) -> Path:
         output = Path(path)
         output.parent.mkdir(parents=True, exist_ok=True)
