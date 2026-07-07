@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .auth import User
 from .models import Absence, AssignmentResult, Employee, ExportFormat, Shift
 
 DEFAULT_AUDIT_LOAD_LIMIT = 500
@@ -166,6 +167,17 @@ def assignment_snapshot(employee: Employee, shift: Shift) -> dict[str, object]:
     }
 
 
+def user_snapshot(user: User) -> dict[str, object]:
+    """Audit snapshot for a user account. Excludes password hash and salt."""
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "role": user.role.value,
+        "is_active": user.is_active,
+    }
+
+
 def install_service_audit(service_cls: type[Any]) -> None:
     if getattr(service_cls, "_audit_installed", False):
         return
@@ -181,6 +193,7 @@ def install_service_audit(service_cls: type[Any]) -> None:
     original_delete_absence = service_cls.delete_absence
     original_publish_week = service_cls.publish_week
     original_export_schedule = service_cls.export_schedule
+    original_export_calendar_ics = service_cls.export_calendar_ics
     original_export_reports = service_cls.export_reports
 
     def __init__(self, *args, **kwargs):
@@ -346,9 +359,40 @@ def install_service_audit(service_cls: type[Any]) -> None:
         self.record_audit_event("schedule.published", "week", week_start.date().isoformat(), before, after, user_id=user_id)
         return count
 
-    def export_schedule(self, path, export_format=ExportFormat.CSV, *, user_id="system", **kwargs):
-        output = original_export_schedule(self, path, export_format, **kwargs)
-        self.record_audit_event("schedule.exported", "export", str(output), None, {"path": str(output), "format": export_format.value, "shift_count": len(self.shifts)}, user_id=user_id)
+    def export_schedule(self, path, export_format=ExportFormat.CSV, *, options=None, user_id="system", **kwargs):
+        output = original_export_schedule(self, path, export_format, options=options, **kwargs)
+        self.record_audit_event(
+            "schedule.exported",
+            "export",
+            str(output),
+            None,
+            {
+                "path": str(output),
+                "format": export_format.value,
+                "shift_count": len(self.shifts),
+                "export_options": asdict(options) if options is not None else None,
+            },
+            user_id=user_id,
+        )
+        return output
+
+    def export_calendar_ics(self, path, start, end, *, employee_id=None, options=None, user_id="system"):
+        output = original_export_calendar_ics(self, path, start, end, employee_id=employee_id, options=options)
+        self.record_audit_event(
+            "calendar.exported",
+            "export",
+            str(output),
+            None,
+            {
+                "path": str(output),
+                "format": "ics",
+                "employee_id": employee_id,
+                "start": start,
+                "end": end,
+                "export_options": asdict(options) if options is not None else None,
+            },
+            user_id=user_id,
+        )
         return output
 
     def export_reports(self, path, *, user_id="system"):
@@ -372,6 +416,7 @@ def install_service_audit(service_cls: type[Any]) -> None:
     service_cls.delete_absence = delete_absence
     service_cls.publish_week = publish_week
     service_cls.export_schedule = export_schedule
+    service_cls.export_calendar_ics = export_calendar_ics
     service_cls.export_reports = export_reports
     service_cls._audit_installed = True
 
@@ -408,6 +453,59 @@ def _backfill_audit_hashes(connection) -> None:
         previous_hash = event_hash
 
 
+def _insert_repository_audit_event(
+    repository: Any,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    before: object | None,
+    after: object | None,
+    user_id: str,
+) -> None:
+    """Record an audit event for a repository action that commits immediately.
+
+    Unlike service actions, calls such as user management take effect right
+    away instead of being batched until ``save()``. The hash chain is
+    therefore extended against the latest row already persisted in the
+    database rather than an in-memory list.
+    """
+    timestamp = datetime.now()
+    normalized_user_id = str(user_id or "system")
+    before_json = audit_json(before)
+    after_json = audit_json(after)
+    with repository._connect() as connection:
+        row = connection.execute("SELECT event_hash FROM audit_events ORDER BY rowid DESC LIMIT 1").fetchone()
+        previous_hash = row[0] if row else GENESIS_AUDIT_HASH
+        event_hash = calculate_audit_event_hash(
+            previous_hash=previous_hash,
+            timestamp=timestamp,
+            user_id=normalized_user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=str(entity_id),
+            before=before_json,
+            after=after_json,
+        )
+        connection.execute(
+            """
+            INSERT INTO audit_events(id, timestamp, user_id, action, entity_type, entity_id, before, after, previous_hash, event_hash)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid4()),
+                timestamp.isoformat(),
+                normalized_user_id,
+                action,
+                entity_type,
+                str(entity_id),
+                before_json,
+                after_json,
+                previous_hash,
+                event_hash,
+            ),
+        )
+
+
 def install_repository_audit(repository_cls: type[Any]) -> None:
     if getattr(repository_cls, "_audit_installed", False):
         return
@@ -415,6 +513,10 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
     original_initialize = repository_cls._initialize
     original_save = repository_cls.save
     original_load = repository_cls.load
+    original_create_user = repository_cls.create_user
+    original_set_user_active = repository_cls.set_user_active
+    original_update_user_role = repository_cls.update_user_role
+    original_admin_reset_password = repository_cls.admin_reset_password
 
     def _initialize(self):
         original_initialize(self)
@@ -509,9 +611,38 @@ def install_repository_audit(repository_cls: type[Any]) -> None:
             for row in rows
         ]
 
+    def create_user(self, *args, user_id: str = "system", **kwargs):
+        user = original_create_user(self, *args, **kwargs)
+        _insert_repository_audit_event(self, "user.created", "user", user.id, None, user_snapshot(user), user_id)
+        return user
+
+    def set_user_active(self, target_user_id, is_active, *, user_id: str = "system"):
+        before_user = self.get_user(target_user_id)
+        before = user_snapshot(before_user) if before_user is not None else None
+        updated = original_set_user_active(self, target_user_id, is_active)
+        action = "user.activated" if is_active else "user.deactivated"
+        _insert_repository_audit_event(self, action, "user", target_user_id, before, user_snapshot(updated), user_id)
+        return updated
+
+    def update_user_role(self, target_user_id, role, *, user_id: str = "system"):
+        before_user = self.get_user(target_user_id)
+        before = user_snapshot(before_user) if before_user is not None else None
+        updated = original_update_user_role(self, target_user_id, role)
+        _insert_repository_audit_event(self, "user.role_changed", "user", target_user_id, before, user_snapshot(updated), user_id)
+        return updated
+
+    def admin_reset_password(self, target_user_id, new_password, *, user_id: str = "system"):
+        updated = original_admin_reset_password(self, target_user_id, new_password)
+        _insert_repository_audit_event(self, "user.password_reset", "user", target_user_id, None, user_snapshot(updated), user_id)
+        return updated
+
     repository_cls._initialize = _initialize
     repository_cls.save = save
     repository_cls.load = load
+    repository_cls.create_user = create_user
+    repository_cls.set_user_active = set_user_active
+    repository_cls.update_user_role = update_user_role
+    repository_cls.admin_reset_password = admin_reset_password
 
     def verify_audit_integrity(self) -> AuditIntegrityResult:
         with self._connect() as connection:

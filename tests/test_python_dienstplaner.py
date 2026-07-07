@@ -11,7 +11,13 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from python_dienstplaner.auth import Permission, User, UserRole
-from python_dienstplaner.exporters import ExportHeader, ExportOptions
+from python_dienstplaner.exporters import (
+    EXPORT_PRIVACY_PROFILE_LABELS,
+    ExportHeader,
+    ExportOptions,
+    ExportPrivacyProfile,
+    export_options_for_profile,
+)
 from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile
 from python_dienstplaner.repository import SCHEMA_VERSION, SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
@@ -383,6 +389,116 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertEqual("Schicht;Abteilung;Filiale;Start;Ende;Kapazität;Mitarbeitende", without_wage)
         self.assertEqual("Schicht;Abteilung;Filiale;Start;Ende;Kapazität;Mitarbeitende;Stundenlohn", with_wage)
 
+    def test_controlling_anonymized_profile_replaces_employee_names_but_keeps_wage(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=18.25)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        options = export_options_for_profile(ExportPrivacyProfile.CONTROLLING_ANONYMIZED)
+        with tempfile.TemporaryDirectory() as directory:
+            content = service.export_schedule(
+                Path(directory) / "controlling.csv", ExportFormat.CSV, options=options
+            ).read_text(encoding="utf-8")
+
+        self.assertNotIn("Eva Retail", content)
+        self.assertIn("Mitarbeiter 1", content)
+        self.assertIn("18.25", content)
+
+    def test_employee_plan_reduced_profile_hides_wage_and_unpublished_shifts(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=18.25)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        options = export_options_for_profile(ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED)
+        with tempfile.TemporaryDirectory() as directory:
+            content = service.export_schedule(
+                Path(directory) / "employee_plan.csv", ExportFormat.CSV, options=options
+            ).read_text(encoding="utf-8")
+
+        self.assertNotIn("18.25", content)
+        self.assertNotIn("Früh", content)  # unpublished shift is excluded entirely
+
+    def test_internal_full_profile_keeps_wage_and_unpublished_shifts(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse", hourly_wage=18.25)
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 1, 8), datetime(2026, 1, 1, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        options = export_options_for_profile(ExportPrivacyProfile.INTERNAL_FULL)
+        with tempfile.TemporaryDirectory() as directory:
+            content = service.export_schedule(
+                Path(directory) / "internal.csv", ExportFormat.CSV, options=options
+            ).read_text(encoding="utf-8")
+
+        self.assertIn("Eva Retail", content)
+        self.assertIn("18.25", content)
+        self.assertIn("Früh", content)
+
+    def test_all_privacy_profiles_have_a_label(self) -> None:
+        for profile in ExportPrivacyProfile:
+            self.assertIn(profile, EXPORT_PRIVACY_PROFILE_LABELS)
+            self.assertTrue(EXPORT_PRIVACY_PROFILE_LABELS[profile])
+
+    def test_export_calendar_ics_contains_a_valid_event_for_each_shift(self) -> None:
+        service = SchedulerService()
+        employee = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 5, 8), datetime(2026, 1, 5, 16), 1, "Kasse")
+        service.assign(employee.id, shift.id)
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = service.export_calendar_ics(
+                Path(directory) / "plan.ics", datetime(2026, 1, 1), datetime(2026, 1, 8)
+            )
+            content = output.read_bytes().decode("utf-8")
+
+        self.assertTrue(content.startswith("BEGIN:VCALENDAR\r\n"))
+        self.assertTrue(content.rstrip("\r\n").endswith("END:VCALENDAR"))
+        self.assertIn("BEGIN:VEVENT\r\n", content)
+        self.assertIn("DTSTART:20260105T080000\r\n", content)
+        self.assertIn("DTEND:20260105T160000\r\n", content)
+        self.assertIn("Eva Retail", content)
+
+    def test_export_calendar_ics_rejects_end_before_start(self) -> None:
+        service = SchedulerService()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                service.export_calendar_ics(Path(directory) / "plan.ics", datetime(2026, 1, 8), datetime(2026, 1, 1))
+
+    def test_export_calendar_ics_filters_by_employee_and_anonymizes_names(self) -> None:
+        service = SchedulerService()
+        eva = service.add_employee("Eva Retail", "Kasse", "Kasse")
+        tom = service.add_employee("Tom Sales", "Kasse", "Kasse")
+        shift = service.add_shift("Früh", "Kasse", datetime(2026, 1, 5, 8), datetime(2026, 1, 5, 16), 2, "Kasse")
+        service.assign(eva.id, shift.id)
+        service.assign(tom.id, shift.id)
+
+        with tempfile.TemporaryDirectory() as directory:
+            eva_only = service.export_calendar_ics(
+                Path(directory) / "eva.ics", datetime(2026, 1, 1), datetime(2026, 1, 8), employee_id=eva.id
+            ).read_bytes().decode("utf-8")
+            anonymized = service.export_calendar_ics(
+                Path(directory) / "anon.ics",
+                datetime(2026, 1, 1),
+                datetime(2026, 1, 8),
+                options=export_options_for_profile(ExportPrivacyProfile.CONTROLLING_ANONYMIZED),
+            ).read_bytes().decode("utf-8")
+
+        self.assertEqual(1, eva_only.count("BEGIN:VEVENT"))
+        self.assertNotIn("Eva Retail", anonymized)
+        self.assertNotIn("Tom Sales", anonymized)
+        self.assertIn("Mitarbeiter 1", anonymized.replace("\r\n ", ""))
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ValueError):
+                service.export_calendar_ics(
+                    Path(directory) / "missing.ics",
+                    datetime(2026, 1, 1),
+                    datetime(2026, 1, 8),
+                    employee_id="does-not-exist",
+                )
+
 
 class RepositoryTests(unittest.TestCase):
     def test_saves_and_loads_service_state(self) -> None:
@@ -524,6 +640,45 @@ class ForecastImportTests(unittest.TestCase):
         self.assertEqual(1234.50, forecasts[0].expected_revenue)
         self.assertEqual(120, forecasts[0].expected_customers)
 
+    def test_import_report_lists_row_field_message_and_severity_for_bad_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecast.csv"
+            path.write_text(
+                "FilialeId;Filiale;Datum;Umsatz;Kunden\n"
+                "1;Zentrale;01.01.2026;1.234,50;120\n"
+                "abc;Nord;01.01.2026;500,00;80\n"
+                "2;;01.01.2026;500,00;80\n"
+                "3;Süd;nicht-ein-datum;500,00;80\n"
+                "4;West;01.01.2026;500,00;nicht-eine-zahl\n"
+                "5;Ost\n",
+                encoding="utf-8",
+            )
+
+            report = ForecastImportService().import_csv_with_report(path)
+
+        self.assertEqual(6, report.total_rows)
+        self.assertEqual(1, report.imported_count)
+        self.assertEqual(5, report.error_count)
+
+        issues_by_row = {issue.row_number: issue for issue in report.issues}
+        self.assertEqual("FilialeId", issues_by_row[3].field)
+        self.assertEqual("Fehler", issues_by_row[3].severity)
+        self.assertEqual("Filiale", issues_by_row[4].field)
+        self.assertEqual("Datum", issues_by_row[5].field)
+        self.assertEqual("Kunden", issues_by_row[6].field)
+        self.assertEqual("Zeile", issues_by_row[7].field)
+
+    def test_import_csv_still_raises_when_every_row_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecast.csv"
+            path.write_text("FilialeId;Filiale;Datum;Umsatz;Kunden\nabc;Nord;01.01.2026;500,00;80\n", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                ForecastImportService().import_csv(path)
+
+            report = ForecastImportService().import_csv_with_report(path)
+            self.assertEqual(0, report.imported_count)
+            self.assertEqual(1, report.error_count)
 
 
 class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
@@ -1105,6 +1260,103 @@ class UserAuthenticationTests(unittest.TestCase):
             self.assertTrue(recovery_code)
 
 
+class UserManagementTests(unittest.TestCase):
+    def test_get_user_returns_none_for_unknown_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            self.assertIsNone(repository.get_user("does-not-exist"))
+
+    def test_set_user_active_toggles_login_ability(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER)
+
+            repository.set_user_active(planner.id, False, user_id=admin.id)
+
+            self.assertFalse(repository.get_user(planner.id).is_active)
+            self.assertIsNone(repository.authenticate_user("planer", "Sicheres Passwort 2026"))
+
+            repository.set_user_active(planner.id, True, user_id=admin.id)
+
+            self.assertTrue(repository.get_user(planner.id).is_active)
+            self.assertIsNotNone(repository.authenticate_user("planer", "Sicheres Passwort 2026"))
+
+    def test_set_user_active_refuses_to_deactivate_last_active_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            with self.assertRaises(ValueError):
+                repository.set_user_active(admin.id, False)
+            self.assertTrue(repository.get_user(admin.id).is_active)
+
+    def test_set_user_active_allows_deactivating_admin_when_another_admin_remains(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            first_admin = repository.create_user("admin1", "Sicheres Passwort 2026", UserRole.ADMIN)
+            second_admin = repository.create_user("admin2", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            repository.set_user_active(first_admin.id, False, user_id=second_admin.id)
+
+            self.assertFalse(repository.get_user(first_admin.id).is_active)
+
+    def test_update_user_role_changes_permissions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER)
+
+            updated = repository.update_user_role(planner.id, UserRole.VIEWER, user_id=admin.id)
+
+            self.assertEqual(UserRole.VIEWER, updated.role)
+            self.assertEqual(UserRole.VIEWER, repository.get_user(planner.id).role)
+
+    def test_update_user_role_refuses_to_demote_last_active_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            with self.assertRaises(ValueError):
+                repository.update_user_role(admin.id, UserRole.PLANNER)
+            self.assertEqual(UserRole.ADMIN, repository.get_user(admin.id).role)
+
+    def test_admin_reset_password_replaces_hash_and_enforces_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER)
+
+            repository.admin_reset_password(planner.id, "Neues Sicheres Passwort!", user_id=admin.id)
+
+            self.assertIsNone(repository.authenticate_user("planer", "Sicheres Passwort 2026"))
+            self.assertIsNotNone(repository.authenticate_user("planer", "Neues Sicheres Passwort!"))
+            with self.assertRaises(ValueError):
+                repository.admin_reset_password(planner.id, "kurz")
+
+    def test_user_management_actions_are_recorded_in_audit_hash_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "auth.sqlite3")
+            admin = repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN, user_id="system")
+            planner = repository.create_user("planer", "Sicheres Passwort 2026", UserRole.PLANNER, user_id=admin.id)
+            repository.set_user_active(planner.id, False, user_id=admin.id)
+            repository.update_user_role(planner.id, UserRole.VIEWER, user_id=admin.id)
+            repository.admin_reset_password(planner.id, "Noch sicherer 2026!", user_id=admin.id)
+
+            events = repository.list_audit_events(50)
+            actions = [event.action for event in reversed(events)]
+            self.assertEqual(
+                ["user.created", "user.created", "user.deactivated", "user.role_changed", "user.password_reset"],
+                actions,
+            )
+            for event in events:
+                self.assertNotIn("Sicheres Passwort", event.before)
+                self.assertNotIn("Sicheres Passwort", event.after)
+
+            integrity = repository.verify_audit_integrity()
+            self.assertTrue(integrity.is_valid, integrity.problems)
+
+
 class RolePermissionTests(unittest.TestCase):
     def test_role_permissions_match_locked_actions(self) -> None:
         admin = User("admin", UserRole.ADMIN)
@@ -1115,11 +1367,14 @@ class RolePermissionTests(unittest.TestCase):
         self.assertTrue(admin.has_permission(Permission.MANAGE_ABSENCES))
         self.assertTrue(admin.has_permission(Permission.PUBLISH_SCHEDULE))
         self.assertTrue(admin.has_permission(Permission.EXPORT))
+        self.assertTrue(admin.has_permission(Permission.MANAGE_USERS))
         self.assertFalse(planner.has_permission(Permission.MANAGE_EMPLOYEES))
         self.assertTrue(planner.has_permission(Permission.MANAGE_ABSENCES))
         self.assertTrue(planner.has_permission(Permission.PUBLISH_SCHEDULE))
         self.assertTrue(planner.has_permission(Permission.EXPORT))
+        self.assertFalse(planner.has_permission(Permission.MANAGE_USERS))
         self.assertFalse(viewer.has_permission(Permission.EXPORT))
+        self.assertFalse(viewer.has_permission(Permission.MANAGE_USERS))
 
     def test_app_permission_helper_blocks_locked_actions_for_viewer(self) -> None:
         from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
@@ -1131,8 +1386,10 @@ class RolePermissionTests(unittest.TestCase):
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.PUBLISH_SCHEDULE))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_ABSENCES))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_EMPLOYEES))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(viewer, Permission.MANAGE_USERS))
         self.assertTrue(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.EXPORT))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.MANAGE_EMPLOYEES))
+        self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(planner, Permission.MANAGE_USERS))
         self.assertFalse(AuthenticatedSchedulerApp._user_has_permission(None, Permission.EXPORT))
 
     def test_scheduler_app_constructor_does_not_force_modal_login_for_tests(self) -> None:
@@ -1143,6 +1400,91 @@ class RolePermissionTests(unittest.TestCase):
         self.assertIn("current_user", scheduler_parameters)
         self.assertNotIn("require_authentication", scheduler_parameters)
         self.assertIn("AuthenticatedSchedulerApp", Path("python_dienstplaner/secure_app.py").read_text(encoding="utf-8"))
+
+    def test_secure_create_app_checks_license_against_active_users(self) -> None:
+        from python_dienstplaner.secure_app import create_app
+        from python_dienstplaner.licensing import LicenseCheckResult
+
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "app.sqlite3"
+            repository = SQLiteSchedulerRepository(database_path)
+            repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            inactive_user = repository.create_user("inactive", "Sicheres Passwort 2026", UserRole.VIEWER)
+            with sqlite3.connect(database_path) as connection:
+                connection.execute("UPDATE users SET is_active = 0 WHERE id = ?", (inactive_user.id,))
+
+            license_result = LicenseCheckResult(True, "Lizenz gültig.")
+            with (
+                patch("python_dienstplaner.secure_app.LicenseManager") as manager_cls,
+                patch("python_dienstplaner.secure_app.AuthenticatedSchedulerApp") as app_cls,
+            ):
+                manager_cls.return_value.check.return_value = license_result
+                create_app(database_path, Path(directory) / "license.json")
+
+        manager_cls.return_value.check.assert_called_once_with(current_user_count=1)
+        app_cls.assert_called_once()
+        self.assertIs(app_cls.call_args.kwargs["license_result"], license_result)
+
+    def test_check_active_user_limit_blocks_when_license_seats_are_full(self) -> None:
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult
+        from python_dienstplaner.models import LicenseInfo
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            license_info = LicenseInfo(
+                company_name="Test GmbH",
+                license_id="lic-1",
+                valid_until=date(2099, 1, 1),
+                max_users=1,
+                features=["standard"],
+                signature="irrelevant-for-this-check",
+            )
+            app = AuthenticatedSchedulerApp.__new__(AuthenticatedSchedulerApp)
+            app.repository = repository
+            app.license_result = LicenseCheckResult(True, "Lizenz gültig.", license_info)
+
+            with self.assertRaises(ValueError):
+                app._check_active_user_limit()
+
+    def test_check_active_user_limit_allows_seats_within_license(self) -> None:
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult
+        from python_dienstplaner.models import LicenseInfo
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            license_info = LicenseInfo(
+                company_name="Test GmbH",
+                license_id="lic-1",
+                valid_until=date(2099, 1, 1),
+                max_users=5,
+                features=["standard"],
+                signature="irrelevant-for-this-check",
+            )
+            app = AuthenticatedSchedulerApp.__new__(AuthenticatedSchedulerApp)
+            app.repository = repository
+            app.license_result = LicenseCheckResult(True, "Lizenz gültig.", license_info)
+
+            app._check_active_user_limit()  # must not raise
+
+    def test_check_active_user_limit_no_ops_without_loaded_license(self) -> None:
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            app = AuthenticatedSchedulerApp.__new__(AuthenticatedSchedulerApp)
+            app.repository = repository
+            app.license_result = LicenseCheckResult(False, "Lizenzdatei fehlt.")
+
+            app._check_active_user_limit()  # must not raise
 
 
 class AppIntegrityTests(unittest.TestCase):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import csv
 import logging
 import os
 import re
@@ -13,10 +14,23 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
+from . import __version__
+from .exporters import (
+    EXPORT_PRIVACY_PROFILE_DESCRIPTIONS,
+    EXPORT_PRIVACY_PROFILE_LABELS,
+    ExportOptions,
+    ExportPrivacyProfile,
+    export_options_for_profile,
+)
 from .licensing import LicenseCheckResult, LicenseManager
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
 from .repository import SQLiteSchedulerRepository
-from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
+from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportReport, ForecastImportService, SchedulerService
+
+
+EXPORT_PRIVACY_PROFILE_BY_LABEL: dict[str, ExportPrivacyProfile] = {
+    label: profile for profile, label in EXPORT_PRIVACY_PROFILE_LABELS.items()
+}
 
 
 SENSITIVE_LOG_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -116,7 +130,7 @@ class SchedulerApp(tk.Tk):
         self.active_view = "Dienstplan"
         self.ui_logger = configure_app_logging()
 
-        self.title("Dienstplanung Pro")
+        self.title(f"Dienstplanung Pro · v{__version__}")
         self.geometry("1440x840")
         self.minsize(1180, 720)
         self.configure(bg="#F8FAFC")
@@ -167,7 +181,10 @@ class SchedulerApp(tk.Tk):
 
         logo = tk.Label(header, text="▣", bg="#0B66E4", fg="#FFFFFF", font=("Segoe UI", 16, "bold"), width=2)
         logo.grid(row=0, column=0, padx=(22, 10), pady=14)
-        tk.Label(header, text="Dienstplanung Pro", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 16, "bold")).grid(row=0, column=1, sticky="w")
+        title_frame = tk.Frame(header, bg="#FFFFFF")
+        title_frame.grid(row=0, column=1, sticky="w")
+        tk.Label(title_frame, text="Dienstplanung Pro", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 16, "bold")).pack(side="left")
+        tk.Label(title_frame, text=f"v{__version__}", bg="#FFFFFF", fg="#94A3B8", font=("Segoe UI", 9)).pack(side="left", padx=(8, 0), pady=(6, 0))
 
         self.search_term = tk.StringVar()
         search = ttk.Entry(header, textvariable=self.search_term, width=46)
@@ -191,6 +208,14 @@ class SchedulerApp(tk.Tk):
                 fg=color,
             )
         self._set_status(f"{prefix}: {self.license_result.display_text} — {self.license_result.message}")
+        if not self.license_result.valid:
+            messagebox.showwarning(
+                "Lizenzproblem",
+                f"{self.license_result.message}\n\n"
+                "Die Anwendung bleibt nutzbar, aber bitte prüfen Sie die Lizenzdatei oder "
+                "wenden Sie sich an den Support, um das Problem zu beheben.",
+                parent=self,
+            )
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
@@ -332,7 +357,8 @@ class SchedulerApp(tk.Tk):
         ttk.Button(actions, text="💾 Speichern", style="Ghost.TButton", command=self._save).pack(fill="x", padx=12, pady=(5, 5))
         ttk.Button(actions, text="Backup erstellen", style="Ghost.TButton", command=self._create_backup).pack(fill="x", padx=12, pady=5)
         ttk.Button(actions, text="Backup wiederherstellen", style="Danger.TButton", command=self._restore_backup).pack(fill="x", padx=12, pady=(5, 12))
-        ttk.Button(actions, text="CSV Export", style="Ghost.TButton", command=self._export_csv).pack(fill="x", padx=12, pady=(0, 12))
+        ttk.Button(actions, text="CSV Export", style="Ghost.TButton", command=self._export_csv).pack(fill="x", padx=12, pady=(0, 5))
+        ttk.Button(actions, text="Kalender (ICS) Export", style="Ghost.TButton", command=self._export_ics).pack(fill="x", padx=12, pady=(0, 12))
 
     def _activate_sidebar(self, key: str, command: object) -> None:
         self.active_view = key
@@ -1609,6 +1635,52 @@ class SchedulerApp(tk.Tk):
         self._run_ui_action("Berichte exportieren", export_reports)
 
     def _export_csv(self) -> None:
+        self._open_export_privacy_dialog(self._run_schedule_export)
+
+    def _open_export_privacy_dialog(self, on_confirm: Callable[[ExportOptions], None]) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Exportprofil wählen")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        tk.Label(dialog, text="Exportprofil wählen", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 8))
+        tk.Label(
+            dialog,
+            text="Das Profil bestimmt, welche personenbezogenen Daten im Export enthalten sind.",
+            bg="#FFFFFF",
+            fg="#334155",
+            wraplength=380,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 12))
+
+        profile_value = tk.StringVar(value=EXPORT_PRIVACY_PROFILE_LABELS[ExportPrivacyProfile.INTERNAL_FULL])
+        tk.Label(dialog, text="Profil", bg="#FFFFFF", fg="#334155").grid(row=2, column=0, sticky="w", padx=18, pady=6)
+        ttk.Combobox(
+            dialog,
+            textvariable=profile_value,
+            values=list(EXPORT_PRIVACY_PROFILE_LABELS.values()),
+            state="readonly",
+            width=32,
+        ).grid(row=2, column=1, padx=18, pady=6)
+
+        description_label = tk.Label(dialog, text="", bg="#FFFFFF", fg="#64748B", wraplength=380, justify="left")
+        description_label.grid(row=3, column=0, columnspan=2, sticky="w", padx=18, pady=(4, 12))
+
+        def update_description(*_args) -> None:
+            profile = EXPORT_PRIVACY_PROFILE_BY_LABEL[profile_value.get()]
+            description_label.configure(text=EXPORT_PRIVACY_PROFILE_DESCRIPTIONS[profile])
+
+        profile_value.trace_add("write", update_description)
+        update_description()
+
+        def confirm() -> None:
+            profile = EXPORT_PRIVACY_PROFILE_BY_LABEL[profile_value.get()]
+            dialog.destroy()
+            on_confirm(export_options_for_profile(profile))
+
+        ttk.Button(dialog, text="Weiter", style="Primary.TButton", command=confirm).grid(row=4, column=1, sticky="e", padx=18, pady=(0, 18))
+
+    def _run_schedule_export(self, options: ExportOptions) -> None:
         path = filedialog.asksaveasfilename(
             title="Dienstplan exportieren",
             defaultextension=".csv",
@@ -1624,23 +1696,91 @@ class SchedulerApp(tk.Tk):
         else:
             export_format = ExportFormat.CSV
         def export_schedule() -> None:
-            output = self.service.export_schedule(path, export_format, user_id=self._current_user_id())
+            output = self.service.export_schedule(path, export_format, options=options, user_id=self._current_user_id())
             self._persist_changes(f"Exportiert: {output}")
 
         self._run_ui_action("Dienstplan exportieren", export_schedule)
+
+    def _export_ics(self) -> None:
+        self._open_export_privacy_dialog(self._run_calendar_export)
+
+    def _run_calendar_export(self, options: ExportOptions) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Kalender exportieren",
+            defaultextension=".ics",
+            filetypes=[("iCalendar", "*.ics")],
+        )
+        if not path:
+            return
+        start = self.week_start
+        end = start + timedelta(days=7)
+
+        def export_calendar() -> None:
+            output = self.service.export_calendar_ics(path, start, end, options=options, user_id=self._current_user_id())
+            self._set_status(f"Kalender exportiert: {output}")
+
+        self._run_ui_action("Kalender exportieren", export_calendar)
 
     def _import_forecast(self) -> None:
         path = filedialog.askopenfilename(title="Forecast CSV importieren", filetypes=[("CSV", "*.csv"), ("Alle Dateien", "*.*")])
         if not path:
             return
         def import_forecast() -> None:
-            forecasts = ForecastImportService().import_csv(path)
-            added = self.service.add_forecasts(forecasts)
-            if not self._persist_changes(f"{len(forecasts)} Forecast-Zeilen importiert, {added} neu gespeichert."):
-                return
+            report = ForecastImportService().import_csv_with_report(path)
+            if report.total_rows == 0:
+                raise ValueError("Forecast-Datei enthält keine Datenzeilen.")
+            if report.forecasts:
+                added = self.service.add_forecasts(report.forecasts)
+                if not self._persist_changes(f"{report.imported_count} von {report.total_rows} Forecast-Zeilen importiert, {added} neu gespeichert."):
+                    return
+            else:
+                self._set_status(f"Keine der {report.total_rows} Zeilen konnte importiert werden. Siehe Fehlerbericht.")
             self._refresh_all()
+            if report.issues:
+                self._open_import_report_window(report, path)
 
         self._run_ui_action("Forecast importieren", import_forecast)
+
+    def _open_import_report_window(self, report: ForecastImportReport, source_path: str) -> None:
+        window = self._create_manager_window("Forecast-Import: Fehlerbericht", "780x460")
+        tk.Label(
+            window,
+            text=f"{report.imported_count} von {report.total_rows} Zeilen importiert · {report.error_count} Fehler.",
+            bg="#F8FAFC",
+            fg="#334155",
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", padx=16, pady=(14, 0))
+
+        columns = ("row", "field", "severity", "message")
+        tree = self._create_tree(window, columns, {
+            "row": "Zeile",
+            "field": "Feld",
+            "severity": "Schweregrad",
+            "message": "Fehlertext",
+        })
+        tree.column("message", width=360)
+        for index, issue in enumerate(report.issues):
+            tree.insert("", "end", iid=str(index), values=(issue.row_number, issue.field, issue.severity, issue.message))
+
+        def save_report() -> None:
+            default_name = f"{Path(source_path).stem}-fehlerbericht.csv"
+            target = filedialog.asksaveasfilename(
+                title="Fehlerbericht speichern",
+                defaultextension=".csv",
+                initialfile=default_name,
+                filetypes=[("CSV", "*.csv")],
+            )
+            if not target:
+                return
+            with open(target, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle, delimiter=";")
+                writer.writerow(["Zeile", "Feld", "Schweregrad", "Fehlertext"])
+                for issue in report.issues:
+                    writer.writerow([issue.row_number, issue.field, issue.severity, issue.message])
+            self._set_status(f"Fehlerbericht gespeichert: {target}")
+
+        self._add_manager_buttons(window, [("Als CSV speichern", save_report)])
 
     def _publish_schedule(self) -> None:
         def publish() -> None:

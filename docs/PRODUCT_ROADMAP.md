@@ -39,18 +39,18 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ## Priorisierte Roadmap
 
-| Priorität | Initiative | Reach | Impact | Confidence | Aufwand | RICE | Begründung |
-| ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | Datenbankmigrationen | 9 | 5 | 0,85 | 8 | 4,78 | Grundlage für sichere Weiterentwicklung ohne Datenverlust. |
-| 2 | Backup/Restore | 8 | 5 | 0,80 | 10 | 3,20 | Reduziert Betriebsrisiko der lokalen SQLite-Datenhaltung. |
-| 3 | Benutzer- und Rechteverwaltung in der UI | 8 | 4 | 0,75 | 12 | 2,00 | Macht lokale Anmeldung administrierbar und bereitet Rechteprüfungen vor. |
-| 4 | Datenschutzprofile für Exporte | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
-| 5 | Import-Fehlerbericht | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
-| 6 | Kalender-/ICS-Export | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
-| 7 | Audit-Integrität | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
-| 8 | Packaging/Installer | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
-| 9 | Lizenzdurchsetzung | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
-| 10 | Automatische Regelvorschläge | 5 | 4 | 0,50 | 20 | 0,50 | Hoher Nutzen möglich, aber fachlich und technisch unsicher ohne Nutzungsdaten. |
+| Priorität | Initiative | Status | Reach | Impact | Confidence | Aufwand | RICE | Begründung |
+| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | Datenbankmigrationen | ✅ Umgesetzt | 9 | 5 | 0,85 | 8 | 4,78 | Grundlage für sichere Weiterentwicklung ohne Datenverlust. |
+| 2 | Backup/Restore | ✅ Umgesetzt | 8 | 5 | 0,80 | 10 | 3,20 | Reduziert Betriebsrisiko der lokalen SQLite-Datenhaltung. |
+| 3 | Benutzer- und Rechteverwaltung in der UI | ✅ Umgesetzt | 8 | 4 | 0,75 | 12 | 2,00 | Macht lokale Anmeldung administrierbar und bereitet Rechteprüfungen vor. |
+| 4 | Datenschutzprofile für Exporte | ✅ Umgesetzt | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
+| 5 | Import-Fehlerbericht | ✅ Umgesetzt | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
+| 6 | Kalender-/ICS-Export | ✅ Umgesetzt | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
+| 7 | Audit-Integrität | ✅ Umgesetzt | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
+| 8 | Packaging/Installer | 🟡 Teilweise umgesetzt | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
+| 9 | Lizenzdurchsetzung | ✅ Umgesetzt | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
+| 10 | Automatische Regelvorschläge | Offen | 5 | 4 | 0,50 | 20 | 0,50 | Hoher Nutzen möglich, aber fachlich und technisch unsicher ohne Nutzungsdaten. |
 
 ## Initiativen im Detail
 
@@ -74,6 +74,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 3. Benutzer- und Rechteverwaltung in der UI
 
+- **Status:** Umgesetzt (2026-07-06). UI unter „🔑 Benutzer verwalten" im Kopfbereich, nur für Administratoren sichtbar; Nutzer anlegen, aktivieren/deaktivieren, Rollenwechsel und Passwort-Reset stehen bereit. Ein Schutzmechanismus verhindert das Deaktivieren oder Herabstufen des letzten aktiven Administrators. Alle Aktionen sind Teil der Audit-Hashkette.
 - **Zielgruppe:** Administratoren, Teamleitungen, Dienstplanverantwortliche.
 - **Nutzen:** Admins können Nutzer anlegen, deaktivieren, Rollen ändern und Passwort-Resets steuern, ohne direkt in Datenbank oder Code einzugreifen.
 - **Risiko bei Nichtumsetzung:** Zugangskontrolle bleibt operativ schwach. Geteilte Admin-Zugänge und manuelle Eingriffe erhöhen Sicherheits- und Support-Risiken.
@@ -83,6 +84,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 4. Datenschutzprofile für Exporte
 
+- **Status:** Umgesetzt (2026-07-06). Vor jedem Dienstplan-Export wählt man eines der drei MVP-Profile in einem Dialog; die Wahl (inklusive aller Feldeinstellungen) wird im Änderungsverlauf protokolliert. Keine frei konfigurierbare Feldmatrix, wie im MVP vorgesehen.
 - **Zielgruppe:** Datenschutzverantwortliche, Dienstplanverantwortliche, Geschäftsführung.
 - **Nutzen:** Exporte enthalten nur die für den jeweiligen Zweck notwendigen personenbezogenen Daten.
 - **Risiko bei Nichtumsetzung:** CSV-, HTML- oder PDF-Exporte können unnötige personenbezogene Daten enthalten und unkontrolliert weitergegeben werden.
@@ -92,6 +94,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 5. Import-Fehlerbericht
 
+- **Status:** Umgesetzt (2026-07-07). Fehlerhafte Zeilen blockieren den Import nicht mehr vollständig; ein Dialog listet Zeilennummer, Feld, Schweregrad und Fehlertext je Zeile und lässt sich als CSV speichern. Keine automatische Korrektur der Quelldatei, wie im MVP vorgesehen.
 - **Zielgruppe:** Dienstplanverantwortliche, Controlling, Support.
 - **Nutzen:** Fehlerhafte Forecast-CSV-Dateien lassen sich zeilenbezogen korrigieren, ohne Trial-and-Error im Importdialog.
 - **Risiko bei Nichtumsetzung:** Importprobleme binden Supportzeit und können dazu führen, dass Planung ohne aktuelle Forecast-Daten erfolgt.
@@ -101,6 +104,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 6. Kalender-/ICS-Export
 
+- **Status:** Umgesetzt (2026-07-07). „Kalender (ICS) Export" exportiert die aktuell angezeigte Woche als RFC-5545-Datei, wahlweise gefiltert auf einen Mitarbeitenden (Service-Ebene) und mit demselben Datenschutzprofil-Dialog wie der CSV/PDF-Export. Zeiten werden als lokale „floating time" ohne Zeitzonen-Konvertierung geschrieben, passend zur restlichen Anwendung. Keine bidirektionale Synchronisierung, keine CalDAV-Anbindung.
 - **Zielgruppe:** Mitarbeitende, Dienstplanverantwortliche, Teamleitungen.
 - **Nutzen:** Schichten lassen sich in persönliche Kalender übernehmen und mit mobilen Geräten synchronisieren.
 - **Risiko bei Nichtumsetzung:** Mitarbeitende müssen Dienstplandaten manuell übertragen. Das erhöht Übertragungsfehler und reduziert Akzeptanz.
@@ -119,6 +123,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 8. Packaging/Installer
 
+- **Status:** Teilweise umgesetzt (2026-07-07). Versionsanzeige in Titelleiste und Kopfbereich der Anwendung ist umgesetzt und getestet. `scripts/windows_installer.iss` (Inno Setup) erzeugt einen Startmenüeintrag, optionales Desktop-Icon und entfernt beim Deinstallieren nie das Datenverzeichnis – konnte aber in dieser Linux-Umgebung nicht tatsächlich kompiliert oder auf einem Windows-System durchgespielt werden. Vor dem ersten Kundenversand einmal real auf Windows bauen und die Installation/Deinstallation verifizieren, dann auf „Umgesetzt" setzen.
 - **Zielgruppe:** Endnutzer, Administratoren, Support, Vertrieb.
 - **Nutzen:** Installation und Updates werden reproduzierbar. Support kann sich auf definierte Installationspfade und Versionen beziehen.
 - **Risiko bei Nichtumsetzung:** Nutzer müssen Python, Tkinter und Startskripte korrekt einrichten. Installationsfehler bremsen Einführung und Support.
@@ -128,6 +133,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 9. Lizenzdurchsetzung
 
+- **Status:** Umgesetzt (2026-07-07). Produktentscheidung: bei fehlender/ungültiger/abgelaufener Lizenz zeigt der Start einen klaren Warndialog, die Anwendung bleibt aber nutzbar (kein Hard-Lock, da es keine Online-Reaktivierung gibt und ein kaputtes lokales Lizenzfile sonst den Datenzugriff komplett sperren würde). Das aktive-Nutzer-Limit der Lizenz wird dagegen hart durchgesetzt: Neuanlage oder Reaktivierung eines Nutzers über dem Limit hinaus wird mit klarer Fehlermeldung abgelehnt. Zuvor prüfte der produktive Start (`secure_app.create_app`) die Lizenz gar nicht; das ist jetzt behoben. Keine Online-Aktivierung, kein Lizenzserver.
 - **Zielgruppe:** Betreiber, Vertrieb, Support, Produktverantwortliche.
 - **Nutzen:** Gültigkeit, Ablauf und Nutzerlimit werden konsistent geprüft und verständlich kommuniziert.
 - **Risiko bei Nichtumsetzung:** Lizenzstatus bleibt uneinheitlich durchsetzbar. Supportfälle bei abgelaufenen oder falsch installierten Lizenzen nehmen zu.

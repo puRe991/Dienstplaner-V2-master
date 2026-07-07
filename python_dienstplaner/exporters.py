@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -21,6 +22,58 @@ class ExportOptions:
     include_hourly_wage: bool = False
     include_absence_reason: bool = True
     only_published_shifts: bool = False
+    anonymize_employee_names: bool = False
+
+
+class ExportPrivacyProfile(str, Enum):
+    """Fixed export privacy profiles for the schedule export dialog.
+
+    The MVP intentionally ships three fixed profiles instead of a freely
+    configurable field matrix, so callers pick a purpose instead of assembling
+    ``ExportOptions`` by hand.
+    """
+
+    INTERNAL_FULL = "internal_full"
+    EMPLOYEE_PLAN_REDUCED = "employee_plan_reduced"
+    CONTROLLING_ANONYMIZED = "controlling_anonymized"
+
+
+EXPORT_PRIVACY_PROFILE_LABELS: dict[ExportPrivacyProfile, str] = {
+    ExportPrivacyProfile.INTERNAL_FULL: "Intern vollständig",
+    ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED: "Mitarbeitendenplan reduziert",
+    ExportPrivacyProfile.CONTROLLING_ANONYMIZED: "Controlling anonymisiert",
+}
+
+EXPORT_PRIVACY_PROFILE_DESCRIPTIONS: dict[ExportPrivacyProfile, str] = {
+    ExportPrivacyProfile.INTERNAL_FULL: (
+        "Vollständiger interner Export mit Stundenlöhnen, Abwesenheitsgründen und "
+        "allen Schichten, auch unveröffentlichten. Nur für internen Gebrauch weitergeben."
+    ),
+    ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED: (
+        "Reduzierter Plan für Mitarbeitende: keine Löhne, keine Abwesenheitsgründe, "
+        "nur bereits veröffentlichte Schichten."
+    ),
+    ExportPrivacyProfile.CONTROLLING_ANONYMIZED: (
+        "Anonymisierter Export für Controlling: Personalkosten bleiben sichtbar, "
+        "Mitarbeitendennamen werden anonymisiert und Abwesenheitsgründe entfernt."
+    ),
+}
+
+
+def export_options_for_profile(profile: ExportPrivacyProfile) -> ExportOptions:
+    """Return the fixed ``ExportOptions`` for one of the MVP privacy profiles."""
+    if profile == ExportPrivacyProfile.INTERNAL_FULL:
+        return ExportOptions(include_hourly_wage=True, include_absence_reason=True, only_published_shifts=False)
+    if profile == ExportPrivacyProfile.EMPLOYEE_PLAN_REDUCED:
+        return ExportOptions(include_hourly_wage=False, include_absence_reason=False, only_published_shifts=True)
+    if profile == ExportPrivacyProfile.CONTROLLING_ANONYMIZED:
+        return ExportOptions(
+            include_hourly_wage=True,
+            include_absence_reason=False,
+            only_published_shifts=False,
+            anonymize_employee_names=True,
+        )
+    raise ValueError(f"Unbekanntes Exportprofil: {profile}")
 
 
 @dataclass(frozen=True)
@@ -86,6 +139,40 @@ class ScheduleExporter:
         rows = self._shift_rows(selected, options or ExportOptions())
         return TabularExporter(self._shift_columns(options or ExportOptions()), rows, export_header).export(path, ExportFormat.PDF)
 
+    def export_ics(
+        self,
+        path: str | Path,
+        start: datetime,
+        end: datetime,
+        *,
+        employee_id: str | None = None,
+        options: ExportOptions | None = None,
+    ) -> Path:
+        """Export shifts in ``[start, end)`` as an iCalendar (.ics) file.
+
+        Times are written as floating local time (no TZID/UTC conversion)
+        since the application does not track a per-installation timezone.
+        Most calendar clients interpret floating time as the device's local
+        time, which matches how shift times are entered and displayed here.
+        """
+        if end <= start:
+            raise ValueError("Exportzeitraum muss nach dem Start enden.")
+        export_options = options or ExportOptions()
+        employee = None
+        if employee_id is not None:
+            employee = self._find_employee(employee_id)
+            if employee is None:
+                raise ValueError("Mitarbeiter wurde nicht gefunden.")
+
+        selected = self._filtered_shifts(export_options, start=start, end=end)
+        if employee is not None:
+            selected = [shift for shift in selected if employee.id in shift.employee_ids]
+
+        output = Path(path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(IcsCalendarDocument(selected, employee, export_options).render())
+        return output
+
     def export_employee_plan_pdf(
         self,
         path: str | Path,
@@ -150,6 +237,10 @@ class ScheduleExporter:
     def _shift_rows(self, shifts: Iterable[Shift], options: ExportOptions) -> list[list[str]]:
         rows: list[list[str]] = []
         for shift in shifts:
+            if options.anonymize_employee_names:
+                assigned_display = ", ".join(f"Mitarbeiter {index + 1}" for index in range(len(shift.employee_names)))
+            else:
+                assigned_display = ", ".join(shift.employee_names)
             row = [
                 shift.name,
                 shift.department,
@@ -157,7 +248,7 @@ class ScheduleExporter:
                 shift.start.isoformat(sep=" ", timespec="minutes"),
                 shift.end.isoformat(sep=" ", timespec="minutes"),
                 str(shift.required_employees),
-                ", ".join(shift.employee_names) or "nicht besetzt",
+                assigned_display or "nicht besetzt",
             ]
             if options.include_hourly_wage:
                 wages = [self._format_wage(employee.hourly_wage) for employee in self._assigned_employees(shift)]
@@ -254,6 +345,90 @@ class TabularExporter:
             return lines
         lines.extend(" | ".join(row) for row in self.rows)
         return lines
+
+
+class IcsCalendarDocument:
+    """Minimal dependency-free iCalendar (RFC 5545) writer for shift exports.
+
+    Times are written as floating local time (no TZID, no UTC conversion)
+    since the application does not track a per-installation timezone; most
+    calendar clients interpret floating time as the device's local time.
+    """
+
+    PRODID = "-//Dienstplanung Pro//Schichtexport//DE"
+    LINE_FOLD_LENGTH = 75
+
+    def __init__(self, shifts: Sequence[Shift], employee: Employee | None, options: ExportOptions) -> None:
+        self.shifts = list(shifts)
+        self.employee = employee
+        self.options = options
+
+    def render(self) -> bytes:
+        now = datetime.now()
+        lines = ["BEGIN:VCALENDAR", "VERSION:2.0", f"PRODID:{self.PRODID}", "CALSCALE:GREGORIAN"]
+        for shift in sorted(self.shifts, key=lambda item: (item.start, item.name)):
+            lines.extend(self._event_lines(shift, now))
+        lines.append("END:VCALENDAR")
+
+        folded: list[str] = []
+        for line in lines:
+            folded.extend(self._fold_line(line))
+        return ("\r\n".join(folded) + "\r\n").encode("utf-8")
+
+    def _event_lines(self, shift: Shift, now: datetime) -> list[str]:
+        summary = shift.name if self.employee is None else f"{shift.name} ({shift.department})"
+        assigned = self._assigned_names(shift)
+        description_parts = [f"Abteilung: {shift.department}", f"Filiale: {shift.branch}"]
+        if assigned:
+            description_parts.append(f"Mitarbeitende: {', '.join(assigned)}")
+        return [
+            "BEGIN:VEVENT",
+            f"UID:{shift.id}@dienstplanung-pro",
+            f"DTSTAMP:{self._format_utc(now)}",
+            f"DTSTART:{self._format_floating(shift.start)}",
+            f"DTEND:{self._format_floating(shift.end)}",
+            f"SUMMARY:{self._escape(summary)}",
+            f"LOCATION:{self._escape(shift.branch)}",
+            f"DESCRIPTION:{self._escape(chr(10).join(description_parts))}",
+            "END:VEVENT",
+        ]
+
+    def _assigned_names(self, shift: Shift) -> list[str]:
+        if not self.options.anonymize_employee_names:
+            return list(shift.employee_names)
+        return [f"Mitarbeiter {index + 1}" for index in range(len(shift.employee_names))]
+
+    @staticmethod
+    def _format_floating(value: datetime) -> str:
+        return value.strftime("%Y%m%dT%H%M%S")
+
+    @staticmethod
+    def _format_utc(value: datetime) -> str:
+        return value.strftime("%Y%m%dT%H%M%SZ")
+
+    @staticmethod
+    def _escape(text: str) -> str:
+        return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+    @classmethod
+    def _fold_line(cls, line: str) -> list[str]:
+        encoded = line.encode("utf-8")
+        if len(encoded) <= cls.LINE_FOLD_LENGTH:
+            return [line]
+        chunks: list[str] = []
+        start = 0
+        limit = cls.LINE_FOLD_LENGTH
+        while start < len(encoded):
+            chunk = encoded[start : start + limit]
+            while chunk:
+                try:
+                    chunks.append(chunk.decode("utf-8"))
+                    break
+                except UnicodeDecodeError:
+                    chunk = chunk[:-1]
+            start += len(chunk)
+            limit = cls.LINE_FOLD_LENGTH - 1
+        return [chunks[0]] + [f" {chunk}" for chunk in chunks[1:]]
 
 
 class SimplePdfDocument:
