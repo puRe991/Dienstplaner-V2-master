@@ -229,8 +229,12 @@ class SchedulerApp(tk.Tk):
         self.license_label.bind("<Button-1>", lambda _event: self._open_license_dialog())
 
     def _refresh_license_label(self) -> None:
-        color = "#15803D" if self.license_result.valid else "#B91C1C"
-        prefix = "Lizenz gültig" if self.license_result.valid else "Lizenzproblem"
+        if self.license_result.is_trial and self.license_result.valid:
+            color, prefix = "#B45309", "Testversion"
+        elif self.license_result.valid:
+            color, prefix = "#15803D", "Lizenz gültig"
+        else:
+            color, prefix = "#B91C1C", "Lizenzproblem"
         if "license_label" in self.__dict__:
             self.license_label.configure(
                 text=f"{prefix}\n{self.license_result.company_name}",
@@ -273,7 +277,10 @@ class SchedulerApp(tk.Tk):
         tk.Label(dialog, text="Lizenzstatus", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(
             row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 6)
         )
-        status_color = "#15803D" if self.license_result.valid else "#B91C1C"
+        if self.license_result.is_trial and self.license_result.valid:
+            status_color = "#B45309"
+        else:
+            status_color = "#15803D" if self.license_result.valid else "#B91C1C"
         tk.Label(
             dialog, text=self.license_result.message, bg="#FFFFFF", fg=status_color, wraplength=380, justify="left"
         ).grid(row=1, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 10))
