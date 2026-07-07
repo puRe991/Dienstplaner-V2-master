@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
@@ -425,41 +426,112 @@ class SchedulerService:
             self.departments.sort(key=str.casefold)
 
 
+@dataclass(frozen=True)
+class ImportIssue:
+    """A single row-level problem found while importing a forecast CSV."""
+
+    row_number: int
+    field: str
+    message: str
+    severity: str = "Fehler"
+
+
+@dataclass(frozen=True)
+class ForecastImportReport:
+    """Result of a forecast CSV import, including a per-row error report."""
+
+    forecasts: list[RevenueForecast] = field(default_factory=list)
+    issues: list[ImportIssue] = field(default_factory=list)
+    total_rows: int = 0
+
+    @property
+    def imported_count(self) -> int:
+        return len(self.forecasts)
+
+    @property
+    def error_count(self) -> int:
+        return sum(1 for issue in self.issues if issue.severity == "Fehler")
+
+
 class ForecastImportService:
     def import_csv(self, path: str | Path) -> List[RevenueForecast]:
+        report = self.import_csv_with_report(path)
+        if not report.forecasts:
+            raise ValueError("Forecast-Datei enthält keine gültigen Datenzeilen.")
+        return report.forecasts
+
+    def import_csv_with_report(self, path: str | Path) -> ForecastImportReport:
         input_path = Path(path)
         if not input_path.exists() or not input_path.is_file():
             raise FileNotFoundError(f"Forecast-Datei wurde nicht gefunden: {input_path}")
 
-        result: list[RevenueForecast] = []
+        forecasts: list[RevenueForecast] = []
+        issues: list[ImportIssue] = []
+        total_rows = 0
         with input_path.open("r", newline="", encoding="utf-8-sig") as handle:
             reader = csv.reader(handle, delimiter=";")
             header = next(reader, None)
             if header is None:
                 raise ValueError("Forecast-Datei ist leer.")
-            for row in reader:
-                forecast = self._parse_row(row)
+            for row_number, row in enumerate(reader, start=2):
+                total_rows += 1
+                forecast, row_issues = self._parse_row(row, row_number)
+                issues.extend(row_issues)
                 if forecast is not None:
-                    result.append(forecast)
-        if not result:
-            raise ValueError("Forecast-Datei enthält keine gültigen Datenzeilen.")
-        return result
+                    forecasts.append(forecast)
+        return ForecastImportReport(forecasts=forecasts, issues=issues, total_rows=total_rows)
 
     @staticmethod
-    def _parse_row(row: list[str]) -> RevenueForecast | None:
+    def _parse_row(row: list[str], row_number: int) -> tuple[RevenueForecast | None, list[ImportIssue]]:
+        issues: list[ImportIssue] = []
         if len(row) < 5:
-            return None
+            issues.append(ImportIssue(
+                row_number,
+                "Zeile",
+                "Zeile hat zu wenige Spalten (erwartet: FilialeId;Filiale;Datum;Umsatz;Kunden).",
+            ))
+            return None, issues
+
+        branch_id: int | None = None
+        try:
+            branch_id = int(row[0].strip())
+        except (TypeError, ValueError):
+            issues.append(ImportIssue(row_number, "FilialeId", f"'{row[0].strip()}' ist keine gültige Ganzzahl."))
+
+        branch = row[1].strip()
+        if not branch:
+            issues.append(ImportIssue(row_number, "Filiale", "Filialname darf nicht leer sein."))
+
+        date_value: datetime | None = None
+        try:
+            date_value = _parse_date(row[2])
+        except ValueError as exc:
+            issues.append(ImportIssue(row_number, "Datum", str(exc)))
+
+        revenue: float | None = None
         try:
             revenue = float(row[3].replace(".", "").replace(",", "."))
-            return RevenueForecast(
-                branch_id=int(row[0]),
-                branch=row[1].strip(),
-                date=_parse_date(row[2]),
-                expected_revenue=revenue,
-                expected_customers=int(row[4]),
-            )
         except (TypeError, ValueError):
-            return None
+            issues.append(ImportIssue(row_number, "Umsatz", f"'{row[3].strip()}' ist keine gültige Zahl."))
+
+        customers: int | None = None
+        try:
+            customers = int(row[4].strip())
+        except (TypeError, ValueError):
+            issues.append(ImportIssue(row_number, "Kunden", f"'{row[4].strip()}' ist keine gültige Ganzzahl."))
+
+        if issues:
+            return None, issues
+        return (
+            RevenueForecast(
+                branch_id=branch_id,
+                branch=branch,
+                date=date_value,
+                expected_revenue=revenue,
+                expected_customers=customers,
+            ),
+            issues,
+        )
 
 
 def _parse_date(value: str) -> datetime:

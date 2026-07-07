@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import csv
 import logging
 import os
 import re
@@ -23,7 +24,7 @@ from .exporters import (
 from .licensing import LicenseCheckResult, LicenseManager
 from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
 from .repository import SQLiteSchedulerRepository
-from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
+from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportReport, ForecastImportService, SchedulerService
 
 
 EXPORT_PRIVACY_PROFILE_BY_LABEL: dict[str, ExportPrivacyProfile] = {
@@ -1692,13 +1693,61 @@ class SchedulerApp(tk.Tk):
         if not path:
             return
         def import_forecast() -> None:
-            forecasts = ForecastImportService().import_csv(path)
-            added = self.service.add_forecasts(forecasts)
-            if not self._persist_changes(f"{len(forecasts)} Forecast-Zeilen importiert, {added} neu gespeichert."):
-                return
+            report = ForecastImportService().import_csv_with_report(path)
+            if report.total_rows == 0:
+                raise ValueError("Forecast-Datei enthält keine Datenzeilen.")
+            if report.forecasts:
+                added = self.service.add_forecasts(report.forecasts)
+                if not self._persist_changes(f"{report.imported_count} von {report.total_rows} Forecast-Zeilen importiert, {added} neu gespeichert."):
+                    return
+            else:
+                self._set_status(f"Keine der {report.total_rows} Zeilen konnte importiert werden. Siehe Fehlerbericht.")
             self._refresh_all()
+            if report.issues:
+                self._open_import_report_window(report, path)
 
         self._run_ui_action("Forecast importieren", import_forecast)
+
+    def _open_import_report_window(self, report: ForecastImportReport, source_path: str) -> None:
+        window = self._create_manager_window("Forecast-Import: Fehlerbericht", "780x460")
+        tk.Label(
+            window,
+            text=f"{report.imported_count} von {report.total_rows} Zeilen importiert · {report.error_count} Fehler.",
+            bg="#F8FAFC",
+            fg="#334155",
+            anchor="w",
+            justify="left",
+        ).pack(fill="x", padx=16, pady=(14, 0))
+
+        columns = ("row", "field", "severity", "message")
+        tree = self._create_tree(window, columns, {
+            "row": "Zeile",
+            "field": "Feld",
+            "severity": "Schweregrad",
+            "message": "Fehlertext",
+        })
+        tree.column("message", width=360)
+        for index, issue in enumerate(report.issues):
+            tree.insert("", "end", iid=str(index), values=(issue.row_number, issue.field, issue.severity, issue.message))
+
+        def save_report() -> None:
+            default_name = f"{Path(source_path).stem}-fehlerbericht.csv"
+            target = filedialog.asksaveasfilename(
+                title="Fehlerbericht speichern",
+                defaultextension=".csv",
+                initialfile=default_name,
+                filetypes=[("CSV", "*.csv")],
+            )
+            if not target:
+                return
+            with open(target, "w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle, delimiter=";")
+                writer.writerow(["Zeile", "Feld", "Schweregrad", "Fehlertext"])
+                for issue in report.issues:
+                    writer.writerow([issue.row_number, issue.field, issue.severity, issue.message])
+            self._set_status(f"Fehlerbericht gespeichert: {target}")
+
+        self._add_manager_buttons(window, [("Als CSV speichern", save_report)])
 
     def _publish_schedule(self) -> None:
         def publish() -> None:

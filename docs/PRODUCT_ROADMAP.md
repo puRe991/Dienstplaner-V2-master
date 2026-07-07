@@ -45,7 +45,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 | 2 | Backup/Restore | ✅ Umgesetzt | 8 | 5 | 0,80 | 10 | 3,20 | Reduziert Betriebsrisiko der lokalen SQLite-Datenhaltung. |
 | 3 | Benutzer- und Rechteverwaltung in der UI | ✅ Umgesetzt | 8 | 4 | 0,75 | 12 | 2,00 | Macht lokale Anmeldung administrierbar und bereitet Rechteprüfungen vor. |
 | 4 | Datenschutzprofile für Exporte | ✅ Umgesetzt | 7 | 4 | 0,70 | 10 | 1,96 | Senkt Risiko bei personenbezogenen Exportdateien. |
-| 5 | Import-Fehlerbericht | Offen | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
+| 5 | Import-Fehlerbericht | ✅ Umgesetzt | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
 | 6 | Kalender-/ICS-Export | Offen | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
 | 7 | Audit-Integrität | ✅ Umgesetzt | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
 | 8 | Packaging/Installer | Offen | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
@@ -94,6 +94,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 5. Import-Fehlerbericht
 
+- **Status:** Umgesetzt (2026-07-07). Fehlerhafte Zeilen blockieren den Import nicht mehr vollständig; ein Dialog listet Zeilennummer, Feld, Schweregrad und Fehlertext je Zeile und lässt sich als CSV speichern. Keine automatische Korrektur der Quelldatei, wie im MVP vorgesehen.
 - **Zielgruppe:** Dienstplanverantwortliche, Controlling, Support.
 - **Nutzen:** Fehlerhafte Forecast-CSV-Dateien lassen sich zeilenbezogen korrigieren, ohne Trial-and-Error im Importdialog.
 - **Risiko bei Nichtumsetzung:** Importprobleme binden Supportzeit und können dazu führen, dass Planung ohne aktuelle Forecast-Daten erfolgt.

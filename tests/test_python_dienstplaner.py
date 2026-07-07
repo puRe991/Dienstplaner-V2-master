@@ -582,6 +582,45 @@ class ForecastImportTests(unittest.TestCase):
         self.assertEqual(1234.50, forecasts[0].expected_revenue)
         self.assertEqual(120, forecasts[0].expected_customers)
 
+    def test_import_report_lists_row_field_message_and_severity_for_bad_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecast.csv"
+            path.write_text(
+                "FilialeId;Filiale;Datum;Umsatz;Kunden\n"
+                "1;Zentrale;01.01.2026;1.234,50;120\n"
+                "abc;Nord;01.01.2026;500,00;80\n"
+                "2;;01.01.2026;500,00;80\n"
+                "3;Süd;nicht-ein-datum;500,00;80\n"
+                "4;West;01.01.2026;500,00;nicht-eine-zahl\n"
+                "5;Ost\n",
+                encoding="utf-8",
+            )
+
+            report = ForecastImportService().import_csv_with_report(path)
+
+        self.assertEqual(6, report.total_rows)
+        self.assertEqual(1, report.imported_count)
+        self.assertEqual(5, report.error_count)
+
+        issues_by_row = {issue.row_number: issue for issue in report.issues}
+        self.assertEqual("FilialeId", issues_by_row[3].field)
+        self.assertEqual("Fehler", issues_by_row[3].severity)
+        self.assertEqual("Filiale", issues_by_row[4].field)
+        self.assertEqual("Datum", issues_by_row[5].field)
+        self.assertEqual("Kunden", issues_by_row[6].field)
+        self.assertEqual("Zeile", issues_by_row[7].field)
+
+    def test_import_csv_still_raises_when_every_row_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "forecast.csv"
+            path.write_text("FilialeId;Filiale;Datum;Umsatz;Kunden\nabc;Nord;01.01.2026;500,00;80\n", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                ForecastImportService().import_csv(path)
+
+            report = ForecastImportService().import_csv_with_report(path)
+            self.assertEqual(0, report.imported_count)
+            self.assertEqual(1, report.error_count)
 
 
 class EmployeeAndAbsenceWorkflowTests(unittest.TestCase):
