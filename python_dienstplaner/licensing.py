@@ -32,6 +32,8 @@ DEFAULT_PUBLIC_KEY = (
 LICENSE_PATH_ENV = "DIENSTPLANER_LICENSE_PATH"
 APP_DATA_DIR_NAME = "DienstplanerPro"
 LICENSE_FILE_NAME = "license.json"
+TRIAL_FILE_NAME = "trial.json"
+DEFAULT_TRIAL_PERIOD_DAYS = 30
 
 
 class LicenseError(ValueError):
@@ -41,14 +43,24 @@ class LicenseError(ValueError):
 class LicenseCheckResult:
     """Immutable-style result for application startup license checks."""
 
-    def __init__(self, valid: bool, message: str, license_info: LicenseInfo | None = None) -> None:
+    def __init__(
+        self,
+        valid: bool,
+        message: str,
+        license_info: LicenseInfo | None = None,
+        *,
+        is_trial: bool = False,
+    ) -> None:
         self.valid = valid
         self.message = message
         self.license_info = license_info
+        self.is_trial = is_trial
 
     @property
     def company_name(self) -> str:
-        return self.license_info.company_name if self.license_info else "Keine Lizenz"
+        if self.license_info is not None:
+            return self.license_info.company_name
+        return "Testversion" if self.is_trial else "Keine Lizenz"
 
     @property
     def display_text(self) -> str:
@@ -71,15 +83,19 @@ class LicenseManager:
         license_path: str | Path | None = None,
         public_key: tuple[int, int] = DEFAULT_PUBLIC_KEY,
         private_key: tuple[int, int] | None = None,
+        trial_path: str | Path | None = None,
+        trial_period_days: int = DEFAULT_TRIAL_PERIOD_DAYS,
     ) -> None:
         self.license_path = Path(license_path) if license_path is not None else default_license_path()
         self.public_key = public_key
         self.private_key = private_key
+        self.trial_path = Path(trial_path) if trial_path is not None else self.license_path.with_name(TRIAL_FILE_NAME)
+        self.trial_period_days = trial_period_days
 
     def check(self, *, current_user_count: int = 0, today: date | None = None) -> LicenseCheckResult:
         today = today or date.today()
         if not self.license_path.exists():
-            return LicenseCheckResult(False, f"Lizenzdatei fehlt: {self.license_path}")
+            return self._check_trial(today)
 
         try:
             license_info = self.load()
@@ -138,6 +154,37 @@ class LicenseManager:
 
     def verify_signature(self, license_info: LicenseInfo) -> bool:
         return verify_license_signature(license_info, self.public_key)
+
+    def _check_trial(self, today: date) -> LicenseCheckResult:
+        """Allow the app to run without a license file for a limited trial period.
+
+        The trial start date is recorded on first launch (next to where the
+        license file would live) so reinstalling the app or deleting an
+        already-expired license cannot restart the clock.
+        """
+        trial_start = self._trial_start_date(today)
+        days_remaining = self.trial_period_days - (today - trial_start).days
+        if days_remaining > 0:
+            return LicenseCheckResult(
+                True,
+                f"Testversion: noch {days_remaining} von {self.trial_period_days} Tagen ohne Lizenz nutzbar.",
+                is_trial=True,
+            )
+        return LicenseCheckResult(
+            False,
+            f"Die {self.trial_period_days}-tägige Testphase ist abgelaufen. Bitte aktivieren Sie eine Lizenz, "
+            "um die Anwendung weiter zu nutzen.",
+            is_trial=True,
+        )
+
+    def _trial_start_date(self, today: date) -> date:
+        try:
+            data = json.loads(self.trial_path.read_text(encoding="utf-8"))
+            return datetime.strptime(str(data["trial_start"]), "%Y-%m-%d").date()
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
+            self.trial_path.parent.mkdir(parents=True, exist_ok=True)
+            self.trial_path.write_text(json.dumps({"trial_start": today.isoformat()}), encoding="utf-8")
+            return today
 
 
 def default_license_path() -> Path:

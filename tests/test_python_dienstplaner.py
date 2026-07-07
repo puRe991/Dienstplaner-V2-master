@@ -780,7 +780,7 @@ class LicenseManagerTests(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertIn("signatur", result.message.lower())
 
-    def test_reports_missing_license(self) -> None:
+    def test_missing_license_starts_trial_period(self) -> None:
         from datetime import date
         from python_dienstplaner.licensing import LicenseManager
 
@@ -789,8 +789,40 @@ class LicenseManagerTests(unittest.TestCase):
 
             result = manager.check(today=date(2026, 6, 8))
 
-        self.assertFalse(result.valid)
-        self.assertIn("fehlt", result.message)
+        self.assertTrue(result.valid)
+        self.assertTrue(result.is_trial)
+        self.assertIn("Testversion", result.message)
+        self.assertIn("30", result.message)
+
+    def test_trial_period_expires_after_30_days(self) -> None:
+        from datetime import date
+        from python_dienstplaner.licensing import LicenseManager
+
+        with tempfile.TemporaryDirectory() as directory:
+            manager = LicenseManager(Path(directory) / "missing-license.json")
+
+            first_check = manager.check(today=date(2026, 1, 1))
+            still_within_trial = manager.check(today=date(2026, 1, 15))
+            expired = manager.check(today=date(2026, 2, 1))
+
+        self.assertTrue(first_check.valid)
+        self.assertTrue(still_within_trial.valid)
+        self.assertFalse(expired.valid)
+        self.assertTrue(expired.is_trial)
+        self.assertIn("abgelaufen", expired.message)
+
+    def test_trial_start_date_persists_across_manager_instances(self) -> None:
+        from datetime import date
+        from python_dienstplaner.licensing import LicenseManager
+
+        with tempfile.TemporaryDirectory() as directory:
+            license_path = Path(directory) / "missing-license.json"
+            LicenseManager(license_path).check(today=date(2026, 1, 1))
+
+            later_result = LicenseManager(license_path).check(today=date(2026, 2, 1))
+
+        self.assertFalse(later_result.valid)
+        self.assertIn("abgelaufen", later_result.message)
 
     def test_import_license_text_installs_valid_license(self) -> None:
         import json
