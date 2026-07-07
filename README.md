@@ -16,6 +16,7 @@ Python-Desktop-Anwendung zur Erstellung, Prüfung und Auswertung von Dienstplän
 - **Persistenz:** Lokale SQLite-Datenbank für Mitarbeitende, Schichten, Zuweisungen und Abwesenheiten.
 - **Lokale Anmeldung:** Beim ersten Start wird ein Admin angelegt. Ein einmaliger Admin-Wiederherstellungscode ermöglicht das Anlegen eines neuen Admins, falls Benutzername oder Passwort vergessen wurden.
 - **Benutzerverwaltung:** Administratoren können über **Benutzer verwalten** im Hauptfenster weitere Nutzer anlegen, deaktivieren/aktivieren, die Rolle ändern und Passwörter zurücksetzen. Mindestens ein aktiver Administrator bleibt dabei immer erhalten; alle Änderungen werden im Änderungsverlauf protokolliert.
+- **Lizenzprüfung:** Beim Start wird die lokale Lizenzdatei geprüft (Signatur, Ablaufdatum, Nutzerlimit). Bei einem Problem erscheint ein klarer Warnhinweis, die Anwendung bleibt aber nutzbar. Das aktive-Nutzer-Limit der Lizenz wird dagegen hart durchgesetzt: Ein neuer oder reaktivierter Nutzer über dem Limit hinaus wird abgelehnt.
 
 ## Technologie
 

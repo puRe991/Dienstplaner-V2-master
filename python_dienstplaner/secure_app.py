@@ -9,6 +9,7 @@ from tkinter import messagebox, ttk
 from .app import SchedulerApp
 from .auth import Permission, User, UserRole
 from .auth_ui import authenticate_on_start, user_label, user_has_permission
+from .licensing import LicenseCheckResult, LicenseManager
 from .repository import SQLiteSchedulerRepository
 
 
@@ -38,9 +39,15 @@ class AuthenticatedSchedulerApp(SchedulerApp):
     for the default launcher.
     """
 
-    def __init__(self, service, repository: SQLiteSchedulerRepository, current_user: User | None = None) -> None:
+    def __init__(
+        self,
+        service,
+        repository: SQLiteSchedulerRepository,
+        current_user: User | None = None,
+        license_result: LicenseCheckResult | None = None,
+    ) -> None:
         self.current_user: User | None = current_user
-        super().__init__(service, repository)
+        super().__init__(service, repository, license_result)
 
     def _configure_styles(self) -> None:
         super()._configure_styles()
@@ -187,6 +194,8 @@ class AuthenticatedSchedulerApp(SchedulerApp):
             if not messagebox.askyesno(action_label, confirm_text, parent=window):
                 return
             try:
+                if not user.is_active:
+                    self._check_active_user_limit()
                 self.repository.set_user_active(user.id, not user.is_active, user_id=self._current_user_id())
                 self._set_status(f"{action_label}: {user.display_name}.")
                 refresh()
@@ -216,7 +225,27 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         if license_info is None:
             return None
         active = self.repository.active_user_count()
-        return f"Lizenz erlaubt {license_info.max_users} aktive Nutzer, aktuell {active} aktiv."
+        return (
+            f"Lizenz erlaubt {license_info.max_users} aktive Nutzer, aktuell {active} aktiv. "
+            "Ein neuer aktiver Nutzer über dem Limit hinaus wird abgelehnt."
+        )
+
+    def _check_active_user_limit(self, additional_active_users: int = 1) -> None:
+        """Enforce the license's active-user limit for new or reactivated users.
+
+        No-ops without a loaded license so missing/invalid licenses (handled
+        separately as a soft startup warning) don't also block user management.
+        """
+        license_info = self.license_result.license_info
+        if license_info is None:
+            return
+        projected = self.repository.active_user_count() + additional_active_users
+        if projected > license_info.max_users:
+            raise ValueError(
+                f"Lizenz erlaubt maximal {license_info.max_users} aktive Nutzer; "
+                f"mit dieser Aktion wären es {projected}. Deaktivieren Sie zuerst einen anderen "
+                "Nutzer oder erweitern Sie die Lizenz."
+            )
 
     def _open_create_user_dialog(self, parent: tk.Misc, *, on_saved) -> tk.Toplevel:
         dialog = tk.Toplevel(self)
@@ -256,6 +285,7 @@ class AuthenticatedSchedulerApp(SchedulerApp):
                 messagebox.showerror("Anlegen fehlgeschlagen", "Die Passwörter stimmen nicht überein.", parent=dialog)
                 return
             try:
+                self._check_active_user_limit()
                 self.repository.create_user(
                     values["username"].get(),
                     values["password"].get(),
@@ -320,10 +350,15 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         return dialog
 
 
-def create_app(database_path: str | Path | None = None) -> AuthenticatedSchedulerApp:
+def create_app(
+    database_path: str | Path | None = None,
+    license_path: str | Path | None = None,
+) -> AuthenticatedSchedulerApp:
     repository = SQLiteSchedulerRepository(database_path or default_database_path())
     service = repository.load()
-    return AuthenticatedSchedulerApp(service, repository)
+    active_user_count = repository.active_user_count()
+    license_result = LicenseManager(license_path).check(current_user_count=active_user_count)
+    return AuthenticatedSchedulerApp(service, repository, license_result=license_result)
 
 
 def main() -> None:

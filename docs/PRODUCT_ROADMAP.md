@@ -49,7 +49,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 | 6 | Kalender-/ICS-Export | ✅ Umgesetzt | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
 | 7 | Audit-Integrität | ✅ Umgesetzt | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
 | 8 | Packaging/Installer | 🟡 Teilweise umgesetzt | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
-| 9 | Lizenzdurchsetzung | Offen | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
+| 9 | Lizenzdurchsetzung | ✅ Umgesetzt | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
 | 10 | Automatische Regelvorschläge | Offen | 5 | 4 | 0,50 | 20 | 0,50 | Hoher Nutzen möglich, aber fachlich und technisch unsicher ohne Nutzungsdaten. |
 
 ## Initiativen im Detail
@@ -133,6 +133,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 9. Lizenzdurchsetzung
 
+- **Status:** Umgesetzt (2026-07-07). Produktentscheidung: bei fehlender/ungültiger/abgelaufener Lizenz zeigt der Start einen klaren Warndialog, die Anwendung bleibt aber nutzbar (kein Hard-Lock, da es keine Online-Reaktivierung gibt und ein kaputtes lokales Lizenzfile sonst den Datenzugriff komplett sperren würde). Das aktive-Nutzer-Limit der Lizenz wird dagegen hart durchgesetzt: Neuanlage oder Reaktivierung eines Nutzers über dem Limit hinaus wird mit klarer Fehlermeldung abgelehnt. Zuvor prüfte der produktive Start (`secure_app.create_app`) die Lizenz gar nicht; das ist jetzt behoben. Keine Online-Aktivierung, kein Lizenzserver.
 - **Zielgruppe:** Betreiber, Vertrieb, Support, Produktverantwortliche.
 - **Nutzen:** Gültigkeit, Ablauf und Nutzerlimit werden konsistent geprüft und verständlich kommuniziert.
 - **Risiko bei Nichtumsetzung:** Lizenzstatus bleibt uneinheitlich durchsetzbar. Supportfälle bei abgelaufenen oder falsch installierten Lizenzen nehmen zu.

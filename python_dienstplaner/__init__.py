@@ -3,6 +3,6 @@
 from .models import Employee, LicenseInfo, Shift
 from .services import SchedulerService
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = ["Employee", "LicenseInfo", "Shift", "SchedulerService", "__version__"]

@@ -208,6 +208,14 @@ class SchedulerApp(tk.Tk):
                 fg=color,
             )
         self._set_status(f"{prefix}: {self.license_result.display_text} — {self.license_result.message}")
+        if not self.license_result.valid:
+            messagebox.showwarning(
+                "Lizenzproblem",
+                f"{self.license_result.message}\n\n"
+                "Die Anwendung bleibt nutzbar, aber bitte prüfen Sie die Lizenzdatei oder "
+                "wenden Sie sich an den Support, um das Problem zu beheben.",
+                parent=self,
+            )
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)

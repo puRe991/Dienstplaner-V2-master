@@ -1401,6 +1401,91 @@ class RolePermissionTests(unittest.TestCase):
         self.assertNotIn("require_authentication", scheduler_parameters)
         self.assertIn("AuthenticatedSchedulerApp", Path("python_dienstplaner/secure_app.py").read_text(encoding="utf-8"))
 
+    def test_secure_create_app_checks_license_against_active_users(self) -> None:
+        from python_dienstplaner.secure_app import create_app
+        from python_dienstplaner.licensing import LicenseCheckResult
+
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = Path(directory) / "app.sqlite3"
+            repository = SQLiteSchedulerRepository(database_path)
+            repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+            inactive_user = repository.create_user("inactive", "Sicheres Passwort 2026", UserRole.VIEWER)
+            with sqlite3.connect(database_path) as connection:
+                connection.execute("UPDATE users SET is_active = 0 WHERE id = ?", (inactive_user.id,))
+
+            license_result = LicenseCheckResult(True, "Lizenz gültig.")
+            with (
+                patch("python_dienstplaner.secure_app.LicenseManager") as manager_cls,
+                patch("python_dienstplaner.secure_app.AuthenticatedSchedulerApp") as app_cls,
+            ):
+                manager_cls.return_value.check.return_value = license_result
+                create_app(database_path, Path(directory) / "license.json")
+
+        manager_cls.return_value.check.assert_called_once_with(current_user_count=1)
+        app_cls.assert_called_once()
+        self.assertIs(app_cls.call_args.kwargs["license_result"], license_result)
+
+    def test_check_active_user_limit_blocks_when_license_seats_are_full(self) -> None:
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult
+        from python_dienstplaner.models import LicenseInfo
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            license_info = LicenseInfo(
+                company_name="Test GmbH",
+                license_id="lic-1",
+                valid_until=date(2099, 1, 1),
+                max_users=1,
+                features=["standard"],
+                signature="irrelevant-for-this-check",
+            )
+            app = AuthenticatedSchedulerApp.__new__(AuthenticatedSchedulerApp)
+            app.repository = repository
+            app.license_result = LicenseCheckResult(True, "Lizenz gültig.", license_info)
+
+            with self.assertRaises(ValueError):
+                app._check_active_user_limit()
+
+    def test_check_active_user_limit_allows_seats_within_license(self) -> None:
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult
+        from python_dienstplaner.models import LicenseInfo
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            repository.create_user("admin", "Sicheres Passwort 2026", UserRole.ADMIN)
+
+            license_info = LicenseInfo(
+                company_name="Test GmbH",
+                license_id="lic-1",
+                valid_until=date(2099, 1, 1),
+                max_users=5,
+                features=["standard"],
+                signature="irrelevant-for-this-check",
+            )
+            app = AuthenticatedSchedulerApp.__new__(AuthenticatedSchedulerApp)
+            app.repository = repository
+            app.license_result = LicenseCheckResult(True, "Lizenz gültig.", license_info)
+
+            app._check_active_user_limit()  # must not raise
+
+    def test_check_active_user_limit_no_ops_without_loaded_license(self) -> None:
+        from python_dienstplaner.secure_app import AuthenticatedSchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            app = AuthenticatedSchedulerApp.__new__(AuthenticatedSchedulerApp)
+            app.repository = repository
+            app.license_result = LicenseCheckResult(False, "Lizenzdatei fehlt.")
+
+            app._check_active_user_limit()  # must not raise
+
 
 class AppIntegrityTests(unittest.TestCase):
     def test_scheduler_app_has_no_duplicate_method_definitions(self) -> None:
