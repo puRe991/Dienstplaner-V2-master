@@ -48,7 +48,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 | 5 | Import-Fehlerbericht | ✅ Umgesetzt | 6 | 3 | 0,80 | 8 | 1,80 | Verkürzt Fehleranalyse bei Forecast-CSV-Importen. |
 | 6 | Kalender-/ICS-Export | ✅ Umgesetzt | 7 | 3 | 0,70 | 9 | 1,63 | Erhöht Nutzbarkeit für Mitarbeitende und operative Kommunikation. |
 | 7 | Audit-Integrität | ✅ Umgesetzt | 5 | 5 | 0,65 | 10 | 1,63 | Schützt Nachvollziehbarkeit, benötigt aber klare Compliance-Ziele. |
-| 8 | Packaging/Installer | Offen | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
+| 8 | Packaging/Installer | 🟡 Teilweise umgesetzt | 7 | 4 | 0,65 | 12 | 1,52 | Erleichtert Installation, bringt aber Plattform- und Release-Komplexität. |
 | 9 | Lizenzdurchsetzung | Offen | 4 | 4 | 0,70 | 8 | 1,40 | Vorhandener Lizenzkern braucht Produktentscheidung zu Enforcement und Support-Fällen. |
 | 10 | Automatische Regelvorschläge | Offen | 5 | 4 | 0,50 | 20 | 0,50 | Hoher Nutzen möglich, aber fachlich und technisch unsicher ohne Nutzungsdaten. |
 
@@ -123,6 +123,7 @@ Diese Roadmap ergänzt die bestätigten Anforderungen um explizite Produktannahm
 
 ### 8. Packaging/Installer
 
+- **Status:** Teilweise umgesetzt (2026-07-07). Versionsanzeige in Titelleiste und Kopfbereich der Anwendung ist umgesetzt und getestet. `scripts/windows_installer.iss` (Inno Setup) erzeugt einen Startmenüeintrag, optionales Desktop-Icon und entfernt beim Deinstallieren nie das Datenverzeichnis – konnte aber in dieser Linux-Umgebung nicht tatsächlich kompiliert oder auf einem Windows-System durchgespielt werden. Vor dem ersten Kundenversand einmal real auf Windows bauen und die Installation/Deinstallation verifizieren, dann auf „Umgesetzt" setzen.
 - **Zielgruppe:** Endnutzer, Administratoren, Support, Vertrieb.
 - **Nutzen:** Installation und Updates werden reproduzierbar. Support kann sich auf definierte Installationspfade und Versionen beziehen.
 - **Risiko bei Nichtumsetzung:** Nutzer müssen Python, Tkinter und Startskripte korrekt einrichten. Installationsfehler bremsen Einführung und Support.

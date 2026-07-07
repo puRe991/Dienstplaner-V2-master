@@ -167,6 +167,8 @@ py -3 -m pip install pyinstaller
 py -3 scripts/build_windows_pyinstaller.py
 ```
 
+Das Ergebnis in `dist/Dienstplaner/` ist bereits ein portables Paket: Der Ordner lässt sich kopieren und `Dienstplaner.exe` darin direkt starten, ohne Installation.
+
 Hinweise:
 
 - Lege ein Windows-Icon als `assets/dienstplaner.ico` ab. Das Skript bindet es automatisch ein.
@@ -174,3 +176,17 @@ Hinweise:
 - Speichere produktive Daten außerhalb des Programmordners. Der sichere Standard-Launcher nutzt in PyInstaller-Builds `%APPDATA%\Dienstplaner\data\dienstplaner.sqlite3`; alternativ kannst du `DIENSTPLANER_DATABASE_PATH` setzen. Der Entwicklungspfad `python_dienstplaner/data/dienstplaner.sqlite3` bleibt nur für den Quellcode-Start aktiv.
 - Überschreibe bei Upgrades nie ungeprüft das Datenverzeichnis. Sichere zuerst die SQLite-Datei und starte danach die neue Version, damit die Migrationen kontrolliert laufen.
 - Wenn ein Upgrade fehlschlägt, nutze die Sicherung der SQLite-Datei und prüfe die Fehlermeldung, bevor du erneut migrierst.
+- Die aktuelle Version steht in der Titelleiste und im Kopfbereich der Anwendung (`v<Version>`), damit Nutzende und Support jederzeit erkennen, welcher Stand installiert ist.
+
+### Windows-Installer mit Startmenüeintrag (Inno Setup)
+
+Für Kunden, die keine portable ZIP-Datei möchten, gibt es zusätzlich ein [Inno Setup](https://jrsoftware.org/isinfo.php)-Skript unter `scripts/windows_installer.iss`. Es baut auf dem PyInstaller-Ordner auf und erzeugt einen Startmenüeintrag (optional Desktop-Icon), zeigt die Version im Windows-Deinstallationsdialog an und entfernt beim Deinstallieren ausschließlich die Programmdateien – niemals `%APPDATA%\Dienstplaner\data` mit Datenbank, Backups und Lizenzdatei.
+
+```powershell
+py -3 scripts/build_windows_pyinstaller.py
+iscc /DAppVersion=0.6.0 scripts\windows_installer.iss
+```
+
+Der fertige Installer liegt danach unter `dist/installer/Dienstplaner-Setup-<Version>.exe`. Ersetze `0.6.0` durch den aktuellen Wert aus `python_dienstplaner/__init__.py`.
+
+> Hinweis: Das Inno-Setup-Skript wurde sorgfältig gegen die dokumentierte Inno-Setup-Syntax geprüft, konnte aber in dieser Umgebung nicht kompiliert werden, da hier weder Windows noch Inno Setup verfügbar sind. Vor dem ersten Kundenversand einmal auf einem echten Windows-System bauen und den Installationsvorgang inklusive Deinstallation durchspielen.

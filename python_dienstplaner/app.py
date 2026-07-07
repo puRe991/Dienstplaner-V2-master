@@ -14,6 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
+from . import __version__
 from .exporters import (
     EXPORT_PRIVACY_PROFILE_DESCRIPTIONS,
     EXPORT_PRIVACY_PROFILE_LABELS,
@@ -129,7 +130,7 @@ class SchedulerApp(tk.Tk):
         self.active_view = "Dienstplan"
         self.ui_logger = configure_app_logging()
 
-        self.title("Dienstplanung Pro")
+        self.title(f"Dienstplanung Pro · v{__version__}")
         self.geometry("1440x840")
         self.minsize(1180, 720)
         self.configure(bg="#F8FAFC")
@@ -180,7 +181,10 @@ class SchedulerApp(tk.Tk):
 
         logo = tk.Label(header, text="▣", bg="#0B66E4", fg="#FFFFFF", font=("Segoe UI", 16, "bold"), width=2)
         logo.grid(row=0, column=0, padx=(22, 10), pady=14)
-        tk.Label(header, text="Dienstplanung Pro", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 16, "bold")).grid(row=0, column=1, sticky="w")
+        title_frame = tk.Frame(header, bg="#FFFFFF")
+        title_frame.grid(row=0, column=1, sticky="w")
+        tk.Label(title_frame, text="Dienstplanung Pro", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 16, "bold")).pack(side="left")
+        tk.Label(title_frame, text=f"v{__version__}", bg="#FFFFFF", fg="#94A3B8", font=("Segoe UI", 9)).pack(side="left", padx=(8, 0), pady=(6, 0))
 
         self.search_term = tk.StringVar()
         search = ttk.Entry(header, textvariable=self.search_term, width=46)
