@@ -98,6 +98,28 @@ class LicenseManager:
             )
         return LicenseCheckResult(True, "Lizenz gültig.", license_info)
 
+    def import_license_text(self, content: str, *, current_user_count: int = 0, today: date | None = None) -> LicenseCheckResult:
+        """Validate a pasted/received license (raw JSON text) and install it if genuine.
+
+        Used to let a customer unlock the app from within the UI after purchase,
+        without requiring them to manually locate the platform-specific license
+        file path. Only installs the license when its signature checks out, so a
+        bad paste can't clobber a working license with garbage.
+        """
+        try:
+            data = json.loads(content)
+            if not isinstance(data, dict):
+                raise LicenseError("Die Lizenz muss ein JSON-Objekt enthalten.")
+            license_info = license_from_dict(data)
+        except (json.JSONDecodeError, LicenseError) as exc:
+            return LicenseCheckResult(False, f"Lizenz ist ungültig: {exc}")
+
+        if not self.verify_signature(license_info):
+            return LicenseCheckResult(False, "Lizenzsignatur ist ungültig oder die Lizenz wurde verändert.", license_info)
+
+        self.save(license_info)
+        return self.check(current_user_count=current_user_count, today=today)
+
     def load(self) -> LicenseInfo:
         data = json.loads(self.license_path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):

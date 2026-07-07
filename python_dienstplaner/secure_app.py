@@ -45,9 +45,10 @@ class AuthenticatedSchedulerApp(SchedulerApp):
         repository: SQLiteSchedulerRepository,
         current_user: User | None = None,
         license_result: LicenseCheckResult | None = None,
+        license_manager: LicenseManager | None = None,
     ) -> None:
         self.current_user: User | None = current_user
-        super().__init__(service, repository, license_result)
+        super().__init__(service, repository, license_result, license_manager)
 
     def _configure_styles(self) -> None:
         super()._configure_styles()
@@ -357,8 +358,9 @@ def create_app(
     repository = SQLiteSchedulerRepository(database_path or default_database_path())
     service = repository.load()
     active_user_count = repository.active_user_count()
-    license_result = LicenseManager(license_path).check(current_user_count=active_user_count)
-    return AuthenticatedSchedulerApp(service, repository, license_result=license_result)
+    license_manager = LicenseManager(license_path)
+    license_result = license_manager.check(current_user_count=active_user_count)
+    return AuthenticatedSchedulerApp(service, repository, license_result=license_result, license_manager=license_manager)
 
 
 def main() -> None:

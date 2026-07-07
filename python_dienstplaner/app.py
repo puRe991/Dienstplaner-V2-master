@@ -33,6 +33,20 @@ EXPORT_PRIVACY_PROFILE_BY_LABEL: dict[str, ExportPrivacyProfile] = {
 }
 
 
+LICENSE_SALES_CONTACT_ENV = "DIENSTPLANER_SALES_CONTACT"
+DEFAULT_LICENSE_SALES_CONTACT = "vertrieb@ihr-unternehmen.example"
+
+
+def license_sales_contact() -> str:
+    """Return the sales contact shown in the purchase dialog.
+
+    No online store/license server exists (product decision, see
+    docs/PRODUCT_ROADMAP.md #9), so this is a placeholder the operator
+    overrides via the env var for their real deployment.
+    """
+    return os.environ.get(LICENSE_SALES_CONTACT_ENV, DEFAULT_LICENSE_SALES_CONTACT)
+
+
 SENSITIVE_LOG_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)(password|passwort|recovery[-_ ]?code|wiederherstellungscode|secret|token)\s*[:=]\s*\S+"),
     re.compile(r"(?i)(password|passwort|recovery[-_ ]?code|wiederherstellungscode|secret|token)"),
@@ -116,11 +130,18 @@ class SchedulerApp(tk.Tk):
     UNASSIGNED_EMPLOYEE_FG = "#92400E"
     UNASSIGNED_CELL_BG = "#FFFBEB"
 
-    def __init__(self, service: SchedulerService, repository: SQLiteSchedulerRepository, license_result: LicenseCheckResult | None = None) -> None:
+    def __init__(
+        self,
+        service: SchedulerService,
+        repository: SQLiteSchedulerRepository,
+        license_result: LicenseCheckResult | None = None,
+        license_manager: LicenseManager | None = None,
+    ) -> None:
         super().__init__()
         self.service = service
         self.repository = repository
         self.license_result = license_result or LicenseCheckResult(False, "Lizenzprüfung wurde nicht ausgeführt.")
+        self.license_manager = license_manager or LicenseManager()
         self.status = tk.StringVar(value="Bereit")
         self.selected_shift_id: str | None = None
         self.week_start = self._default_week_start()
@@ -195,19 +216,30 @@ class SchedulerApp(tk.Tk):
 
         self.notification_label = tk.Label(header, text="Offene Slots: 0", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12))
         self.notification_label.grid(row=0, column=3, padx=(12, 24))
-        self.license_label = tk.Label(header, text="Lizenz wird geprüft", bg="#FFFFFF", fg="#0F172A", justify="left", font=("Segoe UI", 10))
+        self.license_label = tk.Label(
+            header,
+            text="Lizenz wird geprüft",
+            bg="#FFFFFF",
+            fg="#0F172A",
+            justify="left",
+            font=("Segoe UI", 10),
+            cursor="hand2",
+        )
         self.license_label.grid(row=0, column=4, padx=(0, 24))
+        self.license_label.bind("<Button-1>", lambda _event: self._open_license_dialog())
 
-
-    def _apply_license_status(self) -> None:
+    def _refresh_license_label(self) -> None:
         color = "#15803D" if self.license_result.valid else "#B91C1C"
         prefix = "Lizenz gültig" if self.license_result.valid else "Lizenzproblem"
-        if hasattr(self, "license_label"):
+        if "license_label" in self.__dict__:
             self.license_label.configure(
                 text=f"{prefix}\n{self.license_result.company_name}",
                 fg=color,
             )
         self._set_status(f"{prefix}: {self.license_result.display_text} — {self.license_result.message}")
+
+    def _apply_license_status(self) -> None:
+        self._refresh_license_label()
         if not self.license_result.valid:
             messagebox.showwarning(
                 "Lizenzproblem",
@@ -216,6 +248,100 @@ class SchedulerApp(tk.Tk):
                 "wenden Sie sich an den Support, um das Problem zu beheben.",
                 parent=self,
             )
+
+    def _activate_license_text(self, content: str) -> LicenseCheckResult:
+        """Validate and install a pasted license, refreshing the header status.
+
+        Does not re-show the startup warning dialog so it doesn't stack on top
+        of the activation dialog the user is already looking at.
+        """
+        result = self.license_manager.import_license_text(
+            content, current_user_count=self.repository.active_user_count()
+        )
+        self.license_result = result
+        self._refresh_license_label()
+        return result
+
+    def _open_license_dialog(self) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("Lizenz")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        dialog.resizable(False, False)
+
+        tk.Label(dialog, text="Lizenzstatus", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 12, "bold")).grid(
+            row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 6)
+        )
+        status_color = "#15803D" if self.license_result.valid else "#B91C1C"
+        tk.Label(
+            dialog, text=self.license_result.message, bg="#FFFFFF", fg=status_color, wraplength=380, justify="left"
+        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 10))
+
+        license_info = self.license_result.license_info
+        detail_rows = [
+            ("Firma", license_info.company_name if license_info else "–"),
+            ("Lizenz-ID", license_info.license_id if license_info else "–"),
+            ("Gültig bis", f"{license_info.valid_until:%d.%m.%Y}" if license_info else "–"),
+            ("Max. Nutzer", str(license_info.max_users) if license_info else "–"),
+            ("Merkmale", ", ".join(license_info.features) if license_info else "–"),
+        ]
+        row = 2
+        for label, value in detail_rows:
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#64748B").grid(row=row, column=0, sticky="nw", padx=18, pady=3)
+            tk.Label(dialog, text=value, bg="#FFFFFF", fg="#0F172A", wraplength=260, justify="left").grid(
+                row=row, column=1, sticky="w", padx=(4, 18), pady=3
+            )
+            row += 1
+
+        ttk.Separator(dialog, orient="horizontal").grid(row=row, column=0, columnspan=2, sticky="ew", padx=18, pady=(10, 12))
+        row += 1
+
+        tk.Label(dialog, text="Lizenz freischalten", bg="#FFFFFF", fg="#0F172A", font=("Segoe UI", 11, "bold")).grid(
+            row=row, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 4)
+        )
+        row += 1
+        tk.Label(
+            dialog,
+            text="Inhalt der von Ihnen erhaltenen Lizenzdatei (JSON) hier einfügen:",
+            bg="#FFFFFF",
+            fg="#334155",
+            wraplength=380,
+            justify="left",
+        ).grid(row=row, column=0, columnspan=2, sticky="w", padx=18, pady=(0, 4))
+        row += 1
+        license_text = tk.Text(dialog, width=48, height=6)
+        license_text.grid(row=row, column=0, columnspan=2, padx=18, pady=(0, 8))
+        row += 1
+
+        def activate() -> None:
+            content = license_text.get("1.0", "end").strip()
+            if not content:
+                messagebox.showwarning("Lizenz freischalten", "Bitte fügen Sie den Inhalt der Lizenzdatei ein.", parent=dialog)
+                return
+            result = self._activate_license_text(content)
+            if result.valid:
+                messagebox.showinfo("Lizenz freischalten", "Lizenz wurde erfolgreich freigeschaltet.", parent=dialog)
+                dialog.destroy()
+            else:
+                messagebox.showerror("Lizenz freischalten", result.message, parent=dialog)
+
+        ttk.Button(dialog, text="Lizenz kaufen", style="Ghost.TButton", command=self._show_license_purchase_info).grid(
+            row=row, column=0, sticky="w", padx=18, pady=(0, 18)
+        )
+        ttk.Button(dialog, text="Lizenz freischalten", style="Primary.TButton", command=activate).grid(
+            row=row, column=1, sticky="e", padx=18, pady=(0, 18)
+        )
+
+    def _show_license_purchase_info(self) -> None:
+        messagebox.showinfo(
+            "Lizenz kaufen",
+            "Für den Kauf oder die Erweiterung einer Lizenz (z. B. mehr Nutzer oder Verlängerung) "
+            f"wenden Sie sich bitte an unseren Vertrieb: {license_sales_contact()}\n\n"
+            "Sie erhalten daraufhin eine signierte Lizenzdatei. Deren Inhalt können Sie hier über "
+            "„Lizenz freischalten“ einfügen, um die Anwendung damit freizuschalten.",
+            parent=self,
+        )
 
     def _build_sidebar(self) -> None:
         sidebar = ttk.Frame(self, style="Sidebar.TFrame", width=self.SIDEBAR_WIDTH)
@@ -1932,8 +2058,9 @@ def create_app(
     repository = SQLiteSchedulerRepository(database_path)
     service = repository.load()
     active_user_count = repository.active_user_count()
-    license_result = LicenseManager(license_path).check(current_user_count=active_user_count)
-    return SchedulerApp(service, repository, license_result)
+    license_manager = LicenseManager(license_path)
+    license_result = license_manager.check(current_user_count=active_user_count)
+    return SchedulerApp(service, repository, license_result, license_manager)
 
 
 def main() -> None:

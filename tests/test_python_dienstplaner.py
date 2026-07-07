@@ -792,6 +792,68 @@ class LicenseManagerTests(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertIn("fehlt", result.message)
 
+    def test_import_license_text_installs_valid_license(self) -> None:
+        import json
+        from datetime import date
+        from python_dienstplaner.licensing import LicenseManager, license_to_dict
+        from python_dienstplaner.models import LicenseInfo
+
+        public_key = (TEST_LICENSE_RSA_MODULUS, TEST_LICENSE_RSA_PUBLIC_EXPONENT)
+        private_key = (TEST_LICENSE_RSA_MODULUS, TEST_LICENSE_RSA_PRIVATE_EXPONENT)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "license.json"
+            signer = LicenseManager(path, public_key=public_key, private_key=private_key)
+            license_info = LicenseInfo(
+                company_name="Neu GmbH",
+                license_id="LIC-2026-002",
+                valid_until=date(2026, 12, 31),
+                max_users=7,
+                features=["dienstplan"],
+            )
+            signed = LicenseInfo(
+                company_name=license_info.company_name,
+                license_id=license_info.license_id,
+                valid_until=license_info.valid_until,
+                max_users=license_info.max_users,
+                features=license_info.features,
+                signature=signer.sign(license_info),
+            )
+            content = json.dumps(license_to_dict(signed))
+
+            target_manager = LicenseManager(path, public_key=public_key)
+            result = target_manager.import_license_text(content, current_user_count=2, today=date(2026, 6, 8))
+            self.assertTrue(path.exists())
+
+        self.assertTrue(result.valid)
+        self.assertEqual("Neu GmbH", result.company_name)
+
+    def test_import_license_text_rejects_tampered_signature_without_overwriting(self) -> None:
+        import json
+        from datetime import date
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "license.json"
+            manager = self._signed_license(path, valid_until=date(2026, 12, 31), company_name="Alt GmbH")
+            tampered = json.loads(path.read_text(encoding="utf-8"))
+            tampered["company_name"] = "Angreifer GmbH"
+
+            result = manager.import_license_text(json.dumps(tampered), today=date(2026, 6, 8))
+            self.assertEqual("Alt GmbH", json.loads(path.read_text(encoding="utf-8"))["company_name"])
+
+        self.assertFalse(result.valid)
+        self.assertIn("signatur", result.message.lower())
+
+    def test_import_license_text_rejects_malformed_json(self) -> None:
+        from python_dienstplaner.licensing import LicenseManager
+
+        with tempfile.TemporaryDirectory() as directory:
+            manager = LicenseManager(Path(directory) / "license.json")
+
+            result = manager.import_license_text("das ist kein json")
+
+        self.assertFalse(result.valid)
+        self.assertIn("ungültig", result.message)
+
 
 class DashboardStartupTests(unittest.TestCase):
 
@@ -1485,6 +1547,80 @@ class RolePermissionTests(unittest.TestCase):
             app.license_result = LicenseCheckResult(False, "Lizenzdatei fehlt.")
 
             app._check_active_user_limit()  # must not raise
+
+    def test_activate_license_text_installs_license_and_updates_status(self) -> None:
+        import json
+        from datetime import date
+        from unittest.mock import MagicMock
+        from python_dienstplaner.app import SchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult, LicenseManager, license_to_dict
+        from python_dienstplaner.models import LicenseInfo
+
+        public_key = (TEST_LICENSE_RSA_MODULUS, TEST_LICENSE_RSA_PUBLIC_EXPONENT)
+        private_key = (TEST_LICENSE_RSA_MODULUS, TEST_LICENSE_RSA_PRIVATE_EXPONENT)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "license.json"
+            signer = LicenseManager(path, public_key=public_key, private_key=private_key)
+            license_info = LicenseInfo(
+                company_name="Freigeschaltet GmbH",
+                license_id="LIC-2026-003",
+                valid_until=date(2026, 12, 31),
+                max_users=4,
+                features=["dienstplan"],
+            )
+            signed = LicenseInfo(
+                company_name=license_info.company_name,
+                license_id=license_info.license_id,
+                valid_until=license_info.valid_until,
+                max_users=license_info.max_users,
+                features=license_info.features,
+                signature=signer.sign(license_info),
+            )
+            content = json.dumps(license_to_dict(signed))
+
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            app = SchedulerApp.__new__(SchedulerApp)
+            app.repository = repository
+            app.license_manager = LicenseManager(path, public_key=public_key)
+            app.license_result = LicenseCheckResult(False, "Lizenzdatei fehlt.")
+            app.status = MagicMock()
+
+            result = app._activate_license_text(content)
+
+        self.assertTrue(result.valid)
+        self.assertTrue(app.license_result.valid)
+        self.assertEqual("Freigeschaltet GmbH", app.license_result.company_name)
+
+    def test_activate_license_text_reports_invalid_license_without_crashing(self) -> None:
+        from unittest.mock import MagicMock
+        from python_dienstplaner.app import SchedulerApp
+        from python_dienstplaner.licensing import LicenseCheckResult, LicenseManager
+
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "app.sqlite3")
+            app = SchedulerApp.__new__(SchedulerApp)
+            app.repository = repository
+            app.license_manager = LicenseManager(Path(directory) / "license.json")
+            app.license_result = LicenseCheckResult(False, "Lizenzdatei fehlt.")
+            app.status = MagicMock()
+
+            result = app._activate_license_text("nicht valides json")
+
+        self.assertFalse(result.valid)
+        self.assertFalse(app.license_result.valid)
+
+    def test_license_sales_contact_uses_env_override(self) -> None:
+        import os
+        from unittest.mock import patch as mock_patch
+        from python_dienstplaner.app import (
+            DEFAULT_LICENSE_SALES_CONTACT,
+            LICENSE_SALES_CONTACT_ENV,
+            license_sales_contact,
+        )
+
+        self.assertEqual(DEFAULT_LICENSE_SALES_CONTACT, license_sales_contact())
+        with mock_patch.dict(os.environ, {LICENSE_SALES_CONTACT_ENV: "vertrieb@beispiel.de"}):
+            self.assertEqual("vertrieb@beispiel.de", license_sales_contact())
 
 
 class AppIntegrityTests(unittest.TestCase):
