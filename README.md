@@ -17,6 +17,7 @@ Python-Desktop-Anwendung zur Erstellung, Prüfung und Auswertung von Dienstplän
 - **Lokale Anmeldung:** Beim ersten Start wird ein Admin angelegt. Ein einmaliger Admin-Wiederherstellungscode ermöglicht das Anlegen eines neuen Admins, falls Benutzername oder Passwort vergessen wurden.
 - **Benutzerverwaltung:** Administratoren können über **Benutzer verwalten** im Hauptfenster weitere Nutzer anlegen, deaktivieren/aktivieren, die Rolle ändern und Passwörter zurücksetzen. Mindestens ein aktiver Administrator bleibt dabei immer erhalten; alle Änderungen werden im Änderungsverlauf protokolliert.
 - **Lizenzprüfung:** Beim Start wird die lokale Lizenzdatei geprüft (Signatur, Ablaufdatum, Nutzerlimit). Bei einem Problem erscheint ein klarer Warnhinweis, die Anwendung bleibt aber nutzbar. Das aktive-Nutzer-Limit der Lizenz wird dagegen hart durchgesetzt: Ein neuer oder reaktivierter Nutzer über dem Limit hinaus wird abgelehnt.
+- **Lizenz kaufen/freischalten:** Ein Klick auf den Lizenzstatus im Kopfbereich öffnet einen Dialog mit den Lizenzdetails, einem Hinweis zum Lizenzkauf (Vertriebskontakt über `DIENSTPLANER_SALES_CONTACT` konfigurierbar) sowie einem Feld, um den Inhalt einer neuen, signierten Lizenzdatei einzufügen und sofort freizuschalten – ohne manuellen Dateizugriff auf den Lizenzpfad.
 
 ## Technologie
 
