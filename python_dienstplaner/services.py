@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, List
 
 from .exporters import ExportHeader, ExportOptions, ScheduleExporter
-from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, RuleProfile, Shift
+from .models import Absence, AssignmentResult, Employee, ExportFormat, ReportMetric, RevenueForecast, RuleProfile, Shift, ShiftTemplate
 from .rules import PlanningRules
 
 
@@ -35,8 +35,18 @@ class SchedulerService:
         self.rules.profile = self.active_rule_profile
         self.employees: list[Employee] = []
         self.shifts: list[Shift] = []
+        self.shift_templates: list[ShiftTemplate] = list(self._default_shift_templates())
         self.forecasts: list[RevenueForecast] = []
         self.departments: list[str] = list(DEFAULT_RETAIL_DEPARTMENTS)
+
+    @staticmethod
+    def _default_shift_templates() -> list[ShiftTemplate]:
+        """Ready-to-use templates so shift entry works without prior setup."""
+        return [
+            ShiftTemplate("Frühschicht", "Kasse", "06:00", "14:00", 1, branch="Hauptfiliale"),
+            ShiftTemplate("Spätschicht", "Kasse", "14:00", "22:00", 1, branch="Hauptfiliale"),
+            ShiftTemplate("Nachtschicht", "Kasse", "22:00", "06:00", 1, branch="Hauptfiliale"),
+        ]
 
     @property
     def active_rule_profile(self) -> RuleProfile:
@@ -245,6 +255,84 @@ class SchedulerService:
             source.branch,
         )
         return copied
+
+    def add_shift_template(
+        self,
+        name: str,
+        department: str,
+        start_time: str,
+        end_time: str,
+        required_employees: int,
+        required_qualification: str = "",
+        branch: str = "Zentrale",
+    ) -> ShiftTemplate:
+        template = ShiftTemplate(
+            name=name,
+            department=department,
+            start_time=start_time,
+            end_time=end_time,
+            required_employees=required_employees,
+            required_qualification=required_qualification,
+            branch=branch,
+        )
+        self.shift_templates.append(template)
+        self._remember_department(template.department)
+        return template
+
+    def update_shift_template(
+        self,
+        template_id: str,
+        name: str,
+        department: str,
+        start_time: str,
+        end_time: str,
+        required_employees: int,
+        required_qualification: str = "",
+        branch: str = "Zentrale",
+    ) -> ShiftTemplate:
+        template = self.find_shift_template(template_id)
+        if template is None:
+            raise ValueError("Schichtvorlage wurde nicht gefunden.")
+        updated = ShiftTemplate(
+            id=template.id,
+            name=name,
+            department=department,
+            start_time=start_time,
+            end_time=end_time,
+            required_employees=required_employees,
+            required_qualification=required_qualification,
+            branch=branch,
+        )
+        index = self.shift_templates.index(template)
+        self.shift_templates[index] = updated
+        self._remember_department(updated.department)
+        return updated
+
+    def delete_shift_template(self, template_id: str) -> bool:
+        template = self.find_shift_template(template_id)
+        if template is None:
+            return False
+        self.shift_templates = [item for item in self.shift_templates if item.id != template_id]
+        return True
+
+    def find_shift_template(self, template_id: str) -> ShiftTemplate | None:
+        return next((item for item in self.shift_templates if item.id == template_id), None)
+
+    def create_shift_from_template(self, template_id: str, day: date, *, user_id: str = "system") -> Shift:
+        template = self.find_shift_template(template_id)
+        if template is None:
+            raise ValueError("Schichtvorlage wurde nicht gefunden.")
+        start, end = template.shift_datetimes(day)
+        return self.add_shift(
+            template.name,
+            template.department,
+            start,
+            end,
+            template.required_employees,
+            template.required_qualification,
+            template.branch,
+            user_id=user_id,
+        )
 
     def assign(self, employee_id: str, shift_id: str, *, ignore_profile_mismatch: bool = False) -> AssignmentResult:
         employee = self.find_employee(employee_id)

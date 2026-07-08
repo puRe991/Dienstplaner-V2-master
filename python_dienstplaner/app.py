@@ -23,7 +23,7 @@ from .exporters import (
     export_options_for_profile,
 )
 from .licensing import LicenseCheckResult, LicenseManager
-from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift
+from .models import DEFAULT_ABSENCE_REASONS, Absence, Employee, ExportFormat, RuleProfile, Shift, ShiftTemplate
 from .repository import SQLiteSchedulerRepository
 from .services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportReport, ForecastImportService, SchedulerService
 
@@ -412,6 +412,7 @@ class SchedulerApp(tk.Tk):
         self.week_label.grid(row=0, column=2, sticky="w")
         ttk.Button(toolbar, text="›", style="Ghost.TButton", command=lambda: self._move_week(7)).grid(row=0, column=3, padx=(0, 20))
         ttk.Button(toolbar, text="+ Schicht hinzufügen", style="Primary.TButton", command=self._open_shift_dialog).grid(row=0, column=4, padx=6)
+        ttk.Button(toolbar, text="Aus Vorlage", style="Ghost.TButton", command=self._open_create_shift_from_template_dialog).grid(row=0, column=5, padx=(0, 6))
 
         self.cards_frame = ttk.Frame(content)
         self.cards_frame.grid(row=1, column=0, sticky="ew", pady=(0, 16))
@@ -483,6 +484,7 @@ class SchedulerApp(tk.Tk):
             ("☂ Abwesenheit erfassen", self._open_absence_dialog),
             ("➕ Mitarbeitenden zuweisen", self._open_assignment_dialog),
             ("▤  Schicht anlegen", self._open_shift_dialog),
+            ("📋 Schicht aus Vorlage", self._open_create_shift_from_template_dialog),
             ("✈  Dienstplan veröffentlichen", self._publish_schedule),
             ("📈 Forecast importieren", self._import_forecast),
         ]:
@@ -771,6 +773,16 @@ class SchedulerApp(tk.Tk):
                 window.wait_window(dialog)
             refresh()
 
+        def add_from_template() -> None:
+            dialog = self._open_create_shift_from_template_dialog(parent=window)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def manage_templates() -> None:
+            self._open_shift_template_manager(parent=window)
+            refresh()
+
         def edit() -> None:
             shift = selected_shift()
             if shift is None:
@@ -821,7 +833,7 @@ class SchedulerApp(tk.Tk):
             self.selected_shift_id = shift.id
             self._delete_selected_shift(parent=window, refresh_callback=refresh)
 
-        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Kopieren", copy), ("Zuweisen", assign), ("Zuweisung entfernen", unassign), ("Löschen", delete), ("Aktualisieren", refresh)])
+        self._add_manager_buttons(window, [("Neu", add), ("Aus Vorlage", add_from_template), ("Vorlagen verwalten", manage_templates), ("Bearbeiten", edit), ("Kopieren", copy), ("Zuweisen", assign), ("Zuweisung entfernen", unassign), ("Löschen", delete), ("Aktualisieren", refresh)])
         tree.bind("<Double-Button-1>", lambda _event: edit())
         refresh()
 
@@ -1431,6 +1443,169 @@ class SchedulerApp(tk.Tk):
                 messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
 
         ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_shift).grid(row=7, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
+
+    def _open_create_shift_from_template_dialog(self, parent: tk.Misc | None = None) -> tk.Toplevel | None:
+        if not self.service.shift_templates:
+            if messagebox.askyesno(
+                "Keine Vorlagen vorhanden",
+                "Es gibt noch keine Schichtvorlagen. Jetzt eine Vorlage anlegen?",
+                parent=parent or self,
+            ):
+                self._open_shift_template_dialog(parent=parent)
+            return None
+        dialog = tk.Toplevel(self)
+        dialog.title("Schicht aus Vorlage anlegen")
+        dialog.transient(parent or self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        templates = sorted(self.service.shift_templates, key=lambda item: item.name.casefold())
+        template_options = {
+            f"{template.name} · {template.department} · {template.start_time}–{template.end_time}": template.id
+            for template in templates
+        }
+        values = {
+            "template": tk.StringVar(value=next(iter(template_options))),
+            "day": tk.StringVar(value=self._format_date(datetime.now())),
+        }
+        tk.Label(dialog, text="Vorlage", bg="#FFFFFF", fg="#334155").grid(row=0, column=0, sticky="w", padx=18, pady=7)
+        ttk.Combobox(dialog, textvariable=values["template"], values=list(template_options), width=42, state="readonly").grid(row=0, column=1, padx=18, pady=7)
+        tk.Label(dialog, text="Tag", bg="#FFFFFF", fg="#334155").grid(row=1, column=0, sticky="w", padx=18, pady=7)
+        ttk.Entry(dialog, textvariable=values["day"], width=44).grid(row=1, column=1, padx=18, pady=7)
+
+        def create_shift() -> None:
+            try:
+                day = self._parse_datetime(values["day"].get()).date()
+                template_id = template_options[values["template"].get()]
+                created = self.service.create_shift_from_template(template_id, day, user_id=self._current_user_id())
+                self.selected_shift_id = created.id
+                if not self._persist_changes("Schicht aus Vorlage angelegt.", dialog):
+                    return
+                dialog.destroy()
+                self._refresh_all()
+            except (KeyError, ValueError) as exc:
+                messagebox.showerror("Schicht kann nicht angelegt werden", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Vorlagen verwalten", style="Ghost.TButton", command=lambda: self._open_shift_template_manager(parent=dialog)).grid(row=2, column=0, sticky="w", padx=18, pady=(12, 18))
+        ttk.Button(dialog, text="Anlegen", style="Primary.TButton", command=create_shift).grid(row=2, column=1, sticky="e", padx=18, pady=(12, 18))
+        return dialog
+
+    def _open_shift_template_manager(self, parent: tk.Misc | None = None) -> None:
+        window = self._create_manager_window("Schicht-Vorlagen verwalten", "860x460")
+        if parent is not None:
+            window.transient(parent)
+        columns = ("name", "department", "start", "end", "capacity", "qualification", "branch")
+        tree = self._create_tree(window, columns, {
+            "name": "Name",
+            "department": "Abteilung",
+            "start": "Start",
+            "end": "Ende",
+            "capacity": "Kapazität",
+            "qualification": "Qualifikation",
+            "branch": "Filiale",
+        })
+
+        def refresh() -> None:
+            self._clear_tree(tree)
+            for template in sorted(self.service.shift_templates, key=lambda item: item.name.casefold()):
+                tree.insert("", "end", iid=template.id, values=(
+                    template.name,
+                    template.department,
+                    template.start_time,
+                    template.end_time,
+                    template.required_employees,
+                    template.required_qualification or "-",
+                    template.branch,
+                ))
+
+        def selected_template() -> ShiftTemplate | None:
+            selection = tree.selection()
+            return self.service.find_shift_template(selection[0]) if selection else None
+
+        def add() -> None:
+            dialog = self._open_shift_template_dialog(parent=window)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def edit() -> None:
+            template = selected_template()
+            if template is None:
+                self._set_status("Bitte eine Vorlage auswählen.")
+                return
+            dialog = self._open_shift_template_dialog(template, parent=window)
+            if dialog is not None:
+                window.wait_window(dialog)
+            refresh()
+
+        def delete() -> None:
+            template = selected_template()
+            if template is None:
+                self._set_status("Bitte eine Vorlage auswählen.")
+                return
+            if not messagebox.askyesno("Vorlage löschen", f"Soll '{template.name}' wirklich gelöscht werden?", parent=window):
+                return
+            self.service.delete_shift_template(template.id)
+            self._persist_changes("Vorlage gelöscht.", window)
+            refresh()
+
+        self._add_manager_buttons(window, [("Neu", add), ("Bearbeiten", edit), ("Löschen", delete), ("Aktualisieren", refresh)])
+        tree.bind("<Double-Button-1>", lambda _event: edit())
+        refresh()
+
+    def _open_shift_template_dialog(self, template: ShiftTemplate | None = None, parent: tk.Misc | None = None) -> tk.Toplevel:
+        dialog = tk.Toplevel(self)
+        dialog.title("Vorlage bearbeiten" if template else "Vorlage anlegen")
+        dialog.transient(parent or self)
+        dialog.grab_set()
+        dialog.configure(bg="#FFFFFF")
+        values = {
+            "name": tk.StringVar(value=template.name if template else "Frühschicht"),
+            "department": tk.StringVar(value=template.department if template else "Kasse"),
+            "start_time": tk.StringVar(value=template.start_time if template else "06:00"),
+            "end_time": tk.StringVar(value=template.end_time if template else "14:00"),
+            "capacity": tk.StringVar(value=str(template.required_employees if template else 1)),
+            "qualification": tk.StringVar(value=template.required_qualification if template else ""),
+            "branch": tk.StringVar(value=template.branch if template else "Hauptfiliale"),
+        }
+        for row, (key, label) in enumerate([("name", "Name"), ("department", "Abteilung"), ("start_time", "Start (HH:MM)"), ("end_time", "Ende (HH:MM)"), ("capacity", "Kapazität"), ("qualification", "Qualifikation"), ("branch", "Standort")]):
+            tk.Label(dialog, text=label, bg="#FFFFFF", fg="#334155").grid(row=row, column=0, sticky="w", padx=18, pady=7)
+            if key == "department":
+                self._department_combobox(dialog, values[key], row)
+            else:
+                ttk.Entry(dialog, textvariable=values[key], width=34).grid(row=row, column=1, padx=18, pady=7)
+
+        def save_template() -> None:
+            try:
+                capacity = int(values["capacity"].get())
+                if template is None:
+                    self.service.add_shift_template(
+                        values["name"].get(),
+                        values["department"].get(),
+                        values["start_time"].get(),
+                        values["end_time"].get(),
+                        capacity,
+                        values["qualification"].get(),
+                        values["branch"].get(),
+                    )
+                else:
+                    self.service.update_shift_template(
+                        template.id,
+                        values["name"].get(),
+                        values["department"].get(),
+                        values["start_time"].get(),
+                        values["end_time"].get(),
+                        capacity,
+                        values["qualification"].get(),
+                        values["branch"].get(),
+                    )
+                if not self._persist_changes("Vorlage gespeichert.", dialog):
+                    return
+                dialog.destroy()
+            except ValueError as exc:
+                messagebox.showerror("Ungültige Eingabe", str(exc), parent=dialog)
+
+        ttk.Button(dialog, text="Speichern", style="Primary.TButton", command=save_template).grid(row=7, column=1, sticky="e", padx=18, pady=(12, 18))
         return dialog
 
     def _open_employee_dialog(self, employee: Employee | None = None) -> tk.Toplevel:
