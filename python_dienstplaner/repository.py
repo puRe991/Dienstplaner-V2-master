@@ -11,7 +11,7 @@ from typing import Callable, Iterable
 from uuid import uuid4
 
 from .auth import User, UserRole
-from .models import Absence, Employee, RevenueForecast, RuleProfile, Shift
+from .models import Absence, Employee, RevenueForecast, RuleProfile, Shift, ShiftTemplate
 from .password_policy import validate_password
 from .services import SchedulerService
 
@@ -20,7 +20,7 @@ PASSWORD_ITERATIONS = 200_000
 PASSWORD_SALT_BYTES = 16
 ADMIN_RECOVERY_SECRET_ID = "admin_recovery"
 ADMIN_RECOVERY_CODE_BYTES = 24
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 Migration = Callable[[sqlite3.Connection], None]
 
 RULE_PROFILE_COLUMNS: tuple[str, ...] = (
@@ -76,6 +76,7 @@ class SQLiteSchedulerRepository:
             connection.execute("DELETE FROM absences")
             connection.execute("DELETE FROM forecasts")
             connection.execute("DELETE FROM departments")
+            connection.execute("DELETE FROM shift_templates")
             connection.execute("DELETE FROM shifts")
             connection.execute("DELETE FROM employees")
             connection.execute("DELETE FROM rule_profiles")
@@ -160,6 +161,28 @@ class SQLiteSchedulerRepository:
                 ],
             )
             connection.executemany(
+                """
+                INSERT INTO shift_templates(
+                    id, name, department, start_time, end_time, required_employees,
+                    required_qualification, branch
+                )
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        template.id,
+                        template.name,
+                        template.department,
+                        template.start_time,
+                        template.end_time,
+                        template.required_employees,
+                        template.required_qualification,
+                        template.branch,
+                    )
+                    for template in service.shift_templates
+                ],
+            )
+            connection.executemany(
                 "INSERT INTO assignments(employee_id, shift_id) VALUES(?, ?)",
                 [(employee.id, shift.id) for employee in service.employees for shift in employee.shifts],
             )
@@ -229,6 +252,28 @@ class SQLiteSchedulerRepository:
             departments = [row[0] for row in connection.execute("SELECT name FROM departments ORDER BY name COLLATE NOCASE")]
             if departments:
                 service.departments = departments
+            shift_templates = [
+                ShiftTemplate(
+                    id=row[0],
+                    name=row[1],
+                    department=row[2],
+                    start_time=row[3],
+                    end_time=row[4],
+                    required_employees=row[5],
+                    required_qualification=row[6],
+                    branch=row[7],
+                )
+                for row in connection.execute(
+                    """
+                    SELECT id, name, department, start_time, end_time, required_employees,
+                           required_qualification, branch
+                    FROM shift_templates
+                    ORDER BY name COLLATE NOCASE
+                    """
+                )
+            ]
+            if shift_templates:
+                service.shift_templates = shift_templates
             employees = {
                 row[0]: Employee(
                     id=row[0],
@@ -575,6 +620,7 @@ class SQLiteSchedulerRepository:
             (2, SQLiteSchedulerRepository._migration_002_rule_profile_constraints),
             (3, SQLiteSchedulerRepository._migration_003_planning_metadata),
             (4, SQLiteSchedulerRepository._migration_004_forecasts),
+            (5, SQLiteSchedulerRepository._migration_005_shift_templates),
         )
 
     @staticmethod
@@ -700,6 +746,23 @@ class SQLiteSchedulerRepository:
                 expected_revenue REAL NOT NULL CHECK(expected_revenue >= 0),
                 expected_customers INTEGER NOT NULL CHECK(expected_customers >= 0),
                 PRIMARY KEY(branch_id, date)
+            )
+            """
+        )
+
+    @staticmethod
+    def _migration_005_shift_templates(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS shift_templates(
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                required_employees INTEGER NOT NULL CHECK(required_employees > 0),
+                required_qualification TEXT NOT NULL DEFAULT '',
+                branch TEXT NOT NULL DEFAULT 'Zentrale'
             )
             """
         )
@@ -897,6 +960,7 @@ class SQLiteSchedulerRepository:
             "forecasts",
             "rule_profiles",
             "audit_events",
+            "shift_templates",
         }
         tables = {
             row[0]

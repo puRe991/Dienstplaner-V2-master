@@ -4,7 +4,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,7 +18,7 @@ from python_dienstplaner.exporters import (
     ExportPrivacyProfile,
     export_options_for_profile,
 )
-from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile
+from python_dienstplaner.models import DEFAULT_ABSENCE_REASONS, Absence, ExportFormat, RuleProfile, ShiftTemplate
 from python_dienstplaner.repository import SCHEMA_VERSION, SQLiteSchedulerRepository
 from python_dienstplaner.services import DEFAULT_RETAIL_DEPARTMENTS, ForecastImportService, SchedulerService
 
@@ -66,6 +66,53 @@ class SchedulerServiceTests(unittest.TestCase):
         self.assertEqual("Kasse", copied.department)
         self.assertEqual([], copied.employee_ids)
         self.assertEqual([], copied.employee_names)
+
+    def test_new_service_seeds_ready_to_use_shift_templates(self) -> None:
+        service = SchedulerService()
+
+        names = {template.name for template in service.shift_templates}
+
+        self.assertIn("Frühschicht", names)
+        self.assertIn("Spätschicht", names)
+        self.assertIn("Nachtschicht", names)
+
+    def test_add_shift_template_rejects_invalid_time_format(self) -> None:
+        service = SchedulerService()
+
+        with self.assertRaises(ValueError):
+            service.add_shift_template("Früh", "Kasse", "6 Uhr", "14:00", 1)
+
+    def test_create_shift_from_template_uses_templates_time_of_day_on_given_day(self) -> None:
+        service = SchedulerService()
+        template = service.add_shift_template("Früh", "Kasse", "06:00", "14:00", 2, branch="Hauptfiliale")
+
+        shift = service.create_shift_from_template(template.id, date(2026, 7, 13))
+
+        self.assertEqual("Früh", shift.name)
+        self.assertEqual(datetime(2026, 7, 13, 6, 0), shift.start)
+        self.assertEqual(datetime(2026, 7, 13, 14, 0), shift.end)
+        self.assertEqual(2, shift.required_employees)
+        self.assertIn(shift, service.shifts)
+
+    def test_create_shift_from_template_wraps_overnight_shift_to_next_day(self) -> None:
+        service = SchedulerService()
+        template = service.add_shift_template("Nacht", "Kasse", "22:00", "06:00", 1)
+
+        shift = service.create_shift_from_template(template.id, date(2026, 7, 13))
+
+        self.assertEqual(datetime(2026, 7, 13, 22, 0), shift.start)
+        self.assertEqual(datetime(2026, 7, 14, 6, 0), shift.end)
+
+    def test_update_and_delete_shift_template(self) -> None:
+        service = SchedulerService()
+        template = service.add_shift_template("Früh", "Kasse", "06:00", "14:00", 1)
+
+        updated = service.update_shift_template(template.id, "Frühdienst", "Kasse", "07:00", "15:00", 2)
+        self.assertEqual("Frühdienst", updated.name)
+        self.assertEqual("07:00", updated.start_time)
+
+        self.assertTrue(service.delete_shift_template(template.id))
+        self.assertIsNone(service.find_shift_template(template.id))
 
     def test_assigns_employee_when_rules_are_satisfied(self) -> None:
         service = SchedulerService()
@@ -523,6 +570,25 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual("Repository-Test", loaded.shifts[0].published_by)
         self.assertEqual(30, loaded.employees[0].break_minutes_per_shift)
         self.assertIn("Non-Food", loaded.department_options())
+
+    def test_saves_and_loads_shift_templates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = SQLiteSchedulerRepository(Path(directory) / "test.sqlite3")
+            service = SchedulerService()
+            service.shift_templates = []
+            service.add_shift_template("Spät", "Kasse", "14:00", "22:00", 2, "Kassenschein", "Filiale Nord")
+            repository.save(service)
+
+            loaded = repository.load()
+
+        self.assertEqual(1, len(loaded.shift_templates))
+        template = loaded.shift_templates[0]
+        self.assertEqual("Spät", template.name)
+        self.assertEqual("14:00", template.start_time)
+        self.assertEqual("22:00", template.end_time)
+        self.assertEqual(2, template.required_employees)
+        self.assertEqual("Kassenschein", template.required_qualification)
+        self.assertEqual("Filiale Nord", template.branch)
 
     def test_backup_and_restore_preserves_core_application_tables(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

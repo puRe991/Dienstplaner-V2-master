@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from typing import List
 from uuid import uuid4
@@ -117,6 +117,57 @@ class Shift:
         if self.required_employees <= 0:
             return 0.0
         return min(1.0, len(self.employee_ids) / self.required_employees)
+
+
+@dataclass
+class ShiftTemplate:
+    """A reusable shift pattern (e.g. 'Frühschicht 06:00-14:00') for quick shift entry.
+
+    Only the time of day is stored; a concrete Shift is created by combining the
+    template with a chosen calendar day. An end time at or before the start time
+    is treated as an overnight shift ending on the following day.
+    """
+
+    name: str
+    department: str
+    start_time: str
+    end_time: str
+    required_employees: int
+    required_qualification: str = ""
+    branch: str = "Zentrale"
+    id: str = field(default_factory=lambda: str(uuid4()))
+
+    def __post_init__(self) -> None:
+        self.name = self.name.strip()
+        self.department = self.department.strip()
+        self.required_qualification = self.required_qualification.strip()
+        self.branch = self.branch.strip() or "Zentrale"
+        if not self.name:
+            raise ValueError("Vorlagenname ist erforderlich.")
+        if not self.department:
+            raise ValueError("Abteilung ist erforderlich.")
+        if self.required_employees <= 0:
+            raise ValueError("Kapazität muss größer als 0 sein.")
+        self.start_time = self._normalized_time(self.start_time, "Startzeit")
+        self.end_time = self._normalized_time(self.end_time, "Endzeit")
+        if self.start_time == self.end_time:
+            raise ValueError("Start- und Endzeit dürfen nicht gleich sein.")
+
+    @staticmethod
+    def _normalized_time(value: str, label: str) -> str:
+        try:
+            return datetime.strptime(value.strip(), "%H:%M").strftime("%H:%M")
+        except ValueError as exc:
+            raise ValueError(f"{label} bitte im Format 'HH:MM' angeben, zum Beispiel '06:00'.") from exc
+
+    def shift_datetimes(self, day: date) -> tuple[datetime, datetime]:
+        start_hour, start_minute = (int(part) for part in self.start_time.split(":"))
+        end_hour, end_minute = (int(part) for part in self.end_time.split(":"))
+        start = datetime.combine(day, time(start_hour, start_minute))
+        end = datetime.combine(day, time(end_hour, end_minute))
+        if end <= start:
+            end += timedelta(days=1)
+        return start, end
 
 
 @dataclass
